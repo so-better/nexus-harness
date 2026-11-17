@@ -3,6 +3,10 @@
 import { createPinia } from 'pinia';
 import { createApp } from 'vue';
 import App from './App.vue';
+import { initTheme } from './theme';
 import '../styles/global.less';
 
+initTheme().catch((error: unknown) => {
+  console.error('初始化主题失败', error);
+});
 createApp(App).use(createPinia()).mount('#app');

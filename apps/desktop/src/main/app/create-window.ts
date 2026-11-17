@@ -2,6 +2,7 @@
 
 import { BrowserWindow, screen, shell } from 'electron';
 import { join } from 'node:path';
+import { getWindowBackgroundColor } from './theme';
 
 const preloadPath = join(__dirname, '../preload/index.js');
 const rendererHtml = join(__dirname, '../renderer/index.html');
@@ -20,6 +21,7 @@ export const createMainWindow = (): BrowserWindow => {
     minWidth: 800,
     minHeight: 600,
     icon: iconPath,
+    backgroundColor: getWindowBackgroundColor(),
     show: false,
     webPreferences: {
       preload: preloadPath,
@@ -34,15 +36,21 @@ export const createMainWindow = (): BrowserWindow => {
   });
 
   window.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    shell.openExternal(url).catch((error: unknown) => {
+      console.error('打开外部链接失败', error);
+    });
     return { action: 'deny' };
   });
 
   const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
   if (devServerUrl) {
-    void window.loadURL(devServerUrl);
+    window.loadURL(devServerUrl).catch((error: unknown) => {
+      console.error('加载开发服务器失败', error);
+    });
   } else {
-    void window.loadFile(rendererHtml);
+    window.loadFile(rendererHtml).catch((error: unknown) => {
+      console.error('加载渲染页面失败', error);
+    });
   }
 
   return window;

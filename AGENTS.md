@@ -1281,12 +1281,16 @@ interface AskUserAnswer {
 - 组件样式**禁止硬编码颜色**，只能使用 `var(--nh-*)`。
 - 主题切换：`<html data-theme="light | dark">`，`theme` store 统一管理 `light / dark / system` 三态。
 - `system` 模式监听系统主题变化并实时更新，选择结果持久化。
+- 主进程监听 `nativeTheme`，窗口 `backgroundColor` 与 `--nh-color-bg-base` 同步；渲染进程在 `<html>` 设置 `data-theme` 与 `color-scheme`。
+- Naive UI 的 `darkTheme` 与 `themeOverrides` 必须在根级 `NConfigProvider` 注入，Teleport 弹层不得依赖局部容器。
+- 原生菜单与系统对话框跟随系统主题，不强行改色；自定义菜单使用语义 token。
 - Naive UI 的 `themeOverrides` 必须由同一套语义 token 派生，禁止两套色板。
 - Less 变量只用于断点、mixins、编译期计算；运行期主题必须用 CSS 变量。
 - 每个组件样式加 `scoped`；仅布局根节点、主题定义允许全局选择器。
 - 嵌套层级不超过 3 层；禁止 `!important`，除非覆盖第三方库且注释说明。
 - 类名遵循 BEM，禁止无意义类名（`box1`、`red`）。
 - 字体、动效、阴影、层级同样必须使用 token，禁止在组件内写 `transition: all 0.3s` 之类的魔法值。
+- 尺寸、间距、字号、圆角与行高使用偶数（推荐 4 的倍数），禁止 `13px`、`15px`、`7px` 等奇数数值；`1px` 边框与发丝线例外，统一使用 border token。
 - 平台材质与窗口差异统一收敛到 `platform/` 适配层，业务样式不得直接判断操作系统。
 
 插件主题：
@@ -1428,6 +1432,7 @@ export function normalizeToolCall(raw: RawToolCall): ToolCall {
 - 对外数据结构优先用 `interface`，联合类型、映射类型用 `type`。
 - 禁止非空断言 `!` 滥用；只在已通过校验且注释说明理由时使用。
 - 所有跨进程输入、插件 manifest、配置文件必须经 zod 校验后再使用。
+- 禁止用 `void` 抑制 Promise；异步调用必须显式 `await` 或 `.catch()` 处理错误。
 - 枚举优先使用 `as const` 对象 + 联合类型，避免 TS `enum`。
 - 公共函数必须有显式返回类型。
 
@@ -1700,6 +1705,8 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 新能力通过 tool / skill / plugin 进入，`core` 中没有领域硬编码。
 - [ ] 所有导出成员与关键代码块有中文注释；没有 `/** */`；没有死代码。
 - [ ] 所有颜色来自语义 token，深浅主题下均已检查。
+- [ ] 尺寸、间距、字号与圆角使用偶数（推荐 4 的倍数），1px 边框除外。
+- [ ] 异步调用未使用 `void` 抑制，已显式 `await` 或 `.catch()`。
 - [ ] 动效使用 token，`prefers-reduced-motion` 与 Windows 回退均已验证。
 - [ ] 长列表已虚拟化，重计算没有阻塞渲染主线程。
 - [ ] 跨进程数据经过 zod 校验，公开方法有显式返回类型。

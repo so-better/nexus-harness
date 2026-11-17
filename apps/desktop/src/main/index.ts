@@ -21,21 +21,27 @@ if (!hasSingleInstanceLock) {
     window.focus();
   });
 
-  void app.whenReady().then(() => {
-    if (process.platform === 'darwin' && !app.isPackaged) {
-      const devIcon = join(__dirname, '../../build/icon.png');
-      if (existsSync(devIcon)) app.dock?.setIcon(devIcon);
-    }
-
-    registerIpcHandlers();
-    createMainWindow();
-
-    app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
-        createMainWindow();
+  app
+    .whenReady()
+    .then(() => {
+      if (process.platform === 'darwin' && !app.isPackaged) {
+        const devIcon = join(__dirname, '../../build/icon.png');
+        if (existsSync(devIcon)) app.dock?.setIcon(devIcon);
       }
+
+      registerIpcHandlers();
+      createMainWindow();
+
+      app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+          createMainWindow();
+        }
+      });
+    })
+    .catch((error: unknown) => {
+      console.error('应用启动失败', error);
+      app.quit();
     });
-  });
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {

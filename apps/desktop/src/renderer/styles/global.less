@@ -1,10 +1,26 @@
-/* 全局基础样式：仅重置页面尺寸与盒模型，不定义视觉主题。 */
+/* 全局基础样式：只定义尺寸、盒模型与主题背景，不承载页面设计。 */
+
+:root {
+  color-scheme: light;
+  --nh-color-bg-base: #ffffff;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --nh-color-bg-base: #ffffff;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --nh-color-bg-base: #0b0f14;
+}
 
 html,
 body,
 #app {
   height: 100%;
   margin: 0;
+  background: var(--nh-color-bg-base);
 }
 
 *,
