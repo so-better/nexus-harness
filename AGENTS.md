@@ -82,9 +82,9 @@ Nexus Harness 是一个桌面端 AI Agent 工作台：不是聊天框，也不�
 2. **打开工作区或直接开始**：可先选择工作区目录并确认信任级别，也可不打开工作区直接开始任务；建立文件索引，展示工作区文件树或临时 roots。
 3. **描述任务**：在输入区写目标；输入 `@` 引用工作区或临时 root 内的文件，也可添加文件/文件夹作为临时 root；输入 `/` 浏览并主动调用 Skill；选择审批策略。
 4. **生成计划**：Plan 模式下 Agent 只读分析并给出步骤与验收标准，不执行任何本地操作；用户确认后切换到 Build 执行。
-5. **执行**：流式输出思考与工具调用；写文件前展示 diff，危险命令请求审批；需要澄清时以行内卡片提问，Run 暂停等待回答；工具生成或下载的文件保存到 `<userData>/files` 并在会话流中展示文件卡片；用户可随时打断、补充或取消。
+5. **执行**：流式输出思考与工具调用；写文件前展示 diff，危险命令请求审批；需要澄清时以行内卡片提问，Run 暂停等待回答；工具生成或下载的文件保存到 `<userData>/files` 并在会话流中展示文件卡片；用户可随时停止回复、编辑用户消息重发，或对最后一条回复重新生成。
 6. **验证**：按任务类型运行验证命令（代码任务跑测试、类型检查与 lint，文档任务检查格式与引用，数据任务运行脚本校验输出）；失败则进入自修复循环。
-7. **审阅**：按文件查看 diff，接受或回滚；检查点可回到任意执行步骤。
+7. **审阅**：按文件或 hunk 查看 diff，接受或回滚；检查点可回到任意执行步骤。
 8. **完成**：给出变更摘要、验证结果、token 与费用；AI 输出文件可预览、下载或另存到用户指定目录；失败可一键回滚。
 
 失败路径必须明确：模型超时、提供商报错、工具失败、审批拒绝、验证不通过，都要有可操作的下一步，不能停在无反馈的加载态。
@@ -114,6 +114,7 @@ Nexus Harness 是一个桌面端 AI Agent 工作台：不是聊天框，也不�
 | Settings | 提供商、模型、权限、外观、快捷键、高级、关于 |
 | Extensions | 插件、Skill、MCP 的扫描结果、启用/禁用与权限查看 |
 | Status Bar | 运行状态、成本、插件贡献项 |
+| 后台任务面板 | shell 进程、PID、启动时间、状态与终止 |
 
 交互约定：
 
@@ -123,6 +124,7 @@ Nexus Harness 是一个桌面端 AI Agent 工作台：不是聊天框，也不�
 - 会话支持重命名、置顶、导出与跨会话搜索；搜索入口在侧栏与命令面板。
 - 输入区展示当前 Agent 模式，Plan / Build 切换只能由用户操作。
 - Agent 提问以行内卡片展示，支持键盘选择、数字键、Enter 提交与 Esc 取消。
+- 用户消息可编辑重发；最后一条 AI 回复可重新生成；流式回复可随时停止。
 - 高频操作全部可键盘完成，`Cmd/Ctrl+K` 为统一入口。
 - 低频设置折叠，主流程不出现无关配置。
 - 侧栏与主区可拖拽调整，布局状态持久化。
@@ -181,7 +183,7 @@ Nexus Harness 是一个桌面端 AI Agent 工作台：不是聊天框，也不�
 | RootGrant | id、sessionId、path、kind、access、source、createdAt | 会话的文件或目录授权 |
 | Task | id、sessionId、goal、acceptanceCriteria、status | 用户目标与验收标准 |
 | Run | id、sessionId、taskId、status、budget、startedAt、endedAt | 一次执行尝试 |
-| Message | id、runId、role、content、toolCallIds、createdAt | 消息与工具调用引用 |
+| Message | id、runId、role、content、toolCallIds、status、createdAt | 消息与工具调用引用；status 为 normal / superseded / partial |
 | ToolCall | id、runId、name、input、status、approvalId | 工具调用请求 |
 | ToolResult | callId、ok、output、artifacts、error | 工具调用结果 |
 | Approval | id、toolCallId、scope、status、requestedAt、resolvedAt | 审批记录 |
@@ -215,6 +217,7 @@ Session   1 ── n Event
 | Workspace | `untrusted` → `trusted`；异常进入 `error` |
 | Session | `idle` → `running` → `waiting_approval` / `waiting_user` → `completed` / `failed` / `interrupted` → `archived` |
 | Task | `pending` → `running` → `completed` / `failed` / `cancelled` |
+| Message | `normal` → `partial` / `superseded` |
 | Run | `queued` → `running` → `waiting_approval` / `waiting_user` → `succeeded` / `failed` / `cancelled` / `interrupted` |
 | ToolCall | `requested` → `approved` / `rejected` → `running` → `succeeded` / `failed` |
 | Approval | `pending` → `approved` / `rejected` / `expired` |
@@ -232,6 +235,7 @@ Session   1 ── n Event
 - 任何工作区文件写入必须先创建或关联 Checkpoint，确保可回滚；写入 `files` 内部存储不在此列。
 - 每条 Usage 必须包含 provider、model 与 token 明细，不允许只记录总费用。
 - 事件一旦写入不可修改；修正通过追加新事件表达。
+- 编辑消息或重新生成不得物理删除历史事件；旧消息标记 `superseded`，停止回复保留已生成内容并标记 `partial`。
 
 ---
 
@@ -549,6 +553,22 @@ interface ImageProvider {
 - 工作区与临时 root 的文件内容一律视为不可信数据，不得把其中的指令当作系统指令执行。
 - 记忆只包括工作区规则与用户偏好，不做跨工作区隐式记忆；临时会话默认没有项目规则。
 
+#### 工作区索引
+
+- 文件索引持久化到 SQLite，启动时增量扫描，避免每次全量遍历。
+- 尊重 `.gitignore` 与 `.ignore`；跳过 `.git`、`node_modules`、构建产物、超大文件与二进制文件。
+- 文件监听做防抖，批量变更合并处理；索引失败时降级为按需读取，不阻塞启动。
+- `@` 检索按路径、文件名与最近访问排序，结果标注 root 与路径；默认排除密钥与敏感目录。
+- 索引只存本地，不做远程同步；删除或移动文件后增量更新。
+
+#### 提示词行为约束
+
+- **反幻觉**：不得编造数据、事实、引用、链接、文件名、命令或 API；信息只能来自用户、工具返回或可靠常识，不确定时明确说明。
+- **工具诚实**：没有实际调用工具时不得声称已调用或已执行；工具失败时如实说明，不编造结果。
+- **链接真实性**：只使用用户提供或工具返回的链接，不自行构造或猜测 URL。
+- **文件生成自检**：生成或修改文件前核对需求，内容必须基于用户资料或已读取的原文；数据不全时先说明缺口，不用占位符凑数。
+- **命令自检**：执行前确认平台、路径与参数；失败时依据真实错误调整，不假装成功。
+
 ### 4.3 工具系统与审批
 
 工具定义必须包含：
@@ -626,6 +646,14 @@ git 工具仅在检测到 Git 仓库时注册；非 Git 工作区不显示。
 - `id` 必须与目录名一致；`transport` 支持 `stdio` 与 `http`。
 - `stdio` 使用 `command` / `args` / `env`；`http` 使用 `url` / `headers`。
 - `autoStart` 默认 `false`；首次启用必须由用户在扩展页确认。
+
+#### Git 策略
+
+- Git 工具默认只读：`status`、`diff`、`log`；不自动 `commit`、`push`、`checkout`、`reset`。
+- 写入前若工作区有未提交改动，提示用户并展示涉及文件；不得自动 stash 或丢弃改动。
+- 禁止强制推送、改写历史或切换分支；这些只能由用户显式执行。
+- 合并冲突、分离 HEAD、未跟踪大文件等情况必须如实展示，不自动处理。
+- 检查点不依赖 Git，不改变仓库状态；回滚只恢复被修改文件。
 
 执行顺序固定为：
 
@@ -885,6 +913,7 @@ ctx.workspace.list(dir: string): Promise<WorkspaceEntry[]>;
 | `sessions` | 会话元数据与投影状态，工作区可选 |
 | `session_roots` | 会话临时授权 root |
 | `session_search` | 跨会话全文索引（FTS5） |
+| `workspace_files` | 工作区文件索引（路径、mtime、size、hash） |
 | `events` | append-only 事件流 |
 | `checkpoints` | 逐文件快照索引 |
 | `usage` | token、缓存、reasoning 与费用明细 |
@@ -966,7 +995,8 @@ ctx.workspace.list(dir: string): Promise<WorkspaceEntry[]>;
 
 - 设置分三个层级，优先级为 **Session > Workspace > App**；读取时逐层合并，写入时记录 scope。
 - 设置分类：通用、模型与提供商、权限与审批、外观、快捷键、高级、关于。
-- 模型与提供商：按角色配置对话模型与图像模型；每条包含 Base URL、API Key 引用、能力声明与连接测试；密钥只存系统安全存储，设置表只存引用 id。
+- 模型与提供商：按角色配置对话模型与图像模型；每条包含 Base URL、API Key 引用、模型名、能力声明、上下文窗口、token 价格、`extra_params` 与自定义 headers。
+- 支持连接测试与模型列表刷新；密钥只存系统安全存储，设置表只存引用 id；不写死默认模型。
 - 图像模型可选；未配置时不注册 `generate_image`，设置页提供引导。
 - 权限与审批：默认审批策略、命令白名单、敏感路径策略、工作区信任管理。
 - 外观：`light / dark / system`、字号与密度、减少动效跟随系统。
@@ -1008,9 +1038,10 @@ ctx.workspace.list(dir: string): Promise<WorkspaceEntry[]>;
 #### 4.10.1 跨会话搜索
 
 - 搜索标题、消息、工具结果摘要与审批摘要；默认覆盖全部会话，可按工作区或时间过滤。
-- 使用 SQLite FTS5 建立索引，随 `message.completed`、`tool.completed` 与标题变更增量更新；FTS5 不可用时降级为 LIKE 查询。
+- 使用 SQLite FTS5 建立索引，随 `message.completed`、`message.edited`、`tool.completed` 与标题变更增量更新；FTS5 不可用时降级为 LIKE 查询。
 - 搜索结果展示会话、时间与匹配片段；点击跳转到对应消息。
-- 搜索默认排除密钥与敏感路径内容；索引只存本地，不参与远程同步。
+- 搜索默认排除密钥与敏感路径内容；已被 `superseded` 的消息不参与搜索，但事件仍保留。
+- 索引只存本地，不参与远程同步。
 
 #### 4.10.2 会话导出
 
@@ -1019,6 +1050,32 @@ ctx.workspace.list(dir: string): Promise<WorkspaceEntry[]>;
 - Markdown 为可读文本；HTML 为自包含单文件；PDF 通过 `printToPDF` 生成；PNG 为长图，超长时分段或压缩。
 - 导出文件由文件服务写入 `<userData>/files/exports`，用户通过系统文件对话框选择最终保存路径。
 - 导出前展示内容范围与脱敏选项；导出完成后写入 `session.exported` 事件。
+
+#### 4.10.3 消息操作与重新生成
+
+- **编辑用户消息**：允许修改历史中的用户消息并重发；原消息、后续回复与工具调用保留在事件流中并标记 `superseded`，不物理删除。
+- 编辑前展示受影响的后续消息、已执行工具与检查点；已有副作用时提示用户可能需要回滚。
+- 重发会创建新的 Run，从编辑后的消息继续；旧 Run 保留可回看。
+- **重新生成**：只对最后一条助手回复可用；基于当前上下文重新调用模型，不重放已完成的工具调用，旧回复标记 `superseded`。
+- **停止回复**：中止流式输出，终止正在执行的工具进程树，保留已生成内容并标记未完成；不自动回滚，提示用户可回滚到检查点。
+- 所有操作写入 `message.edited`、`message.regenerated`、`message.superseded`、`run.cancelled` 等事件。
+- UI 提供编辑、重发、重新生成与停止按钮；流式期间停止按钮始终可用。
+
+#### 4.10.4 Diff 审阅与回滚
+
+- 文件 diff 支持按 hunk 接受或拒绝；未处理的 hunk 必须提示。
+- 支持单文件接受/回滚、整个 Run 回滚、恢复到检查点。
+- 恢复前展示 diff；覆盖当前内容需用户确认。
+- 完成前提示未审阅变更，不得静默标记完成。
+- 只读工具与 `files` 输出不进入工作区 diff 审阅。
+
+#### 4.10.5 通知与后台任务
+
+- Run 完成、失败、等待审批或等待用户时，若窗口不在前台，发送系统通知。
+- 托盘与 Dock 显示运行中数量或状态；Dock 徽标显示等待处理或失败数量。
+- 后台任务面板列出 shell 进程、PID、启动时间与状态，支持终止进程组。
+- 通知内容不包含密钥与敏感路径；点击通知跳转到对应会话。
+- 后台或无人值守 Run 必须有硬预算（见 4.9）。
 
 ### 4.11 Agent 模式（Plan / Build）
 
@@ -1178,6 +1235,7 @@ interface AskUserAnswer {
 - 插件命令进入同一注册表，按权限过滤。
 - 核心操作必须有默认快捷键，并在设置页可查看与修改。
 - 会话新建、重命名、置顶、导出与跨会话搜索必须提供默认命令；全局搜索快捷键为 `Cmd/Ctrl+Shift+F`。
+- 编辑重发、重新生成与停止回复必须可通过命令面板触发；流式期间停止始终可用。
 - 命令执行必须有错误处理与禁用态，不允许静默失败。
 
 ---
@@ -1369,6 +1427,10 @@ type Result<T> =
 - 主进程服务使用临时目录做集成测试，覆盖审批、路径限制、事件持久化。
 - 模型调用统一 mock `packages/providers`，测试不依赖真实网络。
 - 事件 schema 与投影需要黄金样例测试，确保升级兼容。
+- 提示词与上下文组装需要快照测试，防止无意改变行为。
+- 权限、SSRF、MCP 连接治理与工具结果归一化需要有集成测试。
+- 会话导出、跨会话搜索与消息编辑/重新生成需要有回归测试。
+- 工作区索引、diff hunk 审阅、Git 只读策略与通知需要有集成或回归测试。
 - 插件宿主需有 manifest 校验、权限拒绝、激活失败、热重载测试。
 - 关键用户流程用 Playwright 做 Electron 端到端测试。
 - 新增功能与修复缺陷必须附带对应测试；无法测试时需在提交说明中写明原因。
@@ -1422,8 +1484,8 @@ pnpm format         # Prettier
 | 阶段 | 内容 |
 | --- | --- |
 | M0 | 规范、monorepo 骨架、electron-vite + Vue、类型化 IPC、深浅主题与动效 token、布局占位、CI 门禁 |
-| M1 | 单 Agent 闭环：多提供商、流式对话、工具调用、审批、多会话与重命名/置顶、自动标题、可选工作区与路径授权、事件流持久化、文件输出与另存为、读改跑测验证 |
-| M2 | 工作区与多 root：文件树、Monaco、diff、逐文件检查点回滚、终端、跨会话搜索、会话导出 |
+| M1 | 单 Agent 闭环：多提供商、流式对话、工具调用、审批、多会话与重命名/置顶、自动标题、消息编辑/重生成/停止、可选工作区与路径授权、事件流持久化、文件输出与另存为、读改跑测验证 |
+| M2 | 工作区与多 root：文件树、Monaco、按 hunk 审阅、逐文件检查点回滚、工作区索引、Git 只读策略、终端、跨会话搜索、会话导出、后台任务通知 |
 | M3 | 工具完善、图像生成、Office 生成、媒体搜索、Skill/MCP 目录扫描与注册 |
 | M4 | 插件宿主、目录扫描、Extensions 管理页、`token-usage` 示例 |
 | M5 | 产品化打包：发布流水线、签名、公证、自动更新、崩溃恢复 |
@@ -1433,8 +1495,8 @@ pnpm format         # Prettier
 | 阶段 | 完成标准 |
 | --- | --- |
 | M0 | 应用可启动；深浅主题可切换；IPC 往返成功；`typecheck`、`lint` 全绿；渲染层无 Node 访问 |
-| M1 | 完成 3 个任务（代码修复、文档修改、脚本数据处理，可用临时会话）；未授权路径触发授权；多会话切换不中断后台 Run；标题可自动生成、重命名与置顶；AI 输出文件可预览并另存；重启后会话与 roots 可恢复 |
-| M2 | 工作区与临时 roots 的文件树、编辑器、diff 可用；逐文件检查点可恢复；终端 `cwd` 受 root 限制；跨会话搜索可跳转；会话可导出 Markdown/HTML/PDF/PNG |
+| M1 | 完成 3 个任务（代码修复、文档修改、脚本数据处理，可用临时会话）；未授权路径触发授权；多会话切换不中断后台 Run；标题可自动生成、重命名与置顶；消息可编辑重发、重新生成与停止；AI 输出文件可预览并另存；重启后会话与 roots 可恢复 |
+| M2 | 工作区与临时 roots 的文件树、编辑器、按 hunk diff 审阅可用；工作区索引尊重 `.gitignore`；逐文件检查点可恢复；终端 `cwd` 受 root 限制；跨会话搜索可跳转；会话可导出 Markdown/HTML/PDF/PNG；后台完成/失败有系统通知 |
 | M3 | 工具覆盖既定清单；图像模型可配置并生成图片；Office 文件与媒体搜索可用；`<userData>/mcp` 可自动扫描接入；`<userData>/skills` 可自动注册并通过 `/skill` 调用 |
 | M4 | 将示例插件放入 `<userData>/plugins` 后自动注册；可启用/禁用；越权调用被拒绝；热重载不残留副作用 |
 | M5 | dmg 与 nsis 可安装；签名与公证通过；自动更新可用；崩溃恢复不丢事件；性能达标 |
@@ -1493,12 +1555,19 @@ CHANGELOG.md         # 版本变更记录
 | AI 输出文件 | `<userData>/files` | 永久保留，手动清理；预览/下载走受控地址，用户可另存为 |
 | Office/媒体工具 | 核心工具 | `save_*` 与图片/视频搜索内置 |
 | Prompt 策略 | 静态前缀 + 动态追加 | 动态上下文追加到用户消息，保护 prompt cache |
+| Prompt 行为 | 内置约束 | 反幻觉、工具诚实、链接真实性、文件生成自检 |
 | 图像生成 | 工具化 | 独立 `image` 模型配置，文本模型通过 `generate_image` 调用 |
 | 上下文压缩 | 自动 | 超过输入预算 70% 触发，写入 `context.compacted` |
 | 工具并发 | 只读可并行 | 写与执行工具串行 |
 | Agent 模式 | Plan / Build | Plan 只读，Build 执行；切换需用户操作 |
 | 交互式提问 | 结构化 `ask_user` | 行内选项、暂停 Run、回答写事件 |
 | 工具调用上限 | 默认不启用 | 次数只做观测，用户可配置可选硬上限 |
+| 消息操作 | 编辑重发 / 重新生成 / 停止 | 旧消息标记 `superseded`，不物理删除 |
+| Diff 审阅 | 按 hunk 接受/拒绝 | 支持单文件与整个 Run 回滚 |
+| 工作区索引 | SQLite 增量索引 | 尊重 `.gitignore`，跳过二进制与大文件 |
+| Git 策略 | 只读 | 不自动 commit/push，脏工作区提示 |
+| 通知 | 系统通知 + Dock/托盘 | 后台完成、失败或等待时提醒 |
+| 模型配置 | 支持 `extra_params` 与自定义 headers | 上下文窗口、token 价格、连接测试 |
 | 预算触发 | 交互提示可继续 | 后台或无人值守 Run 硬停 |
 | 会话恢复 | 事件回放 | 未完成 Run 标记 `interrupted` |
 | 会话模型 | 多会话 | 独立上下文，受全局并发限制 |
@@ -1531,7 +1600,9 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 长列表已虚拟化，重计算没有阻塞渲染主线程。
 - [ ] 跨进程数据经过 zod 校验，公开方法有显式返回类型。
 - [ ] 设置项经 zod 校验，API Key 只存安全存储，设置表只存引用。
+- [ ] 模型配置支持 `extra_params`、自定义 headers、上下文窗口与 token 价格，并可测试连接与刷新模型列表。
 - [ ] 上下文压缩保留不可压缩内容，写入 `context.compacted`，失败可降级为硬截断。
+- [ ] 系统提示包含反幻觉、工具诚实、链接真实性与文件生成自检约束。
 - [ ] 路径访问基于 Workspace roots + Session RootGrant，未授权路径必须走授权流程。
 - [ ] RootGrant 按会话隔离并写入事件，不跨会话继承。
 - [ ] AI 输出文件只写入 `<userData>/files`，默认永久保留、手动清理，预览/下载走受控地址，另存为由用户确认。
@@ -1549,6 +1620,11 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 多会话切换不中断后台 Run；标题、置顶与最近状态可持久化。
 - [ ] 跨会话搜索索引增量更新，删除会话时清理。
 - [ ] 会话导出 Markdown/HTML/PDF/PNG 不含密钥，保存路径由用户确认。
+- [ ] 消息编辑/重发/重新生成/停止写入事件，旧消息标记 `superseded`。
+- [ ] Diff 支持按 hunk 接受/拒绝，未审阅变更会提示。
+- [ ] 工作区索引尊重 `.gitignore`，跳过二进制与大文件，文件监听防抖。
+- [ ] Git 工具只读，不自动 commit/push，脏工作区会提示。
+- [ ] 后台完成/失败/等待时发送系统通知，后台任务可终止。
 - [ ] 网络访问默认拒绝，按域名与提供商显式放行；URL 经 SSRF 校验并限制重定向与响应大小。
 - [ ] 发布产物已签名/公证，升级失败可回退。
 - [ ] 插件、技能、MCP 的 manifest/config 经 zod 校验；无效条目跳过并记录。
@@ -1592,6 +1668,9 @@ CHANGELOG.md         # 版本变更记录
 | `run.no_progress` | `runId`、`reason` | 连续无进展，暂停等待用户 |
 | `message.delta` | `messageId`、`text` | 流式文本增量 |
 | `message.completed` | `messageId`、`content` | 消息完成 |
+| `message.edited` | `messageId`、`content` | 用户编辑消息 |
+| `message.regenerated` | `messageId`、`sourceMessageId` | 重新生成回复 |
+| `message.superseded` | `messageId`、`reason` | 旧回复被编辑或重生成替代 |
 | `context.compacted` | `beforeTokens`、`afterTokens`、`strategy`、`summaryRef` | 上下文自动或手动压缩 |
 | `tool.requested` | `toolCallId`、`name`、`input` | 发起工具调用 |
 | `tool.completed` | `toolCallId`、`ok`、`output` | 工具执行完成 |
