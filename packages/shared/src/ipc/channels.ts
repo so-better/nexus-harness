@@ -18,7 +18,8 @@ export const IPC_CHANNELS = {
   agentCancel: 'agent:cancel',
   agentEvent: 'agent:event',
   approvalResolve: 'approval:resolve',
-  checkpointRestore: 'checkpoint:restore'
+  checkpointRestore: 'checkpoint:restore',
+  artifactRead: 'artifact:read'
 } as const;
 
 /* 所有通道名的联合类型，供 preload 与主进程约束使用。 */

@@ -16,6 +16,8 @@ export interface ChatMessage {
   content: string;
   toolCalls?: ProviderToolCall[];
   toolCallId?: string;
+  /* 宿主元数据，Provider 忽略；用于压缩摘要保留审批结论。 */
+  approvalStatus?: 'approved' | 'rejected';
 }
 
 export interface ToolSchema {

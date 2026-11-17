@@ -5,6 +5,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { safeStorage } from 'electron';
 import type { AgentProviderConfig, ProviderPublic, ProviderSettings } from '@shared/ipc/contracts';
+import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_OUTPUT_TOKENS } from '@nexus/core';
 import { getAppDataPaths } from '../storage/paths';
 
 interface StoredProvider {
@@ -13,6 +14,8 @@ interface StoredProvider {
   baseUrl: string;
   model: string;
   enabled: boolean;
+  contextWindow?: number;
+  maxOutputTokens?: number;
   encryptedApiKey: string;
   encryptedHeaders?: string;
   encryptedExtraParams?: string;
@@ -24,6 +27,9 @@ interface ProviderFile {
 }
 
 const emptyFile = (): ProviderFile => ({ version: 1, providers: [] });
+
+const defaultMaxOutput = (contextWindow: number): number =>
+  Math.min(DEFAULT_MAX_OUTPUT_TOKENS, Math.max(256, Math.floor(contextWindow / 4)));
 
 /* 加密/解密 API Key；系统安全存储不可用时明确失败。 */
 const encryptKey = (apiKey: string): string => {
@@ -45,7 +51,10 @@ const toPublic = (provider: StoredProvider): ProviderPublic => ({
   name: provider.name,
   baseUrl: provider.baseUrl,
   model: provider.model,
-  enabled: provider.enabled
+  enabled: provider.enabled,
+  contextWindow: provider.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+  maxOutputTokens:
+    provider.maxOutputTokens ?? defaultMaxOutput(provider.contextWindow ?? DEFAULT_CONTEXT_WINDOW)
 });
 
 /* Provider 配置文件读写；baseDir 可注入用于测试。 */
@@ -109,6 +118,13 @@ export class ProviderStore {
     if (input.id && !existing) throw new Error(`Provider 不存在：${input.id}`);
 
     const id = input.id ?? randomUUID();
+    const contextWindow = input.contextWindow ?? existing?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
+    const maxOutputTokens =
+      input.maxOutputTokens ?? existing?.maxOutputTokens ?? defaultMaxOutput(contextWindow);
+    if (maxOutputTokens >= contextWindow) {
+      throw new Error('maxOutputTokens 必须小于 contextWindow');
+    }
+
     const encryptedApiKey = input.apiKey ? encryptKey(input.apiKey) : existing?.encryptedApiKey;
     if (!encryptedApiKey) throw new Error('保存 Provider 需要 API Key');
 
@@ -125,6 +141,8 @@ export class ProviderStore {
       baseUrl: input.baseUrl,
       model: input.model,
       enabled: input.enabled ?? existing?.enabled ?? true,
+      contextWindow,
+      maxOutputTokens,
       encryptedApiKey,
       ...(encryptedHeaders === undefined ? {} : { encryptedHeaders }),
       ...(encryptedExtraParams === undefined ? {} : { encryptedExtraParams })

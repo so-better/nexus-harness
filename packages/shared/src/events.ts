@@ -58,7 +58,9 @@ export const eventPayloadSchemas = {
   'tool.completed': z.object({
     toolCallId: z.string(),
     ok: z.boolean(),
-    output: z.string().optional()
+    output: z.string().optional(),
+    artifactId: z.string().optional(),
+    bytes: z.number().nonnegative().optional()
   }),
   'tool.failed': z.object({
     toolCallId: z.string(),
@@ -98,7 +100,9 @@ export const eventPayloadSchemas = {
   'context.compacted': z.object({
     beforeTokens: z.number().nonnegative(),
     afterTokens: z.number().nonnegative(),
-    strategy: z.string()
+    strategy: z.string(),
+    summaryRef: z.string().optional(),
+    artifactIds: z.array(z.string()).optional()
   }),
   'settings.updated': z.object({
     key: z.string(),

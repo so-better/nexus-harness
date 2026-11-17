@@ -1,7 +1,7 @@
 /* Agent 循环测试：工具调用、结果回填、失败回填与最大步骤。 */
 
 import type { NexusEvent } from '@nexus/shared';
-import { MockProvider, type ChatProvider } from '@nexus/providers';
+import { MockProvider, type ChatProvider, type ProviderRequest } from '@nexus/providers';
 import { describe, expect, it, vi } from 'vitest';
 import { AgentLoop } from './agent-loop';
 import { EventBus } from './event-bus';
@@ -35,6 +35,7 @@ const eventTypes = [
   'usage.recorded',
   'approval.requested',
   'approval.resolved',
+  'context.compacted',
   'checkpoint.created',
   'checkpoint.restored'
 ] as const;
@@ -213,12 +214,69 @@ describe('AgentLoop', () => {
       eventBus: bus
     });
 
-    await loop.run();
+    const result = await loop.run();
 
+    expect(result.messages.find((message) => message.role === 'tool')?.approvalStatus).toBe(
+      'approved'
+    );
     expect(approveTool).toHaveBeenCalledTimes(1);
     expect(executeTool).toHaveBeenCalledTimes(1);
     expect(events.some((event) => event.type === 'approval.requested')).toBe(true);
     expect(events.some((event) => event.type === 'approval.resolved')).toBe(true);
+  });
+
+  it('prepares context before each model call and records compacted usage', async () => {
+    const { bus, events } = createCollector();
+    const requests: ProviderRequest[] = [];
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: false, vision: true, reasoning: false },
+      async *stream(request) {
+        requests.push(request);
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const prepareContext = vi.fn().mockResolvedValue({
+      messages: [{ role: 'user', content: '压缩后的上下文' }],
+      compacted: true,
+      beforeTokens: 1000,
+      afterTokens: 100,
+      strategies: ['summarized'],
+      summaryRef: 'artifact-1',
+      usage: { inputTokens: 20, outputTokens: 10 }
+    });
+
+    const loop = new AgentLoop({
+      provider,
+      providerName: 'mock-provider',
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '很长的历史' }],
+      prepareContext,
+      eventBus: bus
+    });
+
+    await loop.run();
+
+    expect(requests[0]?.messages).toEqual([{ role: 'user', content: '压缩后的上下文' }]);
+    expect(events.some((event) => event.type === 'context.compacted')).toBe(true);
+    expect(events.some((event) => event.type === 'usage.recorded')).toBe(true);
+  });
+
+  it('fails the run when context preparation fails', async () => {
+    const { bus, events } = createCollector();
+    const loop = new AgentLoop({
+      provider: new MockProvider([{ text: '不会执行', finishReason: 'stop' }]),
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '任务' }],
+      prepareContext: async () => {
+        throw new Error('预算不足');
+      },
+      eventBus: bus
+    });
+
+    await expect(loop.run()).rejects.toThrow('预算不足');
+    expect(events.some((event) => event.type === 'run.failed')).toBe(true);
   });
 
   it('stops at max steps', async () => {

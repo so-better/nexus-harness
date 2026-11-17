@@ -1019,6 +1019,7 @@ interface SlotContext {
 | `plugins` | 插件启用状态、权限确认与错误信息 |
 | `mcp_servers` | MCP Server 启用、信任与最近状态 |
 | `files` | AI 输出文件与会话导出元数据、存储路径 |
+| `artifacts` | 工具产物索引：会话、Run、标签、路径、大小与类型 |
 | `plugin_storage` | 按插件隔离的键值存储 |
 
 规则：
@@ -1474,7 +1475,7 @@ Composables：
 ### 6.6 IPC 与进程边界
 
 - 主窗口必须开启 `contextIsolation: true`、`sandbox: true`、`nodeIntegration: false`。
-- preload 只通过 `contextBridge` 暴露 `window.nexus`，按命名空间组织：`nexus.agent`、`nexus.session`、`nexus.workspace`、`nexus.files`、`nexus.search`、`nexus.plugin`、`nexus.settings`。
+- preload 只通过 `contextBridge` 暴露 `window.nexus`，按命名空间组织：`nexus.agent`、`nexus.session`、`nexus.workspace`、`nexus.files`、`nexus.artifact`、`nexus.search`、`nexus.plugin`、`nexus.settings`。
 - 会话重命名、置顶、导出与跨会话搜索必须走 `nexus.session` / `nexus.search` 的类型化方法。
 - 工作区绑定、root 授权与撤销必须走 `nexus.workspace` / `nexus.session` 的类型化方法，渲染层不得直接拼接路径或修改授权状态。
 - `nexus.files` 提供文件列表、预览地址与另存为，禁止渲染层直接拼接 `files` 路径。
@@ -1788,9 +1789,9 @@ CHANGELOG.md         # 版本变更记录
 | `message.edited` | `messageId`、`content` | 用户编辑消息 |
 | `message.regenerated` | `messageId`、`sourceMessageId` | 重新生成回复 |
 | `message.superseded` | `messageId`、`reason` | 旧回复被编辑或重生成替代 |
-| `context.compacted` | `beforeTokens`、`afterTokens`、`strategy`、`summaryRef` | 上下文自动或手动压缩 |
+| `context.compacted` | `beforeTokens`、`afterTokens`、`strategy`、`summaryRef`、`artifactIds` | 上下文自动或手动压缩，含工具输出与摘要产物引用 |
 | `tool.requested` | `toolCallId`、`name`、`input` | 发起工具调用 |
-| `tool.completed` | `toolCallId`、`ok`、`output` | 工具执行完成 |
+| `tool.completed` | `toolCallId`、`ok`、`output`、`artifactId`、`bytes` | 工具执行完成；长输出转为 Artifact 引用 |
 | `tool.failed` | `toolCallId`、`error` | 工具执行失败 |
 | `approval.requested` | `approvalId`、`toolCallId`、`scope` | 请求审批 |
 | `approval.resolved` | `approvalId`、`decision` | 审批完成 |

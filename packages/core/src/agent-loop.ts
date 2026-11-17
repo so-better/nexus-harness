@@ -12,10 +12,13 @@ import type { EventPayloadMap, NexusEventType } from '@nexus/shared';
 import type { EventBus } from './event-bus';
 import type { PermissionGateway, PermissionLevel } from './permissions';
 import { createNexusEvent } from './event-factory';
+import { ContextLimitError, type ContextPreparer } from './context';
 
 export interface ToolExecutionResult {
   ok: boolean;
   output: string;
+  artifactId?: string;
+  bytes?: number;
   error?: { code: string; message: string };
 }
 
@@ -47,7 +50,9 @@ export interface AgentLoopOptions {
   sessionId: string;
   runId?: string;
   maxSteps?: number;
+  maxTokens?: number;
   extraParams?: Record<string, unknown>;
+  prepareContext?: ContextPreparer;
   permissionGateway?: PermissionGateway;
   approveTool?: (
     call: ProviderToolCall,
@@ -69,9 +74,10 @@ const DEFAULT_MAX_STEPS = 10;
 /* 执行单次 Run；工具失败会作为 tool 消息回填，让模型自行调整。 */
 export class AgentLoop {
   private readonly options: AgentLoopOptions;
-  private readonly messages: ChatMessage[];
+  private messages: ChatMessage[];
   private seq = 1;
   private toolCallCount = 0;
+  private readonly approvalStatuses = new Map<string, 'approved' | 'rejected'>();
 
   constructor(options: AgentLoopOptions) {
     this.options = options;
@@ -112,6 +118,15 @@ export class AgentLoop {
           toolCalls: this.toolCallCount,
           finishReason: 'aborted'
         };
+      }
+
+      try {
+        await this.prepareContext();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const code = error instanceof ContextLimitError ? error.code : 'CONTEXT_PREPARE_FAILED';
+        this.emit('run.failed', { error: { code, message } });
+        throw error instanceof Error ? error : new Error(message);
       }
 
       const result = await this.runStep();
@@ -176,7 +191,9 @@ export class AgentLoop {
           this.emit('tool.completed', {
             toolCallId: call.id,
             ok: true,
-            output: toolResult.output
+            output: toolResult.output,
+            ...(toolResult.artifactId === undefined ? {} : { artifactId: toolResult.artifactId }),
+            ...(toolResult.bytes === undefined ? {} : { bytes: toolResult.bytes })
           });
         } else {
           this.emit('tool.failed', {
@@ -185,10 +202,13 @@ export class AgentLoop {
           });
         }
 
+        const approvalStatus = this.approvalStatuses.get(call.id);
+        this.approvalStatuses.delete(call.id);
         this.messages.push({
           role: 'tool',
           toolCallId: call.id,
-          content: toolResult.ok ? toolResult.output : JSON.stringify(toolResult.error)
+          content: toolResult.ok ? toolResult.output : JSON.stringify(toolResult.error),
+          ...(approvalStatus === undefined ? {} : { approvalStatus })
         });
       }
 
@@ -216,6 +236,35 @@ export class AgentLoop {
     };
   }
 
+  /* 调用宿主提供的上下文准备器；压缩事件由循环统一写入，保证序号一致。 */
+  private async prepareContext(): Promise<void> {
+    const preparer = this.options.prepareContext;
+    if (!preparer) return;
+
+    const prepared = await preparer(this.messages);
+    if (prepared.usage && this.options.providerName) {
+      this.emit('usage.recorded', {
+        provider: this.options.providerName,
+        model: this.options.model,
+        inputTokens: prepared.usage.inputTokens,
+        outputTokens: prepared.usage.outputTokens,
+        ...(prepared.usage.cost === undefined ? {} : { cost: prepared.usage.cost })
+      });
+    }
+
+    if (prepared.compacted) {
+      this.emit('context.compacted', {
+        beforeTokens: prepared.beforeTokens ?? 0,
+        afterTokens: prepared.afterTokens ?? 0,
+        strategy: prepared.strategies?.join('+') || 'compacted',
+        ...(prepared.summaryRef === undefined ? {} : { summaryRef: prepared.summaryRef }),
+        ...(prepared.artifactIds === undefined ? {} : { artifactIds: prepared.artifactIds })
+      });
+    }
+
+    this.messages = prepared.messages;
+  }
+
   /* 执行一步模型调用，收集文本、工具调用与 usage。 */
   private async runStep(): Promise<{
     text: string;
@@ -228,6 +277,7 @@ export class AgentLoop {
       messages: [...this.messages],
       ...(this.options.tools ? { tools: this.options.tools } : {}),
       ...(this.options.extraParams ? { extraParams: this.options.extraParams } : {}),
+      ...(this.options.maxTokens === undefined ? {} : { maxTokens: this.options.maxTokens }),
       ...(this.options.signal ? { signal: this.options.signal } : {})
     };
 
@@ -309,10 +359,12 @@ export class AgentLoop {
           approvalId,
           decision: approved ? 'approved' : 'rejected'
         });
+        this.approvalStatuses.set(call.id, approved ? 'approved' : 'rejected');
         if (!approved) {
           return { code: 'TOOL_APPROVAL_DENIED', message: `工具审批被拒绝：${call.name}` };
         }
       } catch (error) {
+        this.approvalStatuses.set(call.id, 'rejected');
         this.emit('approval.resolved', { approvalId, decision: 'rejected' });
         return {
           code: 'TOOL_APPROVAL_FAILED',
@@ -330,10 +382,13 @@ export class AgentLoop {
     error: { code: string; message: string }
   ): void {
     this.emit('tool.failed', { toolCallId: call.id, error });
+    const approvalStatus = this.approvalStatuses.get(call.id);
+    this.approvalStatuses.delete(call.id);
     this.messages.push({
       role: 'tool',
       toolCallId: call.id,
-      content: JSON.stringify(error)
+      content: JSON.stringify(error),
+      ...(approvalStatus === undefined ? {} : { approvalStatus })
     });
   }
 

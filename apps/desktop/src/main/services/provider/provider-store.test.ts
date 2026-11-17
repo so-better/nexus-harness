@@ -84,6 +84,43 @@ describe('ProviderStore', () => {
     expect(full?.apiKey).toBe('secret');
   });
 
+  it('persists context budget settings and applies defaults', async () => {
+    const saved = await store.save({
+      name: 'OpenAI',
+      baseUrl: 'https://example.com/v1',
+      model: 'gpt-test',
+      apiKey: 'secret'
+    });
+
+    expect(saved.contextWindow).toBe(128_000);
+    expect(saved.maxOutputTokens).toBe(4_096);
+
+    const custom = await store.save({
+      id: saved.id,
+      name: 'OpenAI',
+      baseUrl: 'https://example.com/v1',
+      model: 'gpt-test',
+      contextWindow: 32_000,
+      maxOutputTokens: 8_000
+    });
+
+    expect(custom.contextWindow).toBe(32_000);
+    expect(custom.maxOutputTokens).toBe(8_000);
+  });
+
+  it('rejects output reservations that leave no input budget', async () => {
+    await expect(
+      store.save({
+        name: 'OpenAI',
+        baseUrl: 'https://example.com/v1',
+        model: 'gpt-test',
+        apiKey: 'secret',
+        contextWindow: 8_000,
+        maxOutputTokens: 8_000
+      })
+    ).rejects.toThrow('maxOutputTokens');
+  });
+
   it('removes providers', async () => {
     const saved = await store.save({
       name: 'OpenAI',

@@ -26,16 +26,26 @@ export type ThemeSource = z.infer<typeof themeSourceSchema>;
 export type ThemeInfo = z.infer<typeof themeInfoSchema>;
 
 /* Provider 保存参数；apiKey 省略时保留旧密钥。 */
-export const providerSettingsSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(1),
-  baseUrl: z.string().min(1),
-  model: z.string().min(1),
-  apiKey: z.string().min(1).optional(),
-  headers: z.record(z.string(), z.string()).optional(),
-  extraParams: z.record(z.string(), z.unknown()).optional(),
-  enabled: z.boolean().optional()
-});
+export const providerSettingsSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().min(1),
+    baseUrl: z.string().min(1),
+    model: z.string().min(1),
+    apiKey: z.string().min(1).optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    extraParams: z.record(z.string(), z.unknown()).optional(),
+    enabled: z.boolean().optional(),
+    contextWindow: z.number().int().min(4_096).max(2_000_000).optional(),
+    maxOutputTokens: z.number().int().min(256).max(131_072).optional()
+  })
+  .refine(
+    (value) =>
+      value.contextWindow === undefined ||
+      value.maxOutputTokens === undefined ||
+      value.maxOutputTokens < value.contextWindow,
+    { message: 'maxOutputTokens 必须小于 contextWindow', path: ['maxOutputTokens'] }
+  );
 
 /* 对外展示的 Provider 配置，不包含 API Key。 */
 export const providerPublicSchema = z.object({
@@ -43,7 +53,9 @@ export const providerPublicSchema = z.object({
   name: z.string().min(1),
   baseUrl: z.string().min(1),
   model: z.string().min(1),
-  enabled: z.boolean()
+  enabled: z.boolean(),
+  contextWindow: z.number().int().positive(),
+  maxOutputTokens: z.number().int().positive()
 });
 
 /* 主进程内部使用的完整 Provider 配置；headers/extraParams 视为敏感字段。 */
@@ -83,6 +95,9 @@ export interface NexusBridge {
   };
   checkpoint: {
     restore: (input: CheckpointRestoreInput) => Promise<Result<CheckpointRestoreResult>>;
+  };
+  artifact: {
+    read: (input: ArtifactReadInput) => Promise<Result<ArtifactReadResult>>;
   };
   approval: {
     resolve: (input: ApprovalResolveInput) => Promise<Result<ApprovalResolveResult>>;
@@ -187,6 +202,22 @@ export type SessionCreateInput = z.infer<typeof sessionCreateInputSchema>;
 export type SessionRenameInput = z.infer<typeof sessionRenameInputSchema>;
 export type SessionRemoveResult = z.infer<typeof sessionRemoveResultSchema>;
 export type SessionSetPinnedInput = z.infer<typeof sessionSetPinnedInputSchema>;
+
+/* 读取长输出产物；路径只由主进程解析。 */
+export const artifactReadInputSchema = z.object({
+  sessionId: z.string().min(1),
+  artifactId: z.string().min(1)
+});
+
+export const artifactReadResultSchema = z.object({
+  artifactId: z.string().min(1),
+  label: z.string(),
+  bytes: z.number().nonnegative(),
+  content: z.string()
+});
+
+export type ArtifactReadInput = z.infer<typeof artifactReadInputSchema>;
+export type ArtifactReadResult = z.infer<typeof artifactReadResultSchema>;
 
 /* 用户对审批请求的决定。 */
 export const approvalResolveInputSchema = z.object({

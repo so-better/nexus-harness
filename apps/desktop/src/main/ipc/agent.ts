@@ -20,6 +20,7 @@ import { getDatabase } from '../services/storage/database';
 import { EventStore } from '../services/session/event-store';
 import { RunStore } from '../services/session/run-store';
 import { SessionService } from '../services/session/session-service';
+import { SessionHistoryService } from '../services/session/session-history';
 import {
   getRun,
   hasRunForSession,
@@ -27,14 +28,14 @@ import {
   unregisterRun
 } from '../services/agent/run-registry';
 
-const agentService = new AgentService();
-
 /* 注册 agent:run 与 agent:cancel；事件只回传给发起窗口。 */
 export const registerAgentIpc = (): void => {
   const db = getDatabase();
   const events = new EventStore(db);
   const sessions = new SessionService(db, events);
   const runs = new RunStore(db);
+  const history = new SessionHistoryService(events);
+  const agentService = new AgentService({ database: db });
 
   ipcMain.handle(
     IPC_CHANNELS.agentRun,
@@ -127,6 +128,7 @@ export const registerAgentIpc = (): void => {
         agentService
           .run(parsed.data, provider, {
             runId,
+            history: history.load(parsed.data.sessionId),
             signal: controller.signal,
             approveTool: (_call, _tool, approvalId) => {
               return approvalService.request(approvalId, runId, senderId);

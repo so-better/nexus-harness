@@ -57,6 +57,24 @@ const migrate = (db: DatabaseSync): void => {
     db.exec('ALTER TABLE sessions ADD COLUMN deleted_at INTEGER');
     db.exec('PRAGMA user_version = 2');
   }
+
+  if (version < 3) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS artifacts (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        run_id TEXT,
+        label TEXT NOT NULL,
+        path TEXT NOT NULL,
+        bytes INTEGER NOT NULL,
+        mime TEXT NOT NULL DEFAULT 'text/plain',
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_artifacts_session ON artifacts(session_id);
+    `);
+    db.exec('PRAGMA user_version = 3');
+  }
 };
 
 /* 打开任意路径的数据库并完成迁移，供主进程与测试共用。 */

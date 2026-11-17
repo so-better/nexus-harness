@@ -25,6 +25,9 @@ const bridge: NexusBridge = {
   checkpoint: {
     restore: (input) => ipcRenderer.invoke(IPC_CHANNELS.checkpointRestore, input)
   },
+  artifact: {
+    read: (input) => ipcRenderer.invoke(IPC_CHANNELS.artifactRead, input)
+  },
   approval: {
     resolve: (input) => ipcRenderer.invoke(IPC_CHANNELS.approvalResolve, input)
   },

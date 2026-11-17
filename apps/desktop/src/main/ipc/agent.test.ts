@@ -43,6 +43,9 @@ vi.mock('../services/session/session-service', () => ({
 
 vi.mock('../services/session/event-store', () => ({
   EventStore: class {
+    list() {
+      return [];
+    }
     append(event: Record<string, unknown>) {
       return { ...event, seq: 1 };
     }
