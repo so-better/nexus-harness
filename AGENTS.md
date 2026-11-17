@@ -111,8 +111,8 @@ Nexus Harness 是一个桌面端 AI Agent 工作台：不是聊天框，也不�
 | Session 视图 | 多会话标签、对话流、工具调用、审批、文件卡片、计划与结果 |
 | Workspace 视图 | 工作区或临时 roots 的文件树、Monaco、diff、终端 |
 | Command Palette | 全局命令、文件跳转、设置入口 |
-| Settings | 提供商、模型、权限、外观、快捷键、高级、关于 |
-| Extensions | 插件、Skill、MCP 的扫描结果、启用/禁用与权限查看 |
+| Settings | 提供商、模型、权限、外观、快捷键、高级、关于（弹窗） |
+| Extensions | 插件、Skill、MCP 的扫描结果、启用/禁用与权限查看（弹窗） |
 | Status Bar | 运行状态、成本、插件贡献项 |
 | 后台任务面板 | shell 进程、PID、启动时间、状态与终止 |
 
@@ -123,6 +123,8 @@ Nexus Harness 是一个桌面端 AI Agent 工作台：不是聊天框，也不�
 - 支持同时打开多个会话标签；切换标签不中断后台 Run。
 - 会话支持重命名、置顶、导出与跨会话搜索；搜索入口在侧栏与命令面板。
 - 输入区展示当前 Agent 模式，Plan / Build 切换只能由用户操作。
+- 设置与扩展以弹窗展示，不引入路由；视图切换由导航状态驱动。
+- 插件通过标准插槽注入会话流与输入区，全局背景以 skin 贡献，不改变宿主布局。
 - Agent 提问以行内卡片展示，支持键盘选择、数字键、Enter 提交与 Esc 取消。
 - 用户消息可编辑重发；最后一条 AI 回复可重新生成；流式回复可随时停止。
 - 高频操作全部可键盘完成，`Cmd/Ctrl+K` 为统一入口。
@@ -254,7 +256,6 @@ Session   1 ── n Event
 | 样式 | Less | 4.x |
 | 组件库 | Naive UI | 2.45.x |
 | 状态 | Pinia | 4.x |
-| 路由 | vue-router | 5.x |
 | 契约校验 | zod | 4.x |
 | 打包 | electron-builder | 26.x |
 | 代码编辑器 | Monaco Editor | 0.57.x |
@@ -305,7 +306,7 @@ nexus-harness/
 │        │  └─ security/         # 沙箱、路径白名单、命令拦截
 │        ├─ preload/             # contextBridge 唯一入口
 │        └─ renderer/
-│           ├─ app/              # 启动、全局 provider、路由
+│           ├─ app/              # 启动、全局 provider、导航状态
 │           ├─ layouts/          # 主布局、侧栏、面板容器
 │           ├─ modules/          # 功能模块（chat、workspace、extensions 等，见 3.4）
 │           ├─ components/       # 跨模块通用原子组件
@@ -323,7 +324,8 @@ nexus-harness/
 └─ examples/
    ├─ plugins/
    │  ├─ _template/              # 插件模板：plugin.d.ts + 最小 manifest
-   │  └─ token-usage/            # 插件开发样板，复制到 userData 后生效
+   │  ├─ token-usage/            # 消息尾部 token 展示样板
+   │  └─ theme-background/       # 全局背景皮肤样板
    ├─ skills/<skill-id>/         # Skill 开发样板
    └─ mcp/<server-id>/           # MCP 配置样板
 ```
@@ -401,6 +403,7 @@ MCP Server 不是独立能力层，而是工具来源：配置位于 `<userData>
 | 领域事件 | `域.过去式动作` | `tool.completed` |
 | 插件激活事件 | `onEvent:<领域事件>` | `onEvent:usage.recorded` |
 | 插件视图激活 | `onView:<viewId>` | `onView:usage.panel` |
+| 插件插槽激活 | `onSlot:<slotId>` | `onSlot:usage.inline` |
 
 事件信封：
 
@@ -784,7 +787,8 @@ requires: [read, write, execute]
 - 两侧入口统一导出 `activate(ctx)`，可选导出 `deactivate()`。插件作者可复制 `examples/plugins/_template/plugin.d.ts` 获得类型提示，该文件只提供类型，不引入运行时依赖。
 - 入口路径经 `realpath` 校验，必须位于插件目录内，禁止路径穿越。
 - 渲染进程插件自包含：可以自带 UI 框架，宿主只提供隔离容器、语义 token 与 `ctx`。
-- 宿主为插件视图提供 Shadow DOM 容器，避免样式污染；主题通过 CSS 变量继承。
+- 宿主为插件视图、消息插槽与输入区插槽提供 Shadow DOM 容器，避免样式污染；主题通过 CSS 变量继承。
+- 全局皮肤（背景图、遮罩、强调色）由 manifest 声明，宿主渲染背景层；插件不得直接注入全局 CSS。
 - 插件不得写入自身目录，持久化统一使用 `ctx.storage`。
 - 宿主监听 `<userData>/plugins`，新增、删除、修改后做防抖处理，再卸载或重载对应插件。
 
@@ -798,10 +802,11 @@ requires: [read, write, execute]
   "engines": { "nexus": "^0.1.0" },
   "main": "dist/main.cjs",
   "renderer": "dist/renderer.mjs",
-  "activationEvents": ["onView:usage.panel", "onEvent:usage.recorded"],
-  "permissions": ["storage", "events:usage.recorded", "ui.panel", "ui.statusbar", "ui.command"],
+  "activationEvents": ["onView:usage.panel", "onSlot:usage.inline", "onEvent:usage.recorded"],
+  "permissions": ["storage", "events:usage.recorded", "ui.panel", "ui.slot", "ui.statusbar", "ui.command"],
   "contributes": {
     "views": [{ "id": "usage.panel", "title": "用量", "location": "sidebar" }],
+    "messageSlots": [{ "id": "usage.inline", "location": "message.assistant.footer" }],
     "statusBar": [{ "id": "usage.status", "align": "right" }],
     "commands": [{ "id": "usage.reset", "title": "重置统计" }],
     "settings": [
@@ -821,12 +826,50 @@ requires: [read, write, execute]
 | 贡献点 | 用途 |
 | --- | --- |
 | `views` | 侧栏、主区、底部面板 |
+| `messageSlots` | 会话流、输入区、工具调用与审批等插槽 |
 | `statusBar` | 状态栏条目 |
 | `commands` | 命令面板与快捷键绑定 |
 | `menus` | 上下文菜单、工具栏 |
 | `settings` | 插件设置项 |
+| `skins` | 全局皮肤：背景图、遮罩与强调色 |
 | `tools` | 向 Agent 注册工具（不开放） |
 | `themes` | 后续开放，需单独评审 |
+
+标准插槽：
+
+| 区域 | 插槽 | 用途 |
+| --- | --- | --- |
+| 全局 | `titlebar.actions` | 标题栏操作按钮 |
+| 全局 | `sidebar.header` / `sidebar.footer` | 侧栏顶部/底部 |
+| 全局 | `inspector.panel` | 右侧检查器 |
+| 全局 | `statusbar.left` / `statusbar.right` | 状态栏左右区域 |
+| 输入区 | `composer.toolbar` / `composer.above` / `composer.footer` | 工具条、输入框上方提示、下方用量 |
+| 空状态 | `empty-state` | 首次进入或无会话 |
+| 会话 | `session.header.actions` | 会话头操作 |
+| 会话 | `session.tab.badge` | 会话标签角标（token/成本） |
+| 会话 | `session.item.actions` | 会话列表项操作 |
+| 消息 | `message.assistant.header` / `.footer` / `.actions` | AI 消息头、尾部、操作 |
+| 消息 | `message.user.footer` / `.actions` | 用户消息尾、操作 |
+| 工具 | `toolcall.body` / `toolcall.footer` | 工具调用内容与尾部 |
+| 审批 | `approval.details` | 审批详情附加信息 |
+| 工作区 | `filetree.header` / `filetree.row` / `filetree.actions` | 文件树顶部、行装饰、操作 |
+| 工作区 | `editor.toolbar` / `diff.toolbar` / `diff.hunk.footer` | 编辑器与 diff |
+| 工作区 | `terminal.toolbar` | 终端工具条 |
+| 文件 | `filecard.actions` / `filecard.footer` | 输出文件卡片 |
+| 设置 | `settings.section` | 设置页附加区 |
+| 扩展 | `extensions.detail` | 插件详情附加视图 |
+
+插件只能渲染在宿主给定的容器内，不得改变布局或遮挡宿主操作。
+
+文件预览器、导出格式、首次启动引导等扩展点需要执行逻辑或影响主流程，当前不开放；后续以 `previewers`、`exporters`、`onboarding` 贡献点单独评审。
+
+#### 事件钩子
+
+- `ctx.events.on(event, handler)` 是插件订阅宿主事件的统一方式；payload 由 `packages/shared` 定义。
+- 可用于 session、message、tool、approval、usage、file、context、mcp 等领域事件。
+- 事件钩子是只读观察，不得修改、拦截或替代审批；需要拦截的能力必须单独评审并提升权限。
+- 高频事件 `message.delta` 默认不暴露；使用 `message.completed`、`usage.recorded` 等聚合事件。
+- 订阅必须返回 `Disposable`，插件停用时释放；`onEvent:<event>` 可按需激活。
 
 #### 4.5.5 宿主 API
 
@@ -835,6 +878,7 @@ requires: [read, write, execute]
 ```ts
 ctx.commands.register(id: string, handler: () => void | Promise<void>): Disposable;
 ctx.views.register(id: string, mount: (el: HTMLElement, ctx: PluginContext) => () => void): Disposable;
+ctx.slots.register(id: string, mount: (el: HTMLElement, context: SlotContext) => () => void): Disposable;
 ctx.statusBar.add(item: StatusBarItem): Disposable;
 ctx.events.on(event: NexusEventName, handler: (payload: unknown) => void): Disposable;
 ctx.storage.get<T>(key: string): Promise<T | undefined>;
@@ -847,9 +891,30 @@ ctx.workspace.readFile(path: string): Promise<string>;
 ctx.workspace.list(dir: string): Promise<WorkspaceEntry[]>;
 ```
 
+```ts
+/* 插槽上下文，按 location 提供只读的会话/消息/工具/文件/用量信息 */
+interface SlotContext {
+  location: string;
+  sessionId: string;
+  runId?: string;
+  messageId?: string;
+  role?: 'user' | 'assistant';
+  toolCallId?: string;
+  approvalId?: string;
+  fileId?: string;
+  usage?: UsageSummary;
+  model?: string;
+}
+```
+
 - 每个注册接口返回 `Disposable`，插件被禁用或卸载时必须释放全部资源。
 - `ctx.storage` 与 `ctx.settings` 按插件 id 隔离，禁止跨插件读取。
-- `ctx.views.register` 的 mount 函数必须返回清理函数；宿主负责容器与生命周期。
+- `ctx.views.register` 与 `ctx.slots.register` 的 mount 函数必须返回清理函数；宿主负责容器与生命周期。
+- 消息插槽固定渲染在宿主指定位置，插件不得改变布局、遮挡操作或劫持点击。
+- 插槽顺序、尺寸与间距由宿主决定；插件只负责容器内部内容，不得影响宿主其他区域。
+- 插件插槽只能补充信息，不得替代或隐藏宿主的命令、路径、审批与错误等安全信息。
+- `SlotContext.usage` 为该条消息对应的用量汇总（跨该消息的模型步骤聚合）；缺失时插件可订阅 `usage.recorded` 自行累计。
+- `skins` 由 manifest 声明，宿主校验背景图类型与大小，并在外观设置中供用户选择；插件不得直接注入全局 CSS。
 - 渲染进程插件在 Shadow DOM 容器内挂载，UI 框架由插件自带，不得访问宿主 DOM 或全局状态。
 - 事件 payload 类型由 SDK 导出，禁止插件假设未声明字段存在。
 - 主进程侧事件由宿主按权限转发给渲染进程插件，插件不得自行跨进程通信。
@@ -863,6 +928,7 @@ ctx.workspace.list(dir: string): Promise<WorkspaceEntry[]>;
 ```
 
 - 无效 manifest 或入口缺失时，在扩展页展示错误并跳过，不影响宿主启动。
+- 激活事件支持 `onView:<id>`、`onSlot:<slotId>`、`onCommand:<id>` 与 `onEvent:<event>`；消息插槽首次渲染时激活对应插件。
 - 激活失败必须捕获并记录，自动禁用该插件，不得影响宿主启动。
 - 插件回调抛出的异常由宿主包裹捕获，转为通知与日志。
 - 目录文件变更做防抖处理，先 `deactivate()` 旧实例，再加载新实例。
@@ -875,9 +941,27 @@ ctx.workspace.list(dir: string): Promise<WorkspaceEntry[]>;
 
 - 订阅 `usage.recorded` 事件并聚合统计。
 - 通过 `statusBar` 显示当前会话消耗。
+- 通过 `messageSlots` 在每条 AI 回复尾部显示 token 与费用；插件只拿只读 `SlotContext`，不修改宿主布局。
 - 通过 `views` 注册侧栏面板，图表的颜色全部来自语义 token。
 - 使用 `ctx.storage` 持久化累计数据。
 - 正确处理启用、禁用、热重载。
+
+`examples/plugins/theme-background` 演示全局背景皮肤：manifest 声明 `skins` 与背景资源，宿主在外观设置中提供选择，插件不直接注入 CSS。
+
+```json
+{
+  "permissions": ["ui.skin"],
+  "contributes": {
+    "skins": [
+      {
+        "id": "paper",
+        "title": "纸张",
+        "background": { "image": "assets/paper.jpg", "opacity": 0.25, "fit": "cover" }
+      }
+    ]
+  }
+}
+```
 
 #### 4.5.8 开发与安装
 
@@ -961,6 +1045,7 @@ ctx.workspace.list(dir: string): Promise<WorkspaceEntry[]>;
 | 会话授权泄漏 | RootGrant | 按会话隔离，不跨会话继承，撤销后立即失效 |
 | 密钥泄露 | 日志、事件、导出 | 日志脱敏、密钥只进安全存储、事件不记录明文 |
 | 用户安装插件 | 插件代码 | 加载前校验 manifest 与入口路径、权限清单、能力网关、异常隔离 |
+| 恶意皮肤资源 | 插件 `skins` | 限制图片类型与大小，宿主渲染背景层，不接受任意 CSS |
 | 插件目录篡改 | `<userData>/plugins` | 入口 `realpath` 限制、权限网关、事件审计 |
 | MCP 服务不可信 | 外部 MCP Server | 逐服务启用与信任、工具命名空间隔离、默认不自动启动 |
 | 渲染层 XSS | Markdown、插件 UI | 禁用原始 HTML、CSP、输出转义、不向渲染层暴露 Node |
@@ -1001,9 +1086,9 @@ ctx.workspace.list(dir: string): Promise<WorkspaceEntry[]>;
 - 权限与审批：默认审批策略、命令白名单、敏感路径策略、工作区信任管理。
 - 外观：`light / dark / system`、字号与密度、减少动效跟随系统。
 - 高级：数据目录、日志、清理 `files` 与缓存、遥测开关（默认关闭）。
-- Extensions 页独立管理插件、Skill、MCP，不混入设置；插件自身配置放在插件详情中。
+- Extensions 弹窗独立管理插件、Skill、MCP，不混入设置；插件自身配置放在插件详情中。
 - 设置项必须由 zod schema 定义，未知键忽略；变更写入 `settings.updated` 事件。
-- 入口使用 `Cmd/Ctrl+,`；macOS 使用独立设置窗口，Windows 使用同一套布局。
+- 入口使用 `Cmd/Ctrl+,` 打开设置弹窗；macOS 与 Windows 使用同一套布局。
 
 ### 4.9 Agent 循环与运行控制
 
@@ -1215,7 +1300,7 @@ interface AskUserAnswer {
 
 - 冷启动到可交互目标 < 1.5s（Apple Silicon 基准）；Windows 同档硬件不得明显劣化。
 - 输入与滚动保持 60fps；单次主线程任务 < 16ms，重计算放入 Worker 或主进程。
-- 路由、编辑器、终端、图表等重模块全部懒加载，首屏只加载当前界面。
+- 编辑器、终端、图表等重模块全部懒加载，首屏只加载当前界面。
 - 列表超过 50 项必须虚拟化；流式消息采用增量更新，禁止整列表重渲染。
 - 新增依赖必须评估包体积与启动开销，核心界面不引入重型 UI 依赖。
 
@@ -1252,7 +1337,7 @@ interface AskUserAnswer {
   - props 或 emits 超过 **6 个**，应改为组合子组件或使用插槽。
 - 可复用逻辑必须提取到 `composables/`；可复用 UI 提取到 `components/`。
 - 列表渲染必须有独立子组件（如 `MessageList.vue` + `MessageItem.vue`）。
-- **展示组件**：只接收 props、只 emit 事件，不访问 store、不发起 IPC、不处理路由。
+- **展示组件**：只接收 props、只 emit 事件，不访问 store、不发起 IPC。
 - **容器组件 / views**：负责取数、状态编排、权限与错误处理，把结果传给展示组件。
 - 展示组件必须能在 Storybook 或测试中脱离应用独立渲染。
 
@@ -1333,7 +1418,7 @@ export function normalizeToolCall(raw: RawToolCall): ToolCall {
 - 枚举优先使用 `as const` 对象 + 联合类型，避免 TS `enum`。
 - 公共函数必须有显式返回类型。
 
-### 6.5 Vue / Pinia / Router 规范
+### 6.5 Vue / Pinia / 导航状态规范
 
 Vue 单文件组件：
 
@@ -1353,11 +1438,13 @@ Pinia：
 - 持久化统一走 `storage` 服务，禁止组件内直接使用 `localStorage`。
 - action 内必须处理加载态与错误，禁止把异常静默吞掉。
 
-Router：
+导航与弹窗：
 
-- 路由按模块拆分，使用懒加载。
-- 路由 meta 显式声明 `title`、`requiresWorkspace` 等约束。
-- 禁止在组件中硬编码路径字符串，统一从路由常量引用。
+- 不引入 URL 路由；当前会话、surface、面板与弹窗状态由 Pinia 管理。
+- 设置与扩展以弹窗展示；命令面板、通知与 IPC 只切换状态，不跳转路由。
+- 深链接通过带 `sessionId` 的 IPC 激活窗口并切换会话。
+- 编辑器、终端、图表等重面板使用 `defineAsyncComponent` 懒加载。
+- 禁止在组件内维护独立导航状态或硬编码视图字符串。
 
 Composables：
 
@@ -1543,6 +1630,7 @@ CHANGELOG.md         # 版本变更记录
 | 默认提供商 | 待定 | 首次启动引导选择，不写死默认模型 |
 | 插件加载 | 目录扫描 | `<userData>/plugins`，启动与目录变化时注册 |
 | 插件 API 类型 | 不单独发包 | 由 `examples/plugins/_template/plugin.d.ts` 提供 |
+| 插件 UI 渗透 | 标准 slots + skins | 消息尾部、输入区、状态栏、全局背景 |
 | Skill 加载 | 目录扫描 | `<userData>/skills`，支持 `/skill-name` 主动调用 |
 | Skill 选择 | search + read 两段式 | 显式 `/skill-name` 优先 |
 | MCP 加载 | 目录扫描 | `<userData>/mcp`，逐服务启用与信任 |
@@ -1550,6 +1638,7 @@ CHANGELOG.md         # 版本变更记录
 | MCP 连接治理 | 缓存 + 超时 + 并发上限 | 空闲 TTL、失败负缓存与工具名净化 |
 | 工作区模型 | 可选 | Session 可无工作区；Scope = workspace + session roots |
 | 设置优先级 | 已定 | Session > Workspace > App |
+| 路由 | 不引入 | 单主窗口 + 弹窗，视图由导航状态驱动 |
 | 路径授权 | 会话级 | 未授权路径弹窗，敏感目录始终拒绝 |
 | 检查点 | 逐文件快照 | 不依赖 git，工作区与临时会话通用 |
 | AI 输出文件 | `<userData>/files` | 永久保留，手动清理；预览/下载走受控地址，用户可另存为 |
@@ -1632,6 +1721,9 @@ CHANGELOG.md         # 版本变更记录
 - [ ] MCP 工具仅注入已启用、信任且连接的 Server，调用始终审批。
 - [ ] MCP 连接有缓存、空闲 TTL、失败负缓存、超时与并发上限，工具名已净化。
 - [ ] 插件入口路径限制在插件目录内，扩展能力经宿主权限网关。
+- [ ] 插件 slots 在宿主容器内渲染并正确清理；skins 资源经校验且不破坏可读性。
+- [ ] 事件钩子只读订阅，不能修改或拦截工具调用与审批；高频事件默认不暴露。
+- [ ] 插件未直接修改宿主 DOM 或注入全局 CSS。
 - [ ] 插件新增能力已声明权限，未绕过宿主 API 直接访问系统资源。
 - [ ] 副作用有清理逻辑，错误被处理且不泄露敏感信息。
 - [ ] 新增逻辑有测试，`typecheck`、`lint`、`test` 全部通过。
@@ -1699,6 +1791,8 @@ CHANGELOG.md         # 版本变更记录
 | `storage` | 使用按插件隔离的键值存储 | 开放 |
 | `events:<event>` | 订阅指定领域事件 | 开放 |
 | `ui.panel` | 注册侧栏/主区面板 | 开放 |
+| `ui.slot` | 注册消息尾部/输入区等插槽 | 开放 |
+| `ui.skin` | 贡献全局背景皮肤 | 开放 |
 | `ui.statusbar` | 注册状态栏条目 | 开放 |
 | `ui.command` | 注册命令与快捷键 | 开放 |
 | `ui.notification` | 发送应用内通知 | 开放 |
