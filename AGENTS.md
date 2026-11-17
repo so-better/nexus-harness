@@ -252,7 +252,7 @@ Session   1 ── n Event
 | 桌面壳 | Electron | 45.x |
 | 构建 | electron-vite | 6.x |
 | 前端框架 | Vue | 3.5.x |
-| 语言 | TypeScript | 7.x |
+| 语言 | TypeScript | 5.9.x |
 | 样式 | Less | 4.x |
 | 组件库 | Naive UI | 2.45.x |
 | 状态 | Pinia | 4.x |
@@ -267,7 +267,7 @@ Session   1 ── n Event
 | 测试 | Vitest | 5.x |
 | 质量 | ESLint / Prettier / stylelint | 10.x / 3.x / 18.x |
 
-版本以 `package.json` 为准；升级主版本必须单独提交并说明影响范围。
+版本以 `package.json` 为准；升级主版本必须单独提交并说明影响范围。TypeScript 7 暂无兼容的 `vue-tsc`，当前使用 5.9，升级前必须先验证类型检查链路。
 
 ### 3.2 仓库结构
 
@@ -342,6 +342,7 @@ packages ──> shared（packages 之间允许，但禁止反向依赖 apps）
 - `packages/core`、`packages/providers`、`packages/tools` **禁止**依赖 Electron、Vue、DOM。
 - 渲染层**禁止**直接 import `electron`、`node:*`、`fs` 等模块。
 - 跨进程数据必须定义在 `packages/shared`，并用 zod 校验。
+- `packages/*` 只服务本仓库，**不发布 npm**；应用引用统一使用 `workspace:*`，不对外承诺 API 兼容性。
 - 插件无需导入宿主包；宿主在激活时注入 `ctx`。第三方依赖必须自行打包进插件目录，禁止 import `@nexus/core`、`@nexus/shared`、`apps/desktop` 等内部包。
 - `packages/*` 只放纯逻辑与实现；`main/services/*` 负责 Electron 绑定、审批编排、沙箱、密钥与持久化。
 
@@ -1630,6 +1631,7 @@ CHANGELOG.md         # 版本变更记录
 | 默认提供商 | 待定 | 首次启动引导选择，不写死默认模型 |
 | 插件加载 | 目录扫描 | `<userData>/plugins`，启动与目录变化时注册 |
 | 插件 API 类型 | 不单独发包 | 由 `examples/plugins/_template/plugin.d.ts` 提供 |
+| 内部包发布 | 不发布 npm | `packages/*` 仅通过 `workspace:*` 在仓库内使用 |
 | 插件 UI 渗透 | 标准 slots + skins | 消息尾部、输入区、状态栏、全局背景 |
 | Skill 加载 | 目录扫描 | `<userData>/skills`，支持 `/skill-name` 主动调用 |
 | Skill 选择 | search + read 两段式 | 显式 `/skill-name` 优先 |
