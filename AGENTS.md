@@ -287,6 +287,7 @@ nexus-harness/
 │  └─ ...
 ├─ apps/
 │  └─ desktop/
+│     ├─ build/                  # 应用图标与打包资源
 │     ├─ electron.vite.config.ts
 │     └─ src/
 │        ├─ main/                # Electron 主进程

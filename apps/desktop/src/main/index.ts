@@ -1,6 +1,8 @@
 /* Electron 主进程入口：单实例、窗口生命周期与 IPC 注册。 */
 
 import { app, BrowserWindow } from 'electron';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { createMainWindow } from './app/create-window';
 import { registerIpcHandlers } from './ipc';
 
@@ -20,6 +22,11 @@ if (!hasSingleInstanceLock) {
   });
 
   void app.whenReady().then(() => {
+    if (process.platform === 'darwin' && !app.isPackaged) {
+      const devIcon = join(__dirname, '../../build/icon.png');
+      if (existsSync(devIcon)) app.dock?.setIcon(devIcon);
+    }
+
     registerIpcHandlers();
     createMainWindow();
 
