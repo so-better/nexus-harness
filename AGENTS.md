@@ -1,4 +1,4 @@
-# Nexus Harness 开发规范
+# Nexus 开发规范
 
 本文件是本仓库的**唯一强制性开发规范**。所有人（包括 AI 协作方）在新增、修改、重构代码前必须先阅读并遵守。规范与临时便利冲突时，以本文件为准；确需例外时，必须在代码评审中说明理由，并同步更新本文件。
 
@@ -32,7 +32,7 @@
 
 ### 1.1 定位与描述
 
-Nexus Harness 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服务某一种任务的工具，而是让 Agent 在统一运行时内可靠完成真实任务的工作台。
+Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服务某一种任务的工具，而是让 Agent 在统一运行时内可靠完成真实任务的工作台。
 
 产品采用“底层通用、方向外置”的策略：核心只提供与领域无关的 agent 运行时，具体能力通过工具、技能与插件扩展；`core` 不假设任何具体领域，研究、文档、数据、代码等场景都以扩展方式接入。
 
@@ -40,7 +40,7 @@ Nexus Harness 是一个桌面端 AI Agent 工作台：不是聊天框，也不�
 
 产品描述：
 
-> Nexus Harness 是一个面向真实任务的 AI Agent 工作台。Agent 能调用工具完成任务、验证结果并自我修正；所有工具调用、审批、变更与费用都可审计、可回滚。能力通过工具、技能与插件持续扩展。
+> Nexus 是一个面向真实任务的 AI Agent 工作台。Agent 能调用工具完成任务、验证结果并自我修正；所有工具调用、审批、变更与费用都可审计、可回滚。能力通过工具、技能与插件持续扩展。
 
 电梯陈述：
 
@@ -995,6 +995,7 @@ interface SlotContext {
 ├─ plugins/<plugin-id>/  # 用户插件目录，启动时扫描
 ├─ skills/<skill-id>/    # 技能目录，启动时扫描
 ├─ mcp/<server-id>/      # MCP 配置目录，mcp.json 启动时扫描
+├─ settings/             # 启动设置（主题等，后续迁移到 settings 表）
 ├─ files/                # AI 输出文件与会话导出，按会话存放
 ├─ artifacts/            # 工具产物与完整日志
 ├─ checkpoints/          # 逐文件快照，按会话/检查点存放
@@ -1023,7 +1024,7 @@ interface SlotContext {
 规则：
 
 - 所有运行期文件只写在 `<userData>` 下，不写入应用安装目录。
-- 启动时创建缺失的 `plugins`、`skills`、`mcp`、`files`、`artifacts`、`checkpoints`、`logs` 目录。
+- 启动时创建缺失的 `plugins`、`skills`、`mcp`、`settings`、`files`、`artifacts`、`checkpoints`、`logs` 目录。
 - 插件、技能、MCP 目录由用户维护，应用只读取；启用/禁用等状态写数据库。
 - 文件系统是扩展的唯一事实来源，数据库只保存投影状态，启动时以扫描结果为准。
 - RootGrant 以 `session_roots` 持久化；会话删除时清理授权记录，不删除用户文件。
@@ -1561,6 +1562,7 @@ pnpm format         # Prettier
 - 依赖新增必须在 PR 说明用途与替代方案评估。
 - 构建产物、插件产物、日志文件不得入库。
 - 提交前必须确认 `.gitignore` 覆盖 `node_modules`、`dist`、`out`、日志与本地数据库。
+- `tsconfig.base.json` 只提供共享编译选项；其 `include` 仅用于避免 IDE 把空 base 配置判为非法项目，子配置必须用各自的 `include` / `exclude` 覆盖。
 
 ### 6.11 Git 规范
 

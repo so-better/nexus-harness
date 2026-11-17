@@ -1,3 +1,6 @@
-/* core 包预留：后续放置 Agent 循环、事件流、工具注册表与权限模型。 */
+/* @nexus/core 对外导出：事件总线、权限、工具注册表与 Run 状态机。 */
 
-export {};
+export * from './event-bus';
+export * from './permissions';
+export * from './run-state';
+export * from './tool-registry';

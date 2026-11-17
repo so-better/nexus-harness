@@ -11,14 +11,17 @@ const applyTheme = (info: ThemeInfo): void => {
 
 /* 读取初始主题并订阅系统/用户切换；返回取消订阅函数。 */
 export const initTheme = async (): Promise<() => void> => {
-  const unsubscribe = window.nexus.theme.onChange(applyTheme);
-
   try {
-    const result = await window.nexus.theme.getInfo();
-    if (result.ok) applyTheme(result.data);
-  } catch {
-    // 主题读取失败时保持浏览器默认主题，不阻塞应用启动
-  }
+    const theme = window.nexus?.theme;
+    if (!theme) return () => undefined;
 
-  return unsubscribe;
+    const unsubscribe = theme.onChange(applyTheme);
+    const result = await theme.getInfo();
+    if (result.ok) applyTheme(result.data);
+
+    return unsubscribe;
+  } catch {
+    // preload 或主题读取失败时保持浏览器默认主题，不阻塞应用启动
+    return () => undefined;
+  }
 };

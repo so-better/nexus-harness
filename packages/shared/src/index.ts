@@ -1,5 +1,7 @@
-/* @nexus/shared 对外导出：IPC 契约、通道常量与通用结果类型。 */
+/* @nexus/shared 对外导出：IPC 契约、事件契约与通用结果类型。 */
 
+export * from './events';
 export * from './ipc/channels';
 export * from './ipc/contracts';
 export * from './ipc/result';
+export * from './usage';

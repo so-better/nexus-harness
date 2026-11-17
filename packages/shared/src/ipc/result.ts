@@ -8,9 +8,7 @@ export interface AppError {
 }
 
 /* 所有 IPC 调用返回 Result，避免直接抛出跨进程异常。 */
-export type Result<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: AppError };
+export type Result<T> = { ok: true; data: T } | { ok: false; error: AppError };
 
 /* 构造成功结果。 */
 export const ok = <T>(data: T): Result<T> => ({ ok: true, data });

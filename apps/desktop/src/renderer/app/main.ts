@@ -2,7 +2,7 @@
 
 import { createPinia } from 'pinia';
 import { createApp } from 'vue';
-import App from './App.vue';
+import App from './NexusApp.vue';
 import { initTheme } from './theme';
 import '../styles/global.less';
 

@@ -1,6 +1,6 @@
 /* 主窗口创建：只负责窗口生命周期与安全边界，不承载业务逻辑。 */
 
-import { BrowserWindow, screen, shell } from 'electron';
+import { app, BrowserWindow, screen, shell } from 'electron';
 import { join } from 'node:path';
 import { getWindowBackgroundColor } from './theme';
 
@@ -20,7 +20,8 @@ export const createMainWindow = (): BrowserWindow => {
     height,
     minWidth: 800,
     minHeight: 600,
-    icon: iconPath,
+    title: 'Nexus',
+    ...(app.isPackaged ? {} : { icon: iconPath }),
     backgroundColor: getWindowBackgroundColor(),
     show: false,
     webPreferences: {

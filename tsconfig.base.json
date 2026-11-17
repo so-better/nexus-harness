@@ -16,5 +16,6 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "resolveJsonModule": true
-  }
+  },
+  "include": ["packages/shared/src/index.ts"]
 }

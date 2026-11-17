@@ -3,14 +3,18 @@
   "compilerOptions": {
     "noEmit": true,
     "types": ["node"],
-    "baseUrl": ".",
     "paths": {
+      "@nexus/core": ["../../packages/core/src/index.ts"],
       "@shared/*": ["../../packages/shared/src/*"]
-    }
+    },
+    "composite": true
   },
   "include": [
     "electron.vite.config.ts",
     "src/main/**/*.ts",
-    "src/preload/**/*.ts"
-  ]
+    "src/preload/**/*.ts",
+    "../../packages/shared/src/**/*.ts",
+    "../../packages/core/src/**/*.ts"
+  ],
+  "exclude": ["../../packages/core/src/**/*.test.ts", "../../packages/shared/src/**/*.test.ts"]
 }

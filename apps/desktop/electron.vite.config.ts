@@ -5,12 +5,14 @@ import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'electron-vite';
 
 const sharedSrc = resolve(__dirname, '../../packages/shared/src');
+const coreSrc = resolve(__dirname, '../../packages/core/src');
 const rendererRoot = resolve(__dirname, 'src/renderer');
 
 export default defineConfig({
   main: {
     resolve: {
       alias: {
+        '@nexus/core': coreSrc,
         '@shared': sharedSrc
       }
     },
