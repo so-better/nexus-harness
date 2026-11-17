@@ -17,7 +17,8 @@
     "@nexus/shared": "workspace:*",
     "naive-ui": "^2.45.3",
     "pinia": "^4.1.0",
-    "vue": "^3.5.45"
+    "vue": "^3.5.45",
+    "@nexus/tools": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

@@ -5,7 +5,9 @@
     "types": ["node"],
     "paths": {
       "@nexus/core": ["../../packages/core/src/index.ts"],
-      "@shared/*": ["../../packages/shared/src/*"]
+      "@shared/*": ["../../packages/shared/src/*"],
+      "@nexus/providers": ["../../packages/providers/src/index.ts"],
+      "@nexus/tools": ["../../packages/tools/src/index.ts"]
     },
     "composite": true
   },
@@ -14,7 +16,14 @@
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
     "../../packages/shared/src/**/*.ts",
-    "../../packages/core/src/**/*.ts"
+    "../../packages/core/src/**/*.ts",
+    "../../packages/providers/src/**/*.ts",
+    "../../packages/tools/src/**/*.ts"
   ],
-  "exclude": ["../../packages/core/src/**/*.test.ts", "../../packages/shared/src/**/*.test.ts"]
+  "exclude": [
+    "../../packages/core/src/**/*.test.ts",
+    "../../packages/shared/src/**/*.test.ts",
+    "../../packages/providers/src/**/*.test.ts",
+    "../../packages/tools/src/**/*.test.ts"
+  ]
 }

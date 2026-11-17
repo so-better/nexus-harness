@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@nexus/shared": "workspace:*"
+    "@nexus/shared": "workspace:*",
+    "@nexus/providers": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

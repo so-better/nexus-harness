@@ -1,3 +1,5 @@
-/* providers 包预留：后续放置统一 LLM 抽象与流式事件归一化。 */
+/* @nexus/providers 对外导出：统一 Provider 契约与测试用 Mock Provider。 */
 
-export {};
+export * from './mock-provider';
+export * from './openai-compatible';
+export * from './types';

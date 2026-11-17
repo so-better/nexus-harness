@@ -6,17 +6,25 @@ import { defineConfig } from 'electron-vite';
 
 const sharedSrc = resolve(__dirname, '../../packages/shared/src');
 const coreSrc = resolve(__dirname, '../../packages/core/src');
+const providersSrc = resolve(__dirname, '../../packages/providers/src');
+const toolsSrc = resolve(__dirname, '../../packages/tools/src');
 const rendererRoot = resolve(__dirname, 'src/renderer');
 
 export default defineConfig({
   main: {
+    ssr: {
+      noExternal: true
+    },
     resolve: {
       alias: {
         '@nexus/core': coreSrc,
+        '@nexus/providers': providersSrc,
+        '@nexus/tools': toolsSrc,
         '@shared': sharedSrc
       }
     },
     build: {
+      externalizeDeps: false,
       rollupOptions: {
         external: ['electron']
       }

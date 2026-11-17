@@ -8,6 +8,14 @@ const bridge: NexusBridge = {
   app: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo)
   },
+  provider: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.providerList),
+    save: (input) => ipcRenderer.invoke(IPC_CHANNELS.providerSave, input),
+    remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.providerRemove, id)
+  },
+  agent: {
+    run: (input) => ipcRenderer.invoke(IPC_CHANNELS.agentRun, input)
+  },
   theme: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.themeGetInfo),
     setSource: (source) => ipcRenderer.invoke(IPC_CHANNELS.themeSetSource, source),

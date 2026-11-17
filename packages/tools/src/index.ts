@@ -1,3 +1,3 @@
-/* tools 包预留：后续放置 fs、shell、grep、fetch 与 MCP 工具实现。 */
+/* @nexus/tools 对外导出：文件工具与后续 shell / grep / MCP 实现。 */
 
-export {};
+export * from './file-tools';

@@ -7,6 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@nexus/core': resolve(process.cwd(), 'packages/core/src/index.ts'),
+      '@nexus/providers': resolve(process.cwd(), 'packages/providers/src/index.ts'),
+      '@nexus/tools': resolve(process.cwd(), 'packages/tools/src/index.ts'),
       '@shared': resolve(process.cwd(), 'packages/shared/src')
     }
   },
