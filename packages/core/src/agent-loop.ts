@@ -49,7 +49,11 @@ export interface AgentLoopOptions {
   maxSteps?: number;
   extraParams?: Record<string, unknown>;
   permissionGateway?: PermissionGateway;
-  approveTool?: (call: ProviderToolCall, tool: AgentToolDefinition) => Promise<boolean>;
+  approveTool?: (
+    call: ProviderToolCall,
+    tool: AgentToolDefinition,
+    approvalId: string
+  ) => Promise<boolean>;
   signal?: AbortSignal;
 }
 
@@ -292,12 +296,24 @@ export class AgentLoop {
         return { code: 'TOOL_APPROVAL_REQUIRED', message: `工具需要审批：${call.name}` };
       }
 
+      const approvalId = randomUUID();
+      this.emit('approval.requested', {
+        approvalId,
+        toolCallId: call.id,
+        scope: tool.name
+      });
+
       try {
-        const approved = await approve(call, tool);
+        const approved = await approve(call, tool, approvalId);
+        this.emit('approval.resolved', {
+          approvalId,
+          decision: approved ? 'approved' : 'rejected'
+        });
         if (!approved) {
           return { code: 'TOOL_APPROVAL_DENIED', message: `工具审批被拒绝：${call.name}` };
         }
       } catch (error) {
+        this.emit('approval.resolved', { approvalId, decision: 'rejected' });
         return {
           code: 'TOOL_APPROVAL_FAILED',
           message: error instanceof Error ? error.message : String(error)

@@ -64,6 +64,13 @@ export const eventPayloadSchemas = {
     toolCallId: z.string(),
     error: z.object({ code: z.string(), message: z.string() })
   }),
+  'checkpoint.created': z.object({
+    checkpointId: z.string(),
+    label: z.string()
+  }),
+  'checkpoint.restored': z.object({
+    checkpointId: z.string()
+  }),
   'approval.requested': z.object({
     approvalId: z.string(),
     toolCallId: z.string(),

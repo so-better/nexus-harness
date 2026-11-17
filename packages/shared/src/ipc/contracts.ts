@@ -81,6 +81,12 @@ export interface NexusBridge {
     setPinned: (input: SessionSetPinnedInput) => Promise<Result<SessionSummary>>;
     remove: (id: string) => Promise<Result<SessionRemoveResult>>;
   };
+  checkpoint: {
+    restore: (input: CheckpointRestoreInput) => Promise<Result<CheckpointRestoreResult>>;
+  };
+  approval: {
+    resolve: (input: ApprovalResolveInput) => Promise<Result<ApprovalResolveResult>>;
+  };
   agent: {
     run: (input: AgentRunInput) => Promise<Result<AgentStartResult>>;
     cancel: (runId: string) => Promise<Result<AgentCancelResult>>;
@@ -181,3 +187,31 @@ export type SessionCreateInput = z.infer<typeof sessionCreateInputSchema>;
 export type SessionRenameInput = z.infer<typeof sessionRenameInputSchema>;
 export type SessionRemoveResult = z.infer<typeof sessionRemoveResultSchema>;
 export type SessionSetPinnedInput = z.infer<typeof sessionSetPinnedInputSchema>;
+
+/* 用户对审批请求的决定。 */
+export const approvalResolveInputSchema = z.object({
+  approvalId: z.string().min(1),
+  approved: z.boolean()
+});
+
+export const approvalResolveResultSchema = z.object({
+  approvalId: z.string().min(1),
+  resolved: z.boolean()
+});
+
+export type ApprovalResolveInput = z.infer<typeof approvalResolveInputSchema>;
+export type ApprovalResolveResult = z.infer<typeof approvalResolveResultSchema>;
+
+/* 恢复检查点。 */
+export const checkpointRestoreInputSchema = z.object({
+  sessionId: z.string().min(1),
+  checkpointId: z.string().min(1)
+});
+
+export const checkpointRestoreResultSchema = z.object({
+  checkpointId: z.string().min(1),
+  restored: z.number().int().nonnegative()
+});
+
+export type CheckpointRestoreInput = z.infer<typeof checkpointRestoreInputSchema>;
+export type CheckpointRestoreResult = z.infer<typeof checkpointRestoreResultSchema>;

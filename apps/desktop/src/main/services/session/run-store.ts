@@ -21,7 +21,9 @@ export class RunStore {
 
   /* 更新运行状态并记录结束时间。 */
   updateStatus(runId: string, status: string): void {
-    const endedAt = status === 'running' ? null : Date.now();
+    const endedAt = ['succeeded', 'failed', 'cancelled', 'interrupted'].includes(status)
+      ? Date.now()
+      : null;
     this.db
       .prepare('UPDATE runs SET status = ?, ended_at = ? WHERE id = ?')
       .run(status, endedAt, runId);

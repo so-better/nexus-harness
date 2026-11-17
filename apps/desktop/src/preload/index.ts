@@ -22,6 +22,12 @@ const bridge: NexusBridge = {
     save: (input) => ipcRenderer.invoke(IPC_CHANNELS.providerSave, input),
     remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.providerRemove, id)
   },
+  checkpoint: {
+    restore: (input) => ipcRenderer.invoke(IPC_CHANNELS.checkpointRestore, input)
+  },
+  approval: {
+    resolve: (input) => ipcRenderer.invoke(IPC_CHANNELS.approvalResolve, input)
+  },
   agent: {
     run: (input) => ipcRenderer.invoke(IPC_CHANNELS.agentRun, input),
     cancel: (runId) => ipcRenderer.invoke(IPC_CHANNELS.agentCancel, runId),

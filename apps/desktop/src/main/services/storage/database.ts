@@ -52,6 +52,11 @@ const migrate = (db: DatabaseSync): void => {
     `);
     db.exec('PRAGMA user_version = 1');
   }
+
+  if (version < 2) {
+    db.exec('ALTER TABLE sessions ADD COLUMN deleted_at INTEGER');
+    db.exec('PRAGMA user_version = 2');
+  }
 };
 
 /* 打开任意路径的数据库并完成迁移，供主进程与测试共用。 */

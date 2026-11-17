@@ -16,7 +16,9 @@ export const IPC_CHANNELS = {
   sessionSetPinned: 'session:setPinned',
   agentRun: 'agent:run',
   agentCancel: 'agent:cancel',
-  agentEvent: 'agent:event'
+  agentEvent: 'agent:event',
+  approvalResolve: 'approval:resolve',
+  checkpointRestore: 'checkpoint:restore'
 } as const;
 
 /* 所有通道名的联合类型，供 preload 与主进程约束使用。 */

@@ -1,6 +1,6 @@
 /* 文件工具测试：读取、列目录与路径越界保护。 */
 
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -55,6 +55,57 @@ describe('file tools', () => {
 
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe('FILE_NOT_FOUND');
+  });
+
+  it('writes and patches files inside the root', async () => {
+    const written = await toolset.execute('write_file', {
+      path: 'b.txt',
+      content: 'hello'
+    });
+    expect(written.ok).toBe(true);
+
+    const patched = await toolset.execute('apply_patch', {
+      path: 'b.txt',
+      oldText: 'hello',
+      newText: 'world'
+    });
+    expect(patched.ok).toBe(true);
+
+    const read = await toolset.execute('read_file', { path: 'b.txt' });
+    expect(read.output).toBe('world');
+  });
+
+  it('blocks dangerous commands', async () => {
+    const result = await toolset.execute('run_command', { command: 'rm -rf /' });
+
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('COMMAND_BLOCKED');
+  });
+
+  it('runs safe commands with blocked cwd outside root', async () => {
+    const result = await toolset.execute('run_command', { command: 'echo hello' });
+
+    expect(result.ok).toBe(true);
+    expect(result.output.trim()).toBe('hello');
+  });
+
+  it('does not follow symlinks outside the root when creating directories', async () => {
+    if (process.platform === 'win32') return;
+
+    const outside = await mkdtemp(join(tmpdir(), 'nexus-tools-outside-'));
+    await symlink(outside, join(root, 'link'));
+    try {
+      const result = await toolset.execute('write_file', {
+        path: 'link/new/file.txt',
+        content: 'x',
+        createDirs: true
+      });
+
+      expect(result.ok).toBe(false);
+      await expect(access(join(outside, 'new', 'file.txt'))).rejects.toThrow();
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
   });
 
   it('rejects binary files', async () => {

@@ -113,6 +113,7 @@ vi.mock('../services/agent/agent-service', () => ({
   }
 }));
 
+import { approvalService } from '../services/agent/approval-service';
 import { registerAgentIpc } from './agent';
 
 const input = {
@@ -125,7 +126,9 @@ const input = {
 const createSender = (id = 1) => ({
   id,
   isDestroyed: () => false,
-  send: (channel: string, payload: unknown) => state.sent.push({ channel, payload })
+  send: (channel: string, payload: unknown) => state.sent.push({ channel, payload }),
+  once: vi.fn(),
+  removeListener: vi.fn()
 });
 
 describe('agent IPC', () => {
@@ -150,6 +153,25 @@ describe('agent IPC', () => {
       IPC_CHANNELS.agentEvent
     ]);
     expect((state.sent[1]?.payload as { type?: string }).type).toBe('run.completed');
+  });
+
+  it('resolves approvals only for the owning window', async () => {
+    const handler = state.handlers.get(IPC_CHANNELS.approvalResolve);
+    if (!handler) throw new Error('approval:resolve handler not registered');
+
+    const pending = approvalService.request('approval-test', 'run-x', 1);
+    const wrong = (await handler(
+      { sender: createSender(2) },
+      { approvalId: 'approval-test', approved: true }
+    )) as { data: { resolved: boolean } };
+    expect(wrong.data.resolved).toBe(false);
+
+    const right = (await handler(
+      { sender: createSender(1) },
+      { approvalId: 'approval-test', approved: true }
+    )) as { data: { resolved: boolean } };
+    expect(right.data.resolved).toBe(true);
+    await expect(pending).resolves.toBe(true);
   });
 
   it('cancels a run owned by the same window', async () => {

@@ -7,6 +7,14 @@ import { AgentLoop } from './agent-loop';
 import { EventBus } from './event-bus';
 import { PermissionGateway } from './permissions';
 
+const writeTool = {
+  name: 'write_file',
+  description: '写入文件',
+  inputSchema: {},
+  permission: 'write' as const,
+  requiresApproval: true
+};
+
 const readTool = {
   name: 'read_file',
   description: '读取文件',
@@ -24,7 +32,11 @@ const eventTypes = [
   'tool.requested',
   'tool.completed',
   'tool.failed',
-  'usage.recorded'
+  'usage.recorded',
+  'approval.requested',
+  'approval.resolved',
+  'checkpoint.created',
+  'checkpoint.restored'
 ] as const;
 
 const createCollector = () => {
@@ -175,6 +187,38 @@ describe('AgentLoop', () => {
 
     expect(executeTool).not.toHaveBeenCalled();
     expect(events.some((event) => event.type === 'tool.failed')).toBe(true);
+  });
+
+  it('requests and resolves approval before executing a tool', async () => {
+    const { bus, events } = createCollector();
+    const provider = new MockProvider([
+      {
+        toolCalls: [{ id: 'call-1', name: 'write_file', arguments: { path: 'a.txt' } }],
+        finishReason: 'tool_calls'
+      },
+      { text: '写入完成', finishReason: 'stop' }
+    ]);
+    const executeTool = vi.fn().mockResolvedValue({ ok: true, output: 'written' });
+    const approveTool = vi.fn().mockResolvedValue(true);
+
+    const loop = new AgentLoop({
+      provider,
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '写文件' }],
+      tools: [writeTool],
+      permissionGateway: new PermissionGateway(['write']),
+      approveTool,
+      executeTool,
+      eventBus: bus
+    });
+
+    await loop.run();
+
+    expect(approveTool).toHaveBeenCalledTimes(1);
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    expect(events.some((event) => event.type === 'approval.requested')).toBe(true);
+    expect(events.some((event) => event.type === 'approval.resolved')).toBe(true);
   });
 
   it('stops at max steps', async () => {

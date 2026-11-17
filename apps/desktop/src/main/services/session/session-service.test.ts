@@ -90,20 +90,12 @@ describe('session storage', () => {
     expect(events.list(session.id).map((event) => event.seq)).toEqual([1, 2, 3]);
   });
 
-  it('cascades events when a session is removed', () => {
+  it('keeps events for audit when a session is removed', () => {
     const session = sessions.create();
-    events.append(
-      createNexusEvent({
-        sessionId: session.id,
-        seq: 1,
-        type: 'run.started',
-        payload: { model: 'mock-model' }
-      })
-    );
-
     sessions.remove(session.id);
 
-    expect(events.list(session.id)).toEqual([]);
+    expect(sessions.get(session.id)).toBeUndefined();
+    expect(events.list(session.id).some((event) => event.type === 'session.removed')).toBe(true);
   });
 
   it('marks unfinished runs as interrupted', () => {

@@ -7,11 +7,14 @@ import type { NexusEvent } from '@shared/events';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import {
   agentRunInputSchema,
+  approvalResolveInputSchema,
   type AgentCancelResult,
-  type AgentStartResult
+  type AgentStartResult,
+  type ApprovalResolveResult
 } from '@shared/ipc/contracts';
 import { fail, ok, type Result } from '@shared/ipc/result';
 import { AgentService } from '../services/agent/agent-service';
+import { approvalService } from '../services/agent/approval-service';
 import { providerStore } from '../services/provider/provider-store';
 import { getDatabase } from '../services/storage/database';
 import { EventStore } from '../services/session/event-store';
@@ -61,6 +64,11 @@ export const registerAgentIpc = (): void => {
         const controller = new AbortController();
         const sender = event.sender;
         const senderId = sender.id;
+        const onSenderDestroyed = (): void => {
+          approvalService.cancelRun(runId);
+          controller.abort();
+        };
+        sender.once('destroyed', onSenderDestroyed);
         registerRun({ runId, sessionId: parsed.data.sessionId, senderId, controller });
 
         try {
@@ -107,6 +115,12 @@ export const registerAgentIpc = (): void => {
           } else if (agentEvent.type === 'run.cancelled') {
             runs.updateStatus(runId, 'cancelled');
             sessions.setStatus(parsed.data.sessionId, 'idle');
+          } else if (agentEvent.type === 'approval.requested') {
+            runs.updateStatus(runId, 'waiting_approval');
+            sessions.setStatus(parsed.data.sessionId, 'waiting_approval');
+          } else if (agentEvent.type === 'approval.resolved') {
+            runs.updateStatus(runId, 'running');
+            sessions.setStatus(parsed.data.sessionId, 'running');
           }
         };
 
@@ -114,6 +128,9 @@ export const registerAgentIpc = (): void => {
           .run(parsed.data, provider, {
             runId,
             signal: controller.signal,
+            approveTool: (_call, _tool, approvalId) => {
+              return approvalService.request(approvalId, runId, senderId);
+            },
             onEvent: (agentEvent) => {
               if (
                 agentEvent.type === 'run.completed' ||
@@ -148,6 +165,8 @@ export const registerAgentIpc = (): void => {
           })
           .finally(async () => {
             await persistChain;
+            sender.removeListener('destroyed', onSenderDestroyed);
+            approvalService.cancelRun(runId);
             unregisterRun(runId);
           });
 
@@ -175,8 +194,26 @@ export const registerAgentIpc = (): void => {
         return fail('AGENT_CANCEL_DENIED', '不能取消其他窗口发起的 Run');
       }
 
+      approvalService.cancelRun(rawRunId);
       active.controller.abort();
       return ok({ runId: rawRunId, cancelled: true });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.approvalResolve,
+    async (event, rawInput: unknown): Promise<Result<ApprovalResolveResult>> => {
+      const parsed = approvalResolveInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return fail('APPROVAL_INVALID_INPUT', '审批参数不合法', parsed.error.flatten());
+      }
+
+      const resolved = approvalService.resolve(
+        parsed.data.approvalId,
+        parsed.data.approved,
+        event.sender.id
+      );
+      return ok({ approvalId: parsed.data.approvalId, resolved });
     }
   );
 };

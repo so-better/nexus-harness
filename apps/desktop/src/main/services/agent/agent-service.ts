@@ -1,9 +1,20 @@
 /* Agent 服务：把 Provider、文件工具与 AgentLoop 组装成一次运行。 */
 
 import { randomUUID } from 'node:crypto';
-import { AgentLoop, EventBus, PermissionGateway, type AgentToolDefinition } from '@nexus/core';
-import { OpenAICompatibleProvider, type ChatProvider } from '@nexus/providers';
+import {
+  AgentLoop,
+  EventBus,
+  PermissionGateway,
+  createNexusEvent,
+  type AgentToolDefinition
+} from '@nexus/core';
+import {
+  OpenAICompatibleProvider,
+  type ChatProvider,
+  type ProviderToolCall
+} from '@nexus/providers';
 import { createFileToolset } from '@nexus/tools';
+import { CheckpointService } from '../checkpoint/checkpoint-service';
 import type { NexusEvent } from '@shared/events';
 import type { AgentProviderConfig, AgentRunInput, AgentRunResult } from '@shared/ipc/contracts';
 
@@ -14,7 +25,25 @@ export interface AgentRunHooks {
   runId?: string;
   signal?: AbortSignal;
   onEvent?: (event: NexusEvent) => void;
+  approveTool?: (
+    call: ProviderToolCall,
+    tool: AgentToolDefinition,
+    approvalId: string
+  ) => Promise<boolean>;
 }
+
+/* 从工具参数中读取 path；其他工具返回 undefined。 */
+const getPathArgument = (input: unknown): string | undefined => {
+  if (!input || typeof input !== 'object' || !('path' in input)) return undefined;
+  const pathValue = (input as { path?: unknown }).path;
+  return typeof pathValue === 'string' ? pathValue : undefined;
+};
+
+const getCreateDirsArgument = (input: unknown): boolean =>
+  !!input &&
+  typeof input === 'object' &&
+  'createDirs' in input &&
+  (input as { createDirs?: unknown }).createDirs === true;
 
 const createOpenAIProvider: ProviderFactory = (config) =>
   new OpenAICompatibleProvider({
@@ -40,6 +69,41 @@ export class AgentService {
 
     try {
       const toolset = await createFileToolset(input.rootPaths);
+      const checkpoints = new CheckpointService();
+      const checkpointRoot = await toolset.resolvePath('.');
+
+      const executeTool = async (call: { name: string; arguments: unknown }) => {
+        if (call.name === 'write_file' || call.name === 'apply_patch') {
+          const pathArgument = getPathArgument(call.arguments);
+          if (pathArgument) {
+            try {
+              const filePath = await toolset.resolvePath(pathArgument, {
+                mode: 'write',
+                createDirs: getCreateDirsArgument(call.arguments)
+              });
+              const checkpoint = await checkpoints.create({
+                sessionId: input.sessionId,
+                runId,
+                rootPath: checkpointRoot,
+                filePath,
+                label: call.name
+              });
+              eventBus.publish(
+                createNexusEvent({
+                  sessionId: input.sessionId,
+                  runId,
+                  seq: 1,
+                  type: 'checkpoint.created',
+                  payload: { checkpointId: checkpoint.checkpointId, label: call.name }
+                })
+              );
+            } catch {
+              // 路径非法时交由工具返回结构化错误，不创建检查点
+            }
+          }
+        }
+        return toolset.execute(call.name, call.arguments);
+      };
       const tools: AgentToolDefinition[] = toolset.definitions.map((definition) => ({
         name: definition.name,
         description: definition.description,
@@ -56,8 +120,9 @@ export class AgentService {
         runId,
         messages: [{ role: 'user', content: input.prompt }],
         tools,
-        permissionGateway: new PermissionGateway(['read']),
-        executeTool: async (call) => toolset.execute(call.name, call.arguments),
+        permissionGateway: new PermissionGateway(['read', 'write', 'execute']),
+        executeTool,
+        ...(hooks.approveTool ? { approveTool: hooks.approveTool } : {}),
         eventBus,
         ...(providerConfig.extraParams ? { extraParams: providerConfig.extraParams } : {}),
         ...(hooks.signal ? { signal: hooks.signal } : {}),

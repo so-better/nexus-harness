@@ -81,15 +81,18 @@ export class SessionService {
   /* 列出会话：置顶优先，其次按最近活跃排序。 */
   list(): SessionSummary[] {
     const rows = this.db
-      .prepare('SELECT * FROM sessions ORDER BY pinned DESC, last_active_at DESC')
+      .prepare(
+        'SELECT * FROM sessions WHERE deleted_at IS NULL ORDER BY pinned DESC, last_active_at DESC'
+      )
       .all() as unknown as SessionRow[];
     return rows.map(toSummary);
   }
 
   /* 读取会话；不存在返回 undefined。 */
   get(id: string): SessionSummary | undefined {
-    const row = this.db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) as unknown as
-      SessionRow | undefined;
+    const row = this.db
+      .prepare('SELECT * FROM sessions WHERE id = ? AND deleted_at IS NULL')
+      .get(id) as unknown as SessionRow | undefined;
     return row ? toSummary(row) : undefined;
   }
 
@@ -100,7 +103,7 @@ export class SessionService {
     return this.transaction(() => {
       this.db
         .prepare(
-          "UPDATE sessions SET title = ?, title_source = 'user', updated_at = ?, last_active_at = ? WHERE id = ?"
+          "UPDATE sessions SET title = ?, title_source = 'user', updated_at = ?, last_active_at = ? WHERE id = ? AND deleted_at IS NULL"
         )
         .run(input.title, now, now, input.id);
 
@@ -119,11 +122,15 @@ export class SessionService {
 
   /* 删除会话；事件与 Run 由外键级联清理。 */
   remove(id: string): void {
+    const now = Date.now();
+
     this.transaction(() => {
       this.events.append(
         createNexusEvent({ sessionId: id, seq: 1, type: 'session.removed', payload: {} })
       );
-      this.db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
+      this.db
+        .prepare('UPDATE sessions SET deleted_at = ?, updated_at = ? WHERE id = ?')
+        .run(now, now, id);
     });
   }
 
@@ -133,7 +140,9 @@ export class SessionService {
 
     return this.transaction(() => {
       this.db
-        .prepare('UPDATE sessions SET pinned = ?, updated_at = ? WHERE id = ?')
+        .prepare(
+          'UPDATE sessions SET pinned = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL'
+        )
         .run(pinned ? 1 : 0, now, id);
       this.events.append(
         createNexusEvent({
@@ -151,7 +160,9 @@ export class SessionService {
   setStatus(id: string, status: SessionStatus): void {
     const now = Date.now();
     this.db
-      .prepare('UPDATE sessions SET status = ?, updated_at = ?, last_active_at = ? WHERE id = ?')
+      .prepare(
+        'UPDATE sessions SET status = ?, updated_at = ?, last_active_at = ? WHERE id = ? AND deleted_at IS NULL'
+      )
       .run(status, now, now, id);
   }
 
