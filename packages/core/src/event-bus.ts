@@ -7,6 +7,7 @@ type AnyEventHandler = (event: NexusEvent) => void;
 /* 事件总线的最小实现；持久化事件流由上层负责。 */
 export class EventBus {
   private readonly handlers = new Map<NexusEventType, Set<AnyEventHandler>>();
+  private readonly allHandlers = new Set<AnyEventHandler>();
   private readonly onError: (error: unknown) => void;
 
   constructor(onError: (error: unknown) => void) {
@@ -36,8 +37,24 @@ export class EventBus {
     };
   }
 
+  /* 订阅全部事件，用于 IPC 转发与调试；返回取消订阅函数。 */
+  subscribeAll(handler: (event: NexusEvent) => void): () => void {
+    this.allHandlers.add(handler);
+    return () => {
+      this.allHandlers.delete(handler);
+    };
+  }
+
   /* 同步发布事件；单个订阅者异常不影响其他订阅者。 */
   publish<T extends NexusEventType>(event: NexusEvent<T>): void {
+    for (const handler of [...this.allHandlers]) {
+      try {
+        handler(event as NexusEvent);
+      } catch (error) {
+        this.onError(error);
+      }
+    }
+
     const bucket = this.handlers.get(event.type);
     if (!bucket) return;
 
@@ -53,5 +70,6 @@ export class EventBus {
   /* 清空所有订阅。 */
   clear(): void {
     this.handlers.clear();
+    this.allHandlers.clear();
   }
 }

@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MockProvider } from '@nexus/providers';
+import type { NexusEvent } from '@shared/events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentService } from './agent-service';
 
@@ -39,6 +40,7 @@ describe('AgentService', () => {
       apiKey: 'secret',
       enabled: true
     };
+    const events: NexusEvent[] = [];
     const result = await service.run(
       {
         sessionId: 'session-1',
@@ -46,7 +48,8 @@ describe('AgentService', () => {
         rootPaths: [root],
         providerId: providerConfig.id
       },
-      providerConfig
+      providerConfig,
+      { onEvent: (event) => events.push(event) }
     );
 
     expect(createProvider).toHaveBeenCalledWith(
@@ -57,5 +60,13 @@ describe('AgentService', () => {
     expect(result.finishReason).toBe('stop');
     expect(result.messages.some((message) => message.content === 'hello')).toBe(true);
     expect(result.messages.at(-1)).toMatchObject({ role: 'assistant', content: '读取完成' });
+    expect(events.map((event) => event.type)).toEqual([
+      'run.started',
+      'message.completed',
+      'tool.requested',
+      'tool.completed',
+      'message.completed',
+      'run.completed'
+    ]);
   });
 });

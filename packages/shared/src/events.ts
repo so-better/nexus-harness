@@ -16,6 +16,7 @@ export const eventPayloadSchemas = {
     source: z.enum(['auto', 'user'])
   }),
   'session.pinned': z.object({}),
+  'session.removed': z.object({}),
   'session.unpinned': z.object({}),
   'run.started': z.object({
     model: z.string()
@@ -28,6 +29,9 @@ export const eventPayloadSchemas = {
   }),
   'run.cancelled': z.object({
     reason: z.string().optional()
+  }),
+  'run.interrupted': z.object({
+    reason: z.string()
   }),
   'message.completed': z.object({
     messageId: z.string(),
@@ -113,6 +117,7 @@ export interface NexusEvent<T extends NexusEventType = NexusEventType> {
   version: number;
   ts: number;
   payload: EventPayloadMap[T];
+  persisted?: boolean;
 }
 
 /* 事件信封的基础 zod schema；payload 由具体事件 schema 再校验。 */

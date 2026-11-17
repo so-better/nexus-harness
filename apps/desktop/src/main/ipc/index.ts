@@ -3,6 +3,7 @@
 import { registerAgentIpc } from './agent';
 import { registerAppIpc } from './app';
 import { registerProviderIpc } from './provider';
+import { registerSessionIpc } from './session';
 import { registerThemeIpc } from './theme';
 
 /* 注册全部主进程 IPC；后续按域在此追加。 */
@@ -10,5 +11,6 @@ export const registerIpcHandlers = (): void => {
   registerAgentIpc();
   registerAppIpc();
   registerProviderIpc();
+  registerSessionIpc();
   registerThemeIpc();
 };

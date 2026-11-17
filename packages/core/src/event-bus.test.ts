@@ -28,6 +28,18 @@ describe('EventBus', () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
+  it('notifies all-event subscribers', () => {
+    const bus = new EventBus(() => undefined);
+    const handler = vi.fn();
+    const unsubscribe = bus.subscribeAll(handler);
+
+    bus.publish(createEvent('all'));
+    unsubscribe();
+    bus.publish(createEvent('after'));
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
   it('isolates subscriber errors', () => {
     const onError = vi.fn();
     const bus = new EventBus(onError);

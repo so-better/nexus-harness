@@ -8,7 +8,15 @@ export const IPC_CHANNELS = {
   providerList: 'provider:list',
   providerSave: 'provider:save',
   providerRemove: 'provider:remove',
-  agentRun: 'agent:run'
+  sessionList: 'session:list',
+  sessionCreate: 'session:create',
+  sessionGet: 'session:get',
+  sessionRename: 'session:rename',
+  sessionRemove: 'session:remove',
+  sessionSetPinned: 'session:setPinned',
+  agentRun: 'agent:run',
+  agentCancel: 'agent:cancel',
+  agentEvent: 'agent:event'
 } as const;
 
 /* 所有通道名的联合类型，供 preload 与主进程约束使用。 */

@@ -1,6 +1,7 @@
 /* 跨进程契约：应用级 IPC 的 zod schema 与 preload 桥接类型。 */
 
 import { z } from 'zod';
+import type { NexusEvent } from '../events';
 import type { Result } from './result';
 
 /* 应用基础信息，用于确认渲染进程与主进程通道可用。 */
@@ -72,8 +73,18 @@ export interface NexusBridge {
     save: (input: ProviderSettings) => Promise<Result<ProviderPublic>>;
     remove: (id: string) => Promise<Result<ProviderRemoveResult>>;
   };
+  session: {
+    list: () => Promise<Result<SessionSummary[]>>;
+    create: (input: SessionCreateInput) => Promise<Result<SessionSummary>>;
+    get: (id: string) => Promise<Result<SessionSummary>>;
+    rename: (input: SessionRenameInput) => Promise<Result<SessionSummary>>;
+    setPinned: (input: SessionSetPinnedInput) => Promise<Result<SessionSummary>>;
+    remove: (id: string) => Promise<Result<SessionRemoveResult>>;
+  };
   agent: {
-    run: (input: AgentRunInput) => Promise<Result<AgentRunResult>>;
+    run: (input: AgentRunInput) => Promise<Result<AgentStartResult>>;
+    cancel: (runId: string) => Promise<Result<AgentCancelResult>>;
+    onEvent: (handler: (event: NexusEvent) => void) => Unsubscribe;
   };
 }
 
@@ -84,6 +95,13 @@ export const agentRunInputSchema = z.object({
   rootPaths: z.array(z.string().min(1)).min(1),
   providerId: z.string().min(1),
   maxSteps: z.number().int().positive().max(50).optional()
+});
+
+export const agentStartResultSchema = z.object({ runId: z.string().min(1) });
+
+export const agentCancelResultSchema = z.object({
+  runId: z.string().min(1),
+  cancelled: z.boolean()
 });
 
 export const agentRunResultSchema = z.object({
@@ -105,4 +123,61 @@ export type ProviderPublic = z.infer<typeof providerPublicSchema>;
 export type ProviderRemoveResult = z.infer<typeof providerRemoveResultSchema>;
 export type AgentProviderConfig = z.infer<typeof agentProviderConfigSchema>;
 export type AgentRunInput = z.infer<typeof agentRunInputSchema>;
+export type AgentStartResult = z.infer<typeof agentStartResultSchema>;
+export type AgentCancelResult = z.infer<typeof agentCancelResultSchema>;
 export type AgentRunResult = z.infer<typeof agentRunResultSchema>;
+
+/* 会话状态与 Agent 模式。 */
+export const sessionStatusSchema = z.enum([
+  'idle',
+  'running',
+  'waiting_approval',
+  'waiting_user',
+  'completed',
+  'failed',
+  'interrupted',
+  'archived'
+]);
+
+export const agentModeSchema = z.enum(['plan', 'build']);
+
+export const sessionSummarySchema = z.object({
+  id: z.string().min(1),
+  workspaceId: z.string().optional(),
+  title: z.string(),
+  titleSource: z.enum(['auto', 'user']),
+  pinned: z.boolean(),
+  status: sessionStatusSchema,
+  mode: agentModeSchema,
+  providerId: z.string().optional(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+  lastActiveAt: z.number()
+});
+
+export const sessionCreateInputSchema = z.object({
+  title: z.string().optional(),
+  workspaceId: z.string().optional(),
+  providerId: z.string().optional(),
+  mode: agentModeSchema.optional()
+});
+
+export const sessionRenameInputSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1)
+});
+
+export const sessionRemoveResultSchema = z.object({ id: z.string().min(1) });
+
+export const sessionSetPinnedInputSchema = z.object({
+  id: z.string().min(1),
+  pinned: z.boolean()
+});
+
+export type SessionStatus = z.infer<typeof sessionStatusSchema>;
+export type AgentMode = z.infer<typeof agentModeSchema>;
+export type SessionSummary = z.infer<typeof sessionSummarySchema>;
+export type SessionCreateInput = z.infer<typeof sessionCreateInputSchema>;
+export type SessionRenameInput = z.infer<typeof sessionRenameInputSchema>;
+export type SessionRemoveResult = z.infer<typeof sessionRemoveResultSchema>;
+export type SessionSetPinnedInput = z.infer<typeof sessionSetPinnedInputSchema>;
