@@ -30,6 +30,7 @@ const eventTypes = [
   'run.completed',
   'run.failed',
   'run.cancelled',
+  'message.delta',
   'message.completed',
   'tool.requested',
   'tool.completed',
@@ -91,12 +92,48 @@ describe('AgentLoop', () => {
     ).toBe(true);
     expect(events.map((event) => event.type)).toEqual([
       'run.started',
+      'message.delta',
       'message.completed',
       'tool.requested',
       'tool.completed',
+      'message.delta',
       'message.completed',
       'run.completed'
     ]);
+  });
+
+  it('emits text deltas with the same message id as the completed message', async () => {
+    const { bus, events } = createCollector();
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: false, vision: false, reasoning: false },
+      async *stream() {
+        yield { type: 'text-delta', text: '你' };
+        yield { type: 'text-delta', text: '好' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const loop = new AgentLoop({
+      provider,
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '打招呼' }],
+      eventBus: bus
+    });
+
+    await loop.run();
+
+    const deltas = events.filter(
+      (event): event is NexusEvent<'message.delta'> => event.type === 'message.delta'
+    );
+    const completed = events.find(
+      (event): event is NexusEvent<'message.completed'> => event.type === 'message.completed'
+    );
+    expect(deltas).toHaveLength(2);
+    expect(completed?.type).toBe('message.completed');
+    expect(deltas.every((event) => event.payload.messageId === completed?.payload.messageId)).toBe(
+      true
+    );
+    expect(completed?.payload.content).toBe('你好');
   });
 
   it('feeds tool failures back to the model', async () => {

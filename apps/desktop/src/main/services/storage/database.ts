@@ -82,6 +82,36 @@ const migrate = (db: DatabaseSync): void => {
     db.exec('ALTER TABLE sessions ADD COLUMN model_id TEXT');
     db.exec('PRAGMA user_version = 4');
   }
+
+  if (version < 5) {
+    try {
+      db.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS session_message_search USING fts5(
+          session_id UNINDEXED,
+          message_id UNINDEXED,
+          role UNINDEXED,
+          content,
+          ts UNINDEXED,
+          tokenize = 'trigram'
+        );
+      `);
+      db.exec(`
+        INSERT INTO session_message_search (session_id, message_id, role, content, ts)
+        SELECT e.session_id,
+               json_extract(e.payload, '$.messageId'),
+               json_extract(e.payload, '$.role'),
+               json_extract(e.payload, '$.content'),
+               e.ts
+        FROM events e
+        WHERE e.type = 'message.completed'
+          AND json_extract(e.payload, '$.messageId') IS NOT NULL
+          AND json_extract(e.payload, '$.content') IS NOT NULL;
+      `);
+    } catch (error) {
+      console.warn('FTS5 搜索索引不可用，降级为 LIKE 搜索', error);
+    }
+    db.exec('PRAGMA user_version = 5');
+  }
 };
 
 /**

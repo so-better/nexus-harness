@@ -31,6 +31,7 @@ export interface ChatMessageView {
   content: string;
   toolCalls: ChatToolCall[];
   createdAt: number;
+  streaming?: boolean;
 }
 
 /**
@@ -61,6 +62,7 @@ export interface ChatProjection {
   usage: ChatUsage;
   runId?: string;
   running: boolean;
-  status: 'idle' | 'running' | 'waiting_approval' | 'completed' | 'failed' | 'cancelled';
+  status:
+    'idle' | 'running' | 'waiting_approval' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
   error?: string;
 }

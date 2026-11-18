@@ -25,6 +25,7 @@
         :disabled-reason="disabledReason"
         :focus-message-id="focusMessage?.id"
         :focus-token="focusMessage?.token"
+        :focus-session-id="focusMessage?.sessionId"
         @choose-root="chat.addRoot"
         @update-provider="updateProvider"
         @update-model="updateModel"
@@ -81,7 +82,7 @@ const { sessions: sessionList, activeId } = storeToRefs(sessions);
 const { providers, providerId, modelId, models, rootPaths, runningBySession } = storeToRefs(chat);
 
 const { version, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
-const focusMessage = ref<{ id: string; token: number }>();
+const focusMessage = ref<{ id: string; token: number; sessionId: string }>();
 let focusSequence = 0;
 
 const projection = computed(() => {
@@ -145,7 +146,7 @@ const selectSession = (id: string): void => {
 const openSearchMessage = (sessionId: string, messageId: string): void => {
   sessions.select(sessionId);
   focusSequence += 1;
-  focusMessage.value = { id: messageId, token: focusSequence };
+  focusMessage.value = { id: messageId, token: focusSequence, sessionId };
 };
 
 /**
@@ -161,7 +162,11 @@ const ensureSession = async (): Promise<void> => {
  * 删除会话；删掉最后一个后自动补一个新会话。
  */
 const removeSession = async (id: string): Promise<void> => {
-  await sessions.remove(id);
+  const removed = await sessions.remove(id);
+  if (!removed) {
+    message.error(sessions.error ?? t('session.removeFailed'));
+    return;
+  }
   await ensureSession();
 };
 
@@ -169,7 +174,8 @@ const removeSession = async (id: string): Promise<void> => {
  * 重命名会话。
  */
 const renameSession = async (id: string, title: string): Promise<void> => {
-  await sessions.rename(id, title);
+  const renamed = await sessions.rename(id, title);
+  if (!renamed) message.error(sessions.error ?? t('session.renameFailed'));
 };
 
 /**

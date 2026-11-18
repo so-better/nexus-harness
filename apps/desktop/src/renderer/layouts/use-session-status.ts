@@ -13,7 +13,8 @@ const statusMap: Record<string, SessionStatus> = {
   waiting_approval: 'waiting_approval',
   completed: 'completed',
   failed: 'failed',
-  cancelled: 'interrupted'
+  cancelled: 'interrupted',
+  interrupted: 'interrupted'
 };
 
 /**

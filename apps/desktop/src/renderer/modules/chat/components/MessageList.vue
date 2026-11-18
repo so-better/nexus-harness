@@ -1,5 +1,5 @@
 <template>
-  <div ref="viewport" class="nh-message-list">
+  <div ref="viewport" class="nh-message-list" @scroll="handleScroll">
     <div class="nh-message-list__stack">
       <ChatMessageItem
         v-for="(message, index) in messages"
@@ -7,6 +7,7 @@
         :message="message"
         :grouped="isGrouped(index)"
         :highlighted="message.id === highlightedId"
+        @content-growth="handleContentGrowth"
       />
     </div>
   </div>
@@ -25,21 +26,29 @@ const props = defineProps<{
   messages: ChatMessageView[];
   focusMessageId?: string | undefined;
   focusToken?: number | undefined;
+  focusSessionId?: string | undefined;
+  sessionId?: string | undefined;
 }>();
 
 const viewport = ref<HTMLElement | null>(null);
 const highlightedId = ref<string>();
 let highlightTimer: ReturnType<typeof setTimeout> | undefined;
+let focusRequest = 0;
+let focusReleaseTimer: ReturnType<typeof setTimeout> | undefined;
+const focusing = ref(false);
+const stickToBottom = ref(true);
+const BOTTOM_THRESHOLD = 80;
 
 /**
- * 连续助手消息共用首个头像与角色信息，减少重复视觉噪音。
- */
-/**
  * 等待目标消息渲染后滚动并短暂高亮；跨会话切换时历史加载可能稍晚。
+ * 定位期间抑制自动吸底，避免历史加载后把视图再次拉到底部。
  */
-const focusMessage = async (messageId: string): Promise<void> => {
+const focusMessage = async (messageId: string, request: number): Promise<void> => {
   for (let attempt = 0; attempt < 40; attempt += 1) {
+    if (request !== focusRequest) return;
     await nextTick();
+    if (request !== focusRequest) return;
+
     const element = viewport.value?.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`);
     if (element) {
       element.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -48,24 +57,85 @@ const focusMessage = async (messageId: string): Promise<void> => {
       highlightTimer = setTimeout(() => {
         if (highlightedId.value === messageId) highlightedId.value = undefined;
       }, 1600);
+      if (focusReleaseTimer) clearTimeout(focusReleaseTimer);
+      focusReleaseTimer = setTimeout(() => {
+        if (request === focusRequest) focusing.value = false;
+      }, 600);
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 75));
   }
+
+  if (request === focusRequest) focusing.value = false;
 };
 
 watch(
-  () => [props.focusMessageId, props.focusToken] as const,
-  ([messageId, token], previous) => {
-    if (!messageId || !token || token === previous?.[1]) return;
-    void focusMessage(messageId);
+  () => [props.focusMessageId, props.focusToken, props.focusSessionId, props.sessionId] as const,
+  ([messageId, token, focusSessionId, sessionId], previous) => {
+    if (
+      !messageId ||
+      !token ||
+      token === previous?.[1] ||
+      !focusSessionId ||
+      focusSessionId !== sessionId
+    ) {
+      return;
+    }
+    focusRequest += 1;
+    focusing.value = true;
+    highlightedId.value = undefined;
+    void focusMessage(messageId, focusRequest);
   },
   { immediate: true }
 );
 
 onBeforeUnmount(() => {
+  focusRequest += 1;
   if (highlightTimer) clearTimeout(highlightTimer);
+  if (focusReleaseTimer) clearTimeout(focusReleaseTimer);
 });
+
+/**
+ * 用户接近底部时恢复自动跟随；向上浏览时保持当前位置。
+ */
+/**
+ * 流式文本增长时只在用户贴底时跟随，向上阅读时不打扰。
+ */
+const handleContentGrowth = (): void => {
+  if (focusing.value || !stickToBottom.value) return;
+  const view = viewport.value;
+  if (!view) return;
+  view.scrollTop = view.scrollHeight;
+};
+
+const handleScroll = (): void => {
+  const view = viewport.value;
+  if (!view) return;
+  stickToBottom.value = view.scrollHeight - view.scrollTop - view.clientHeight <= BOTTOM_THRESHOLD;
+};
+
+/**
+ * 滚动到最新消息。
+ */
+const scrollToLatest = (behavior: ScrollBehavior = 'smooth'): void => {
+  const view = viewport.value;
+  if (!view) return;
+  view.scrollTo({ top: view.scrollHeight, behavior });
+};
+
+/**
+ * 切换会话时回到最新消息，并重置跟随状态。
+ */
+watch(
+  () => props.sessionId,
+  async () => {
+    if (props.focusSessionId !== props.sessionId) focusing.value = false;
+    stickToBottom.value = true;
+    await nextTick();
+    if (!focusing.value) scrollToLatest('auto');
+  },
+  { immediate: true }
+);
 
 const isGrouped = (index: number): boolean => {
   const current = props.messages[index];
@@ -83,7 +153,13 @@ watch(
   () => props.messages.length,
   async () => {
     await nextTick();
-    viewport.value?.scrollTo({ top: viewport.value.scrollHeight, behavior: 'smooth' });
+    if (focusing.value) return;
+
+    // 用户自己发送消息时始终回到最新；其余新消息仅在贴底时跟随
+    const last = props.messages.at(-1);
+    if (last?.role !== 'user' && !stickToBottom.value) return;
+    stickToBottom.value = true;
+    scrollToLatest();
   }
 );
 </script>

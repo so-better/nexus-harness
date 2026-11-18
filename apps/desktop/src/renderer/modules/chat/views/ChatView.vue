@@ -34,6 +34,8 @@
         :messages="projection.messages"
         :focus-message-id="focusMessageId"
         :focus-token="focusToken"
+        :focus-session-id="focusSessionId"
+        :session-id="session?.id"
       />
 
       <div class="nh-chat__bottom">
@@ -94,6 +96,7 @@ const props = defineProps<{
   disabledReason?: string | undefined;
   focusMessageId?: string | undefined;
   focusToken?: number | undefined;
+  focusSessionId?: string | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -117,6 +120,8 @@ const pendingApprovals = computed(() =>
 .nh-chat {
   display: flex;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   flex-direction: column;
   background: var(--nh-color-bg-base);
 }

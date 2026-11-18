@@ -1,8 +1,10 @@
 <template>
   <button
     type="button"
+    role="option"
     class="nh-search-result"
     :class="{ 'nh-search-result--active': active }"
+    :aria-selected="active"
     @click="emit('select')"
   >
     <span class="nh-search-result__head">

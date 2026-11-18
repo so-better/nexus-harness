@@ -10,6 +10,73 @@ const event = (input: Omit<NexusEvent, 'id' | 'version' | 'ts'>): NexusEvent =>
   ({ ...input, id: `event-${input.seq}`, version: 1, ts: input.seq }) as NexusEvent;
 
 describe('projectEvents', () => {
+  it('merges message deltas into one completed message', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'message.delta',
+        payload: { messageId: 'assistant-1', text: '你' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'message.delta',
+        payload: { messageId: 'assistant-1', text: '好' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'message.completed',
+        payload: { messageId: 'assistant-1', role: 'assistant', content: '你好' }
+      })
+    ]);
+
+    expect(projection.messages).toHaveLength(1);
+    expect(projection.messages[0]).toMatchObject({
+      id: 'assistant-1',
+      role: 'assistant',
+      content: '你好',
+      streaming: false
+    });
+  });
+
+  it('marks interrupted streaming content as interrupted', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'run.started',
+        payload: { model: 'mock-model' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'message.delta',
+        payload: { messageId: 'assistant-1', text: '部分内容' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'run.interrupted',
+        payload: { reason: 'app_restart' }
+      })
+    ]);
+
+    expect(projection.status).toBe('interrupted');
+    expect(projection.messages[0]).toMatchObject({
+      id: 'assistant-1',
+      content: '部分内容',
+      streaming: false
+    });
+  });
+
   it('projects messages, tool calls, approvals and usage', () => {
     const events: NexusEvent[] = [
       event({

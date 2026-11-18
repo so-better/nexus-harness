@@ -30,7 +30,9 @@
         <span class="nh-message__role">{{ roleLabel }}</span>
         <span class="nh-message__time">{{ timeLabel }}</span>
       </header>
-      <p v-if="message.content" class="nh-message__content">{{ message.content }}</p>
+      <p v-if="message.content" class="nh-message__content">
+        {{ contentText }}<span v-if="isTyping" class="nh-message__caret" />
+      </p>
       <div v-if="message.toolCalls.length" class="nh-message__tools">
         <ToolCallCard v-for="tool in message.toolCalls" :key="tool.id" :tool="tool" />
       </div>
@@ -43,7 +45,7 @@
  * 单条消息：用户、助手或系统提示，并挂载工具调用卡片。
  */
 
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { NAvatar } from 'naive-ui';
 import { t } from '@/app/i18n';
 import type { ChatMessageView } from '../types';
@@ -57,6 +59,78 @@ const props = withDefaults(
   }>(),
   { grouped: false, highlighted: false }
 );
+
+const emit = defineEmits<{ 'content-growth': [] }>();
+
+const visibleContent = ref(props.message.content);
+let frameId: number | undefined;
+
+/**
+ * 流式文本逐帧追平目标内容；完成时仍把剩余尾巴打完，避免整段突然跳出。
+ */
+const pump = (): void => {
+  frameId = undefined;
+  if (props.message.role !== 'assistant') {
+    visibleContent.value = props.message.content;
+    return;
+  }
+
+  const target = Array.from(props.message.content);
+  const visible = Array.from(visibleContent.value);
+  if (visible.length >= target.length) {
+    if (visibleContent.value !== props.message.content)
+      visibleContent.value = props.message.content;
+    return;
+  }
+
+  const remaining = target.length - visible.length;
+  const step = Math.max(1, Math.ceil(remaining / 16));
+  visibleContent.value = target.slice(0, visible.length + step).join('');
+  emit('content-growth');
+  frameId = requestAnimationFrame(pump);
+};
+
+/**
+ * 启动追逐帧；已有帧时不重复调度。
+ */
+const startPump = (): void => {
+  if (frameId === undefined) frameId = requestAnimationFrame(pump);
+};
+
+const contentText = computed(() =>
+  props.message.role === 'assistant' ? visibleContent.value : props.message.content
+);
+const isTyping = computed(
+  () =>
+    props.message.role === 'assistant' &&
+    (props.message.streaming === true || visibleContent.value !== props.message.content)
+);
+
+watch(
+  () => props.message.content,
+  () => {
+    if (props.message.role !== 'assistant') {
+      visibleContent.value = props.message.content;
+      return;
+    }
+    startPump();
+  }
+);
+
+watch(
+  () => props.message.streaming,
+  () => {
+    if (props.message.role === 'assistant') startPump();
+  }
+);
+
+onMounted(() => {
+  if (props.message.role === 'assistant') startPump();
+});
+
+onBeforeUnmount(() => {
+  if (frameId !== undefined) cancelAnimationFrame(frameId);
+});
 
 const roleLabel = computed(() => {
   if (props.message.role === 'user') return t('chat.user');
@@ -152,6 +226,22 @@ const timeLabel = computed(() =>
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   text-wrap: pretty;
+}
+
+.nh-message__caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  background: var(--nh-color-accent);
+  vertical-align: -0.12em;
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
 }
 
 .nh-message--user .nh-message__content {

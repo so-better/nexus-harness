@@ -70,7 +70,41 @@ export class EventStore {
         payload
       );
 
+    this.syncSearchIndex(stored);
     return stored;
+  }
+
+  /**
+   * 同步消息搜索索引；索引失败不能影响事件写入。
+   */
+  private syncSearchIndex(event: NexusEvent): void {
+    try {
+      if (event.type === 'message.completed') {
+        const payload = event.payload as { messageId?: unknown; role?: unknown; content?: unknown };
+        if (
+          typeof payload.messageId !== 'string' ||
+          (payload.role !== 'user' && payload.role !== 'assistant') ||
+          typeof payload.content !== 'string'
+        ) {
+          return;
+        }
+        this.db
+          .prepare('DELETE FROM session_message_search WHERE message_id = ?')
+          .run(payload.messageId);
+        this.db
+          .prepare(
+            `INSERT INTO session_message_search (session_id, message_id, role, content, ts)
+             VALUES (?, ?, ?, ?, ?)`
+          )
+          .run(event.sessionId, payload.messageId, payload.role, payload.content, event.ts);
+      } else if (event.type === 'session.removed') {
+        this.db
+          .prepare('DELETE FROM session_message_search WHERE session_id = ?')
+          .run(event.sessionId);
+      }
+    } catch (error) {
+      console.error('搜索索引更新失败', error);
+    }
   }
 
   /**

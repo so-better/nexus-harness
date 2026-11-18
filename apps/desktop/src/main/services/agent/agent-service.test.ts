@@ -73,6 +73,42 @@ describe('AgentService', () => {
     });
   });
 
+  it('runs without a workspace and does not expose local tools', async () => {
+    const requests: ProviderRequest[] = [];
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: false, vision: false, reasoning: false },
+      async *stream(request) {
+        requests.push(request);
+        yield { type: 'text-delta', text: '无需工作区' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const service = new AgentService({ createProvider: () => provider });
+    const providerConfig = {
+      id: 'provider-1',
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+
+    const result = await service.run(
+      {
+        sessionId: 'session-1',
+        prompt: '你好',
+        rootPaths: [],
+        providerId: providerConfig.id,
+        modelId: 'mock-model'
+      },
+      providerConfig
+    );
+
+    expect(result.finishReason).toBe('stop');
+    expect(requests[0]?.tools ?? []).toEqual([]);
+  });
+
   it('compacts oversized tool output into artifacts before the next model call', async () => {
     await writeFile(join(root, 'large.txt'), 'x'.repeat(20_000), 'utf8');
     const provider = new MockProvider([
@@ -161,9 +197,11 @@ describe('AgentService', () => {
     expect(events.map((event) => event.type)).toEqual([
       'message.completed',
       'run.started',
+      'message.delta',
       'message.completed',
       'tool.requested',
       'tool.completed',
+      'message.delta',
       'message.completed',
       'run.completed'
     ]);

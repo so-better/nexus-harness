@@ -23,7 +23,8 @@ export const appendAgentEvent = (
   } else if (
     event.type === 'run.completed' ||
     event.type === 'run.failed' ||
-    event.type === 'run.cancelled'
+    event.type === 'run.cancelled' ||
+    event.type === 'run.interrupted'
   ) {
     runningBySession[event.sessionId] = false;
     delete runIds[event.sessionId];

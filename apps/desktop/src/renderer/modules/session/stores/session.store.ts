@@ -79,27 +79,31 @@ export const useSessionStore = defineStore('sessions', () => {
   /**
    * 用户重命名会话并更新本地列表。
    */
-  const rename = async (id: string, title: string): Promise<void> => {
+  const rename = async (id: string, title: string): Promise<boolean> => {
     error.value = undefined;
     try {
       const updated = await renameSession({ id, title });
       sessions.value = sessions.value.map((session) => (session.id === id ? updated : session));
+      return true;
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);
+      return false;
     }
   };
 
   /**
    * 删除会话并选中下一个可用会话。
    */
-  const remove = async (id: string): Promise<void> => {
+  const remove = async (id: string): Promise<boolean> => {
     error.value = undefined;
     try {
       await removeSession(id);
       sessions.value = sessions.value.filter((session) => session.id !== id);
       if (activeId.value === id) activeId.value = sessions.value[0]?.id;
+      return true;
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);
+      return false;
     }
   };
 

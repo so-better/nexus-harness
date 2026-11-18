@@ -405,6 +405,7 @@ MCP Server 不是独立能力层，而是工具来源：配置位于 `<userData>
 - UI 只渲染事件流的投影状态，不持有业务真相；应用重启或崩溃后可从事件流恢复。
 - 任何会改变工作区或产生费用的动作，必须先记录 `tool.requested` 或审批事件再执行，保证可审计、可回放、可回滚。
 - 插件通过宿主事件总线订阅，payload 由 `packages/shared` 定义并校验，宿主按权限过滤。
+- `message.delta` 按时间或长度合并后持久化，用于流式恢复；最终内容仍由 `message.completed` 持久化。
 - 事件与插槽契约先于功能实现定义；所有新功能必须同步发出领域事件并暴露标准插槽。
 
 命名约定：
@@ -1051,7 +1052,7 @@ interface SlotContext {
 | `workspace_roots` | 工作区 root 集合 |
 | `sessions` | 会话元数据与投影状态，工作区可选 |
 | `session_roots` | 会话临时授权 root |
-| `session_search` | 跨会话全文索引（FTS5） |
+| `session_message_search` | 跨会话消息全文索引（FTS5 trigram） |
 | `workspace_files` | 工作区文件索引（路径、mtime、size、hash） |
 | `events` | append-only 事件流 |
 | `checkpoints` | 逐文件快照索引 |
@@ -1072,7 +1073,7 @@ interface SlotContext {
 - RootGrant 以 `session_roots` 持久化；会话删除时清理授权记录，不删除用户文件。
 - 检查点把改动文件复制到 `<userData>/checkpoints/<sessionId>/<checkpointId>/`；恢复时按文件覆盖并先展示 diff。
 - AI 输出文件只写入 `<userData>/files`，元数据写 `files` 表；预览/下载 URL 由主进程映射到该目录，不暴露任意路径。
-- 搜索索引随会话消息与标题增量更新；删除会话时清理，FTS5 不可用时降级为 LIKE。
+- 搜索索引随 `message.completed` 增量更新，结果中的会话标题实时从 `sessions` 读取；删除会话时清理索引，短关键词或 FTS5 不可用时降级为 LIKE。
 - 会话导出写入 `<userData>/files/exports`，通过文件服务分配 fileId；最终保存路径由用户选择。
 - 另存为通过系统文件对话框选择目标目录，用户确认后复制；不自动写入工作区。
 - AI 输出文件默认永久保留，不自动清理；用户可手动清理，删除会话时可选择清理关联文件。
@@ -1169,6 +1170,7 @@ interface SlotContext {
 ### 4.10 会话生命周期与恢复
 
 - 支持多会话：可同时打开多个会话标签，每个会话独立上下文、scope 与运行状态；切换标签不中断后台 Run。
+- 启动、删除最后一个会话或清除全部后若会话数为 0，自动创建一个新会话；无会话空状态仅作为异常兜底。
 - 会话支持创建、重命名、恢复、归档、删除与导出/导入。
 - 会话标题：首条用户消息后异步生成简短 AI 摘要，默认以首条用户消息为主要依据；失败或无模型时截断首条消息。用户重命名后不再自动覆盖，`titleSource` 记录 `auto` / `user`。
 - 会话支持置顶/取消置顶；列表按置顶、最近活跃排序，可按工作区分组。
@@ -1182,8 +1184,8 @@ interface SlotContext {
 
 #### 4.10.1 跨会话搜索
 
-- 搜索标题、消息、工具结果摘要与审批摘要；默认覆盖全部会话，可按工作区或时间过滤。
-- 使用 SQLite FTS5 建立索引，随 `message.completed`、`message.edited`、`tool.completed` 与标题变更增量更新；FTS5 不可用时降级为 LIKE 查询。
+- 搜索消息正文；结果展示所属会话标题、角色与命中片段。默认覆盖全部会话，可按工作区或时间过滤。
+- 使用 SQLite FTS5 trigram 索引消息正文，随 `message.completed` 增量更新；短关键词或 FTS5 不可用时降级为 LIKE 查询。
 - 搜索结果展示会话、时间与匹配片段；点击跳转到对应消息。
 - 搜索默认排除密钥与敏感路径内容；已被 `superseded` 的消息不参与搜索，但事件仍保留。
 - 索引只存本地，不参与远程同步。
@@ -1763,7 +1765,7 @@ CHANGELOG.md         # 版本变更记录
 | 会话标题 | AI 自动总结 | 基于首条用户消息，用户可重命名 |
 | 会话组织 | 置顶 + 最近 | 支持跨会话搜索 |
 | 会话导出 | Markdown / HTML / PDF / PNG | 脱敏后由用户选择保存路径 |
-| 跨会话搜索 | SQLite FTS5 | 标题、消息、工具结果摘要 |
+| 跨会话搜索 | SQLite FTS5 | 消息正文；结果附会话标题与定位信息 |
 | 网络访问 | 默认拒绝 | 按 provider / 域名显式放行 |
 | 发布 | 签名 + 自动更新 | stable / beta 双通道 |
 | 网络工具 | 默认关闭 | 后续再评估是否开放 `fetch` |

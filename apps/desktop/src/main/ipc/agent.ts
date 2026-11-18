@@ -87,7 +87,7 @@ export const registerAgentIpc = (): void => {
           throw error;
         }
 
-        let persistChain: Promise<void> = Promise.resolve();
+        let eventChain: Promise<void> = Promise.resolve();
         let terminalEventSent = false;
 
         const sendEvent = (payload: NexusEvent): void => {
@@ -101,8 +101,11 @@ export const registerAgentIpc = (): void => {
         /**
          * 先落库再推送；失败时仍推送原事件，避免 UI 卡住。
          */
+        /**
+         * 所有事件按统一队列发送；增量文本不落库，但必须排在已持久化事件之后。
+         */
         const enqueueEvent = (agentEvent: NexusEvent): void => {
-          persistChain = persistChain.then(() => {
+          eventChain = eventChain.then(() => {
             try {
               const stored = events.append(agentEvent);
               applyTerminalState(stored);
@@ -124,7 +127,7 @@ export const registerAgentIpc = (): void => {
             sessions.setStatus(parsed.data.sessionId, 'failed');
           } else if (agentEvent.type === 'run.cancelled') {
             runs.updateStatus(runId, 'cancelled');
-            sessions.setStatus(parsed.data.sessionId, 'idle');
+            sessions.setStatus(parsed.data.sessionId, 'interrupted');
           } else if (agentEvent.type === 'approval.requested') {
             runs.updateStatus(runId, 'waiting_approval');
             sessions.setStatus(parsed.data.sessionId, 'waiting_approval');
@@ -175,7 +178,7 @@ export const registerAgentIpc = (): void => {
             }
           })
           .finally(async () => {
-            await persistChain;
+            await eventChain;
             sender.removeListener('destroyed', onSenderDestroyed);
             approvalService.cancelRun(runId);
             unregisterRun(runId);

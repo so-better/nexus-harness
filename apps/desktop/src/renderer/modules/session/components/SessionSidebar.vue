@@ -41,6 +41,10 @@
         clearable
         :placeholder="t('search.placeholder')"
         :aria-label="t('search.placeholder')"
+        aria-controls="session-search-results"
+        :aria-activedescendant="
+          activeHitIndex >= 0 ? `session-search-hit-${activeHitIndex}` : undefined
+        "
         @keydown="handleSearchKeydown"
         @compositionstart="searchComposing = true"
         @compositionend="searchComposing = false"
@@ -60,9 +64,16 @@
         <p v-else-if="results.length === 0" class="nh-sidebar__search-empty">
           {{ query.trim() ? t('search.empty') : t('search.prompt') }}
         </p>
-        <div v-else ref="resultsRef" class="nh-sidebar__search-results" role="listbox">
+        <div
+          v-else
+          id="session-search-results"
+          ref="resultsRef"
+          class="nh-sidebar__search-results"
+          role="listbox"
+        >
           <SessionSearchResultItem
             v-for="(result, index) in results"
+            :id="`session-search-hit-${index}`"
             :key="result.messageId"
             :result="result"
             :active="index === activeHitIndex"

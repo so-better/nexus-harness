@@ -14,6 +14,15 @@ import type {
 const emptyUsage = (): ChatUsage => ({ inputTokens: 0, outputTokens: 0, cost: 0 });
 
 /**
+ * Run 终止时关闭残留的流式状态，避免光标一直闪烁。
+ */
+const finishStreaming = (messages: ChatMessageView[]): void => {
+  for (const message of messages) {
+    if (message.streaming) message.streaming = false;
+  }
+};
+
+/**
  * 按事件顺序重建聊天视图；消息与工具调用保持原始顺序。
  */
 export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => {
@@ -27,17 +36,46 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
   let error: string | undefined;
 
   for (const event of events) {
+    if (event.type === 'message.delta') {
+      const payload = event.payload as EventPayloadMap['message.delta'];
+      let message = messages.find((item) => item.id === payload.messageId);
+      if (!message) {
+        message = {
+          id: payload.messageId,
+          role: 'assistant',
+          content: '',
+          toolCalls: [],
+          createdAt: event.ts,
+          streaming: true
+        };
+        messages.push(message);
+      }
+      message.content += payload.text;
+      message.streaming = true;
+      lastAssistant = message;
+      continue;
+    }
+
     if (event.type === 'message.completed') {
       const payload = event.payload as EventPayloadMap['message.completed'];
-      const message: ChatMessageView = {
-        id: payload.messageId,
-        role: payload.role,
-        content: payload.content,
-        toolCalls: [],
-        createdAt: event.ts
-      };
-      messages.push(message);
-      lastAssistant = payload.role === 'assistant' ? message : undefined;
+      const existing = messages.find((item) => item.id === payload.messageId);
+      if (existing) {
+        existing.role = payload.role;
+        existing.content = payload.content;
+        existing.streaming = false;
+        lastAssistant = payload.role === 'assistant' ? existing : undefined;
+      } else {
+        const message: ChatMessageView = {
+          id: payload.messageId,
+          role: payload.role,
+          content: payload.content,
+          toolCalls: [],
+          createdAt: event.ts,
+          streaming: false
+        };
+        messages.push(message);
+        lastAssistant = payload.role === 'assistant' ? message : undefined;
+      }
       continue;
     }
 
@@ -129,6 +167,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
     if (event.type === 'run.completed') {
       running = false;
       status = 'completed';
+      finishStreaming(messages);
       continue;
     }
 
@@ -137,6 +176,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       running = false;
       status = 'failed';
       error = payload.error.message;
+      finishStreaming(messages);
       messages.push(systemMessage(event, `${payload.error.code}: ${payload.error.message}`));
       continue;
     }
@@ -144,6 +184,14 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
     if (event.type === 'run.cancelled') {
       running = false;
       status = 'cancelled';
+      finishStreaming(messages);
+      continue;
+    }
+
+    if (event.type === 'run.interrupted') {
+      running = false;
+      status = 'interrupted';
+      finishStreaming(messages);
       continue;
     }
 

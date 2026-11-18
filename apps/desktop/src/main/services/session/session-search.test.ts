@@ -66,6 +66,18 @@ describe('session search', () => {
     expect(result?.snippet.slice(result.matchStart, result.matchEnd)).toBe('截断');
   });
 
+  it('uses the FTS index for longer Chinese queries', () => {
+    const session = sessions.create({ title: 'FTS 会话' });
+    const messageId = addMessage(session.id, '这是一段流式输出验证，稍后逐步出现。', 'assistant');
+
+    const [result] = searchSessions(db, '流式输出');
+    expect(result).toMatchObject({
+      sessionId: session.id,
+      messageId,
+      role: 'assistant'
+    });
+  });
+
   it('does not match session titles alone', () => {
     sessions.create({ title: '上下文压缩策略' });
     expect(searchSessions(db, '压缩')).toEqual([]);
@@ -76,6 +88,6 @@ describe('session search', () => {
     addMessage(session.id, '需要删除的内容');
     sessions.remove(session.id);
 
-    expect(searchSessions(db, '删除')).toEqual([]);
+    expect(searchSessions(db, '删除的内容')).toEqual([]);
   });
 });

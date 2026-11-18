@@ -135,7 +135,8 @@ export class AgentLoop {
         throw error instanceof Error ? error : new Error(message);
       }
 
-      const result = await this.runStep();
+      const assistantMessageId = randomUUID();
+      const result = await this.runStep(assistantMessageId);
 
       if (this.options.signal?.aborted) {
         this.emit('run.cancelled', { reason: 'aborted' });
@@ -162,7 +163,7 @@ export class AgentLoop {
         };
         this.messages.push(assistantMessage);
         this.emit('message.completed', {
-          messageId: randomUUID(),
+          messageId: assistantMessageId,
           role: 'assistant',
           content: result.text
         });
@@ -276,7 +277,7 @@ export class AgentLoop {
   /**
    * 执行一步模型调用，收集文本、工具调用与 usage。
    */
-  private async runStep(): Promise<{
+  private async runStep(messageId: string): Promise<{
     text: string;
     toolCalls: ProviderToolCall[];
     finishReason: string;
@@ -295,12 +296,37 @@ export class AgentLoop {
     let finishReason = 'stop';
     let error: { code: string; message: string } | undefined;
     const toolCalls: ProviderToolCall[] = [];
+    let deltaBuffer = '';
+    let lastDeltaAt = 0;
+    let flushedDelta = false;
+
+    /**
+     * 首个增量立即下发保证首字延迟，后续按时间/长度合并后持久化。
+     */
+    const flushDelta = (): void => {
+      if (!deltaBuffer) return;
+      this.emit('message.delta', { messageId, text: deltaBuffer });
+      deltaBuffer = '';
+      lastDeltaAt = Date.now();
+      flushedDelta = true;
+    };
 
     try {
       for await (const event of this.options.provider.stream(request)) {
         switch (event.type) {
           case 'text-delta':
             text += event.text;
+            if (event.text) {
+              deltaBuffer += event.text;
+              const now = Date.now();
+              if (
+                !flushedDelta ||
+                deltaBuffer.length >= 96 ||
+                (lastDeltaAt > 0 && now - lastDeltaAt >= 80)
+              ) {
+                flushDelta();
+              }
+            }
             break;
           case 'tool-call-end':
             toolCalls.push(event.toolCall);
@@ -335,6 +361,7 @@ export class AgentLoop {
       };
     }
 
+    flushDelta();
     return { text, toolCalls, finishReason, ...(error ? { error } : {}) };
   }
 

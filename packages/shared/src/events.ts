@@ -41,6 +41,10 @@ export const eventPayloadSchemas = {
   'run.interrupted': z.object({
     reason: z.string()
   }),
+  'message.delta': z.object({
+    messageId: z.string(),
+    text: z.string()
+  }),
   'message.completed': z.object({
     messageId: z.string(),
     role: z.enum(['user', 'assistant']),
