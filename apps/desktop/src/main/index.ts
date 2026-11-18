@@ -8,12 +8,17 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { createMainWindow } from './app/create-window';
 import { registerIpcHandlers } from './ipc';
-import { ensureAppDataDirectories } from './services/storage/paths';
+import {
+  ensureAppDataDirectories,
+  getAppDataPaths,
+  getBuiltinPluginsDirectory
+} from './services/storage/paths';
 import { closeDatabase, initDatabase } from './services/storage/database';
 import { loadThemeSource } from './services/settings/theme-settings';
 import { EventStore } from './services/session/event-store';
 import { RunStore } from './services/session/run-store';
 import { SessionService } from './services/session/session-service';
+import { syncBuiltinPlugins } from './services/plugins/builtin-plugin-service';
 
 app.setName('Nexus');
 
@@ -34,6 +39,10 @@ if (!hasSingleInstanceLock) {
     .whenReady()
     .then(async () => {
       await ensureAppDataDirectories();
+      await syncBuiltinPlugins({
+        sourceDir: getBuiltinPluginsDirectory(),
+        destinationDir: getAppDataPaths().plugins
+      });
       nativeTheme.themeSource = await loadThemeSource();
 
       const db = initDatabase();

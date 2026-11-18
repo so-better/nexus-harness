@@ -29,5 +29,13 @@
     "typescript": "^5.9.3",
     "vite": "^8.3.8",
     "vue-tsc": "^3.3.14"
+  },
+  "build": {
+    "extraResources": [
+      {
+        "from": "resources/plugins",
+        "to": "plugins"
+      }
+    ]
   }
 }

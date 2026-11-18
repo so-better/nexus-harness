@@ -6,6 +6,14 @@ import { app } from 'electron';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
+/**
+ * 内置插件目录：开发态位于应用目录 resources/plugins，打包后位于 resources/plugins。
+ */
+export const getBuiltinPluginsDirectory = (): string =>
+  app.isPackaged
+    ? join(process.resourcesPath, 'plugins')
+    : join(app.getAppPath(), 'resources', 'plugins');
+
 export interface AppDataPaths {
   root: string;
   plugins: string;
