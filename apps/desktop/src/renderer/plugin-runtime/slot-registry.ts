@@ -32,7 +32,6 @@ export const SLOT_LOCATIONS = [
   'filetree.actions',
   'editor.toolbar',
   'diff.toolbar',
-  'diff.hunk.footer',
   'terminal.toolbar',
   'filecard.actions',
   'filecard.footer',
