@@ -10,13 +10,16 @@ import {
   sessionRenameInputSchema,
   sessionSetModelInputSchema,
   sessionSetPinnedInputSchema,
+  type SessionClearAllResult,
   type SessionRemoveResult,
+  type SessionSearchResult,
   type SessionSummary
 } from '@shared/ipc/contracts';
 import { fail, ok, type Result } from '@shared/ipc/result';
 import { hasRunForSession } from '../services/agent/run-registry';
 import { EventStore } from '../services/session/event-store';
 import { SessionService } from '../services/session/session-service';
+import { searchSessions } from '../services/session/session-search';
 import { getDatabase } from '../services/storage/database';
 
 /**
@@ -44,6 +47,21 @@ export const registerSessionIpc = (): void => {
           'SESSION_EVENTS_FAILED',
           error instanceof Error ? error.message : '读取会话事件失败'
         );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.sessionSearch,
+    async (_event, rawQuery: unknown): Promise<Result<SessionSearchResult[]>> => {
+      if (typeof rawQuery !== 'string') {
+        return fail('SESSION_INVALID_INPUT', '搜索关键词不合法');
+      }
+
+      try {
+        return ok(searchSessions(db, rawQuery));
+      } catch (error) {
+        return fail('SESSION_SEARCH_FAILED', error instanceof Error ? error.message : '搜索失败');
       }
     }
   );
@@ -105,6 +123,18 @@ export const registerSessionIpc = (): void => {
       }
     }
   );
+
+  ipcMain.handle(IPC_CHANNELS.sessionClearAll, async (): Promise<Result<SessionClearAllResult>> => {
+    const items = sessions.list();
+    const busy = items.find((session) => hasRunForSession(session.id));
+    if (busy) return fail('SESSION_BUSY', `会话有运行中的 Run：${busy.id}`);
+
+    try {
+      return ok(sessions.removeAll());
+    } catch (error) {
+      return fail('SESSION_CLEAR_FAILED', error instanceof Error ? error.message : '清除会话失败');
+    }
+  });
 
   ipcMain.handle(
     IPC_CHANNELS.sessionSetPinned,

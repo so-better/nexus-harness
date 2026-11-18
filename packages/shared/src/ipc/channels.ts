@@ -22,6 +22,8 @@ export const IPC_CHANNELS = {
   sessionGet: 'session:get',
   sessionRename: 'session:rename',
   sessionRemove: 'session:remove',
+  sessionClearAll: 'session:clearAll',
+  sessionSearch: 'session:search',
   sessionSetPinned: 'session:setPinned',
   sessionSetModel: 'session:setModel',
   sessionEvents: 'session:events',

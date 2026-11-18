@@ -3,7 +3,12 @@
     <NCollapseItem :name="tool.id">
       <template #header>
         <div class="nh-tool__summary">
-          <span class="nh-tool__name">{{ tool.name }}</span>
+          <span class="nh-tool__identity">
+            <span class="nh-tool__icon">
+              <AppIcon :name="toolIcon" :size="14" />
+            </span>
+            <span class="nh-tool__name">{{ tool.name }}</span>
+          </span>
           <NTag size="tiny" :type="statusType" :bordered="false">{{ statusLabel }}</NTag>
         </div>
       </template>
@@ -33,9 +38,22 @@
 import { computed } from 'vue';
 import { NCollapse, NCollapseItem, NTag } from 'naive-ui';
 import { t } from '@/app/i18n';
+import AppIcon from '@/components/AppIcon.vue';
 import type { ChatToolCall } from '../types';
 
 const props = defineProps<{ tool: ChatToolCall }>();
+
+const toolIcon = computed<
+  'file' | 'edit' | 'terminal' | 'globe' | 'spark' | 'settings' | 'history'
+>(() => {
+  if (['read_file', 'list_dir', 'glob', 'grep'].includes(props.tool.name)) return 'file';
+  if (['write_file', 'apply_patch'].includes(props.tool.name)) return 'edit';
+  if (props.tool.name === 'run_command') return 'terminal';
+  if (props.tool.name === 'fetch' || props.tool.name.startsWith('search_')) return 'globe';
+  if (props.tool.name === 'generate_image') return 'spark';
+  if (props.tool.name === 'checkpoint') return 'history';
+  return 'settings';
+});
 
 const inputText = computed(() => {
   try {
@@ -90,15 +108,36 @@ const statusType = computed(() => {
 
 .nh-tool__summary {
   display: flex;
+  width: 100%;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  width: 100%;
+}
+
+.nh-tool__identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.nh-tool__icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--nh-color-bg-hover);
+  color: var(--nh-color-text-secondary);
 }
 
 .nh-tool__name {
+  overflow: hidden;
   font-family: var(--nh-font-mono);
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nh-tool__body {

@@ -160,6 +160,28 @@ export class SessionService {
   }
 
   /**
+   * 清除全部会话；事件保留用于审计。
+   */
+  removeAll(): { removed: number } {
+    const rows = this.db
+      .prepare('SELECT id FROM sessions WHERE deleted_at IS NULL')
+      .all() as unknown as Array<{ id: string }>;
+    const now = Date.now();
+
+    return this.transaction(() => {
+      for (const row of rows) {
+        this.events.append(
+          createNexusEvent({ sessionId: row.id, seq: 1, type: 'session.removed', payload: {} })
+        );
+        this.db
+          .prepare('UPDATE sessions SET deleted_at = ?, updated_at = ? WHERE id = ?')
+          .run(now, now, row.id);
+      }
+      return { removed: rows.length };
+    });
+  }
+
+  /**
    * 设置置顶状态并写入事件。
    */
   setPinned(id: string, pinned: boolean): SessionSummary {

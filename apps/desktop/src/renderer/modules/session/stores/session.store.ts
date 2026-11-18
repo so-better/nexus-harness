@@ -6,9 +6,11 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import type { SessionStatus, SessionSummary } from '@shared/ipc/contracts';
 import {
+  clearAllSessions,
   createSession,
   listSessions,
   removeSession,
+  renameSession,
   setSessionModel,
   setSessionPinned
 } from '../api/session.api';
@@ -70,7 +72,21 @@ export const useSessionStore = defineStore('sessions', () => {
    * 选中会话。
    */
   const select = (id: string): void => {
+    if (!sessions.value.some((session) => session.id === id)) return;
     activeId.value = id;
+  };
+
+  /**
+   * 用户重命名会话并更新本地列表。
+   */
+  const rename = async (id: string, title: string): Promise<void> => {
+    error.value = undefined;
+    try {
+      const updated = await renameSession({ id, title });
+      sessions.value = sessions.value.map((session) => (session.id === id ? updated : session));
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+    }
   };
 
   /**
@@ -84,6 +100,22 @@ export const useSessionStore = defineStore('sessions', () => {
       if (activeId.value === id) activeId.value = sessions.value[0]?.id;
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);
+    }
+  };
+
+  /**
+   * 清除全部会话；成功后清空本地列表与当前选中项。
+   */
+  const clearAll = async (): Promise<boolean> => {
+    error.value = undefined;
+    try {
+      await clearAllSessions();
+      sessions.value = [];
+      activeId.value = undefined;
+      return true;
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+      return false;
     }
   };
 
@@ -134,8 +166,10 @@ export const useSessionStore = defineStore('sessions', () => {
     load,
     create,
     updateModel,
+    rename,
     select,
     remove,
+    clearAll,
     togglePinned,
     setLocalStatus
   };

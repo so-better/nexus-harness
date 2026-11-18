@@ -19,7 +19,9 @@ const bridge: NexusBridge = {
     rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionRename, input),
     setPinned: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionSetPinned, input),
     setModel: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionSetModel, input),
-    remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.sessionRemove, id)
+    remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.sessionRemove, id),
+    clearAll: () => ipcRenderer.invoke(IPC_CHANNELS.sessionClearAll),
+    search: (query) => ipcRenderer.invoke(IPC_CHANNELS.sessionSearch, query)
   },
   settings: {
     getAutoLaunch: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetAutoLaunch),

@@ -100,6 +100,17 @@ describe('session storage', () => {
     expect(events.list(session.id).some((event) => event.type === 'session.removed')).toBe(true);
   });
 
+  it('clears all sessions while keeping audit events', () => {
+    const first = sessions.create({ title: '第一个' });
+    const second = sessions.create({ title: '第二个' });
+
+    expect(sessions.removeAll()).toEqual({ removed: 2 });
+    expect(sessions.list()).toEqual([]);
+    expect(events.list(first.id).some((event) => event.type === 'session.removed')).toBe(true);
+    expect(events.list(second.id).some((event) => event.type === 'session.removed')).toBe(true);
+    expect(sessions.removeAll()).toEqual({ removed: 0 });
+  });
+
   it('marks unfinished runs as interrupted', () => {
     const session = sessions.create();
     runs.create('run-1', session.id);

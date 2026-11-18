@@ -151,6 +151,8 @@ export interface NexusBridge {
     setPinned: (input: SessionSetPinnedInput) => Promise<Result<SessionSummary>>;
     setModel: (input: SessionSetModelInput) => Promise<Result<SessionSummary>>;
     remove: (id: string) => Promise<Result<SessionRemoveResult>>;
+    clearAll: () => Promise<Result<SessionClearAllResult>>;
+    search: (query: string) => Promise<Result<SessionSearchResult[]>>;
   };
   checkpoint: {
     restore: (input: CheckpointRestoreInput) => Promise<Result<CheckpointRestoreResult>>;
@@ -259,6 +261,18 @@ export const sessionRenameInputSchema = z.object({
 
 export const sessionRemoveResultSchema = z.object({ id: z.string().min(1) });
 
+export const sessionClearAllResultSchema = z.object({
+  removed: z.number().int().nonnegative()
+});
+
+export const sessionSearchResultSchema = z.object({
+  sessionId: z.string().min(1),
+  title: z.string(),
+  snippet: z.string(),
+  kind: z.enum(['title', 'message']),
+  matchedAt: z.number().nonnegative()
+});
+
 export const sessionSetPinnedInputSchema = z.object({
   id: z.string().min(1),
   pinned: z.boolean()
@@ -276,6 +290,8 @@ export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type SessionCreateInput = z.infer<typeof sessionCreateInputSchema>;
 export type SessionRenameInput = z.infer<typeof sessionRenameInputSchema>;
 export type SessionRemoveResult = z.infer<typeof sessionRemoveResultSchema>;
+export type SessionClearAllResult = z.infer<typeof sessionClearAllResultSchema>;
+export type SessionSearchResult = z.infer<typeof sessionSearchResultSchema>;
 export type SessionSetPinnedInput = z.infer<typeof sessionSetPinnedInputSchema>;
 export type SessionSetModelInput = z.infer<typeof sessionSetModelInputSchema>;
 

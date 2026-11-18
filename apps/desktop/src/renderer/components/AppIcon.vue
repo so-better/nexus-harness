@@ -39,6 +39,12 @@
       d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM3 12h18M12 3c2.4 2.5 3.8 5.5 3.8 9S14.4 18.5 12 21c-2.4-2.5-3.8-5.5-3.8-9S9.6 5.5 12 3Z"
     />
     <path v-else-if="name === 'power'" d="M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0" />
+    <path v-else-if="name === 'alert'" d="M12 3 2 21h20L12 3ZM12 9v5M12 17h.01" />
+    <path v-else-if="name === 'close'" d="m6 6 12 12M18 6 6 18" />
+    <path v-else-if="name === 'search'" d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14ZM16 16l4 4" />
+    <path v-else-if="name === 'message'" d="M4 5h16v11H9l-4 4v-4H4z" />
+    <path v-else-if="name === 'more'" d="M5 12h.01M12 12h.01M19 12h.01" />
+    <path v-else-if="name === 'pin'" d="M9 4h6l-1 6 4 4H6l4-4-1-6ZM12 14v7" />
     <path v-else-if="name === 'info'" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM12 11v5M12 8h.01" />
     <path v-else-if="name === 'trash'" d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
     <path v-else-if="name === 'check'" d="m5 12 4 4L19 6" />
@@ -77,6 +83,12 @@ withDefaults(
       | 'globe'
       | 'database'
       | 'power'
+      | 'alert'
+      | 'close'
+      | 'pin'
+      | 'message'
+      | 'search'
+      | 'more'
       | 'info'
       | 'trash'
       | 'check'

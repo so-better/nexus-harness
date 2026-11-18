@@ -3,7 +3,12 @@
  */
 
 import type { NexusEvent } from '@shared/events';
-import type { SessionCreateInput, SessionRenameInput, SessionSummary } from '@shared/ipc/contracts';
+import type {
+  SessionCreateInput,
+  SessionRenameInput,
+  SessionSearchResult,
+  SessionSummary
+} from '@shared/ipc/contracts';
 import { unwrap } from '@/app/ipc';
 
 /**
@@ -52,3 +57,15 @@ export const setSessionModel = async (
 export const removeSession = async (id: string): Promise<void> => {
   unwrap(await window.nexus.session.remove(id));
 };
+
+/**
+ * 清除全部会话，返回删除数量。
+ */
+export const clearAllSessions = async (): Promise<number> =>
+  unwrap(await window.nexus.session.clearAll()).removed;
+
+/**
+ * 跨会话搜索标题与消息内容。
+ */
+export const searchSessions = async (query: string): Promise<SessionSearchResult[]> =>
+  unwrap(await window.nexus.session.search(query));

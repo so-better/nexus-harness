@@ -1,7 +1,12 @@
 <template>
   <div ref="viewport" class="nh-message-list">
     <div class="nh-message-list__stack">
-      <ChatMessageItem v-for="message in messages" :key="message.id" :message="message" />
+      <ChatMessageItem
+        v-for="(message, index) in messages"
+        :key="message.id"
+        :message="message"
+        :grouped="isGrouped(index)"
+      />
     </div>
   </div>
 </template>
@@ -18,6 +23,21 @@ import ChatMessageItem from './ChatMessageItem.vue';
 const props = defineProps<{ messages: ChatMessageView[] }>();
 
 const viewport = ref<HTMLElement | null>(null);
+
+/**
+ * 连续助手消息共用首个头像与角色信息，减少重复视觉噪音。
+ */
+const isGrouped = (index: number): boolean => {
+  const current = props.messages[index];
+  const previous = props.messages[index - 1];
+  return Boolean(
+    current &&
+    previous &&
+    current.role === 'assistant' &&
+    previous.role === 'assistant' &&
+    current.createdAt - previous.createdAt < 10 * 60 * 1000
+  );
+};
 
 watch(
   () => props.messages.length,

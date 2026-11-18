@@ -7,7 +7,9 @@
         :loading="sessions.loading"
         @create="createSession"
         @select="selectSession"
-        @remove="sessions.remove"
+        @remove="removeSession"
+        @rename="renameSession"
+        @clear-all="clearAllSessions"
         @toggle-pin="sessions.togglePinned"
       />
 
@@ -54,6 +56,7 @@
  */
 
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
+import { useMessage } from 'naive-ui';
 import { storeToRefs } from 'pinia';
 import type { ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
 import { setLocale, t } from '@/app/i18n';
@@ -70,6 +73,7 @@ import { useSessionStatusSync } from './use-session-status';
 
 const sessions = useSessionStore();
 const chat = useChatStore();
+const message = useMessage();
 const { sessions: sessionList, activeId } = storeToRefs(sessions);
 const { providers, providerId, modelId, models, rootPaths, runningBySession } = storeToRefs(chat);
 
@@ -132,6 +136,42 @@ const selectSession = (id: string): void => {
 };
 
 /**
+ * 没有会话时自动创建一个，保证始终有可进入的工作上下文。
+ */
+const ensureSession = async (): Promise<void> => {
+  if (sessions.sessions.length === 0) {
+    await sessions.create(providerId.value, modelId.value);
+  }
+};
+
+/**
+ * 删除会话；删掉最后一个后自动补一个新会话。
+ */
+const removeSession = async (id: string): Promise<void> => {
+  await sessions.remove(id);
+  await ensureSession();
+};
+
+/**
+ * 重命名会话。
+ */
+const renameSession = async (id: string, title: string): Promise<void> => {
+  await sessions.rename(id, title);
+};
+
+/**
+ * 清除全部会话；完成后自动进入一个新会话。
+ */
+const clearAllSessions = async (): Promise<void> => {
+  const cleared = await sessions.clearAll();
+  if (!cleared) {
+    message.error(sessions.error ?? t('session.clearAllFailed'));
+    return;
+  }
+  await ensureSession();
+};
+
+/**
  * 发送消息；没有会话时先创建。
  */
 const send = async (prompt: string): Promise<void> => {
@@ -184,6 +224,7 @@ onMounted(async () => {
   }
   await chat.initialize();
   await sessions.load();
+  await ensureSession();
   await loadAppMeta();
 });
 
@@ -196,6 +237,7 @@ onBeforeUnmount(() => {
 .nh-layout {
   display: grid;
   height: 100%;
+  overflow: hidden;
   grid-template-rows: minmax(0, 1fr) 44px;
   background: var(--nh-color-bg-base);
 }
@@ -203,12 +245,13 @@ onBeforeUnmount(() => {
 .nh-layout__body {
   display: grid;
   min-height: 0;
-  grid-template-columns: 264px minmax(0, 1fr);
+  overflow: hidden;
+  grid-template-columns: 288px minmax(0, 1fr);
 }
 
 @media (width <= 1024px) {
   .nh-layout__body {
-    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-columns: 268px minmax(0, 1fr);
   }
 }
 </style>

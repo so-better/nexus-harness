@@ -159,6 +159,16 @@ const onEnter = (event: KeyboardEvent): void => {
   border-radius: 16px;
   background: var(--nh-color-bg-base);
   box-shadow: var(--nh-shadow-card);
+  transition:
+    border-color var(--nh-duration-fast) var(--nh-ease-standard),
+    box-shadow var(--nh-duration-fast) var(--nh-ease-standard);
+}
+
+.nh-composer:focus-within {
+  border-color: color-mix(in srgb, var(--nh-color-accent) 45%, var(--nh-color-border));
+  box-shadow:
+    var(--nh-shadow-card),
+    0 0 0 3px color-mix(in srgb, var(--nh-color-accent) 8%, transparent);
 }
 
 .nh-composer--hero {
@@ -178,6 +188,7 @@ const onEnter = (event: KeyboardEvent): void => {
 
 .nh-composer__selectors {
   display: flex;
+  min-width: 0;
   gap: 8px;
 }
 

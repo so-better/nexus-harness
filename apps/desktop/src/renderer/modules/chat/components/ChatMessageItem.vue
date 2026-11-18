@@ -3,10 +3,21 @@
     <span class="nh-message__system-dot" />
     <span>{{ message.content }}</span>
   </article>
-  <article v-else class="nh-message" :class="`nh-message--${message.role}`">
-    <NAvatar round :size="28" :style="avatarStyle">{{ avatarText }}</NAvatar>
+  <article
+    v-else
+    class="nh-message"
+    :class="[`nh-message--${message.role}`, { 'nh-message--grouped': grouped }]"
+  >
+    <NAvatar
+      v-if="message.role === 'assistant' && !grouped"
+      round
+      :size="24"
+      :style="assistantAvatarStyle"
+    >
+      N
+    </NAvatar>
     <div class="nh-message__body">
-      <header class="nh-message__header">
+      <header v-if="!grouped" class="nh-message__header">
         <span class="nh-message__role">{{ roleLabel }}</span>
         <span class="nh-message__time">{{ timeLabel }}</span>
       </header>
@@ -29,7 +40,13 @@ import { t } from '@/app/i18n';
 import type { ChatMessageView } from '../types';
 import ToolCallCard from './ToolCallCard.vue';
 
-const props = defineProps<{ message: ChatMessageView }>();
+const props = withDefaults(
+  defineProps<{
+    message: ChatMessageView;
+    grouped?: boolean;
+  }>(),
+  { grouped: false }
+);
 
 const roleLabel = computed(() => {
   if (props.message.role === 'user') return t('chat.user');
@@ -37,22 +54,12 @@ const roleLabel = computed(() => {
   return t('chat.system');
 });
 
-const avatarText = computed(() => (props.message.role === 'user' ? '你' : 'N'));
-
-const avatarStyle = computed(() =>
-  props.message.role === 'user'
-    ? {
-        background: 'var(--nh-color-bg-hover)',
-        color: 'var(--nh-color-text-secondary)',
-        fontSize: '12px'
-      }
-    : {
-        background: 'var(--nh-color-accent)',
-        color: 'var(--nh-color-bg-base)',
-        fontSize: '12px',
-        fontWeight: '600'
-      }
-);
+const assistantAvatarStyle = {
+  background: 'color-mix(in srgb, var(--nh-color-accent) 12%, transparent)',
+  color: 'var(--nh-color-accent)',
+  fontSize: '12px',
+  fontWeight: '600'
+};
 
 const timeLabel = computed(() =>
   new Intl.DateTimeFormat('zh-CN', {
@@ -69,6 +76,10 @@ const timeLabel = computed(() =>
   align-items: flex-start;
 }
 
+.nh-message--grouped {
+  margin-top: -12px;
+}
+
 .nh-message__body {
   display: flex;
   min-width: 0;
@@ -77,10 +88,28 @@ const timeLabel = computed(() =>
   gap: 6px;
 }
 
+.nh-message--grouped .nh-message__body {
+  padding-left: 36px;
+}
+
+.nh-message--user {
+  justify-content: flex-end;
+}
+
+.nh-message--user .nh-message__body {
+  max-width: 640px;
+  flex: 0 1 auto;
+  align-items: flex-end;
+}
+
 .nh-message__header {
   display: flex;
   align-items: baseline;
   gap: 8px;
+}
+
+.nh-message--user .nh-message__header {
+  justify-content: flex-end;
 }
 
 .nh-message__role {
@@ -98,6 +127,7 @@ const timeLabel = computed(() =>
 }
 
 .nh-message__content {
+  max-width: 100%;
   margin: 0;
   font-size: 14px;
   line-height: 1.7;
@@ -108,12 +138,10 @@ const timeLabel = computed(() =>
 
 .nh-message--user .nh-message__content {
   width: fit-content;
-  max-width: 640px;
   padding: 10px 12px;
   border: 1px solid var(--nh-color-border);
   border-radius: 14px;
   border-bottom-right-radius: 4px;
-  background: var(--nh-color-bg-elevated);
   background: color-mix(in srgb, var(--nh-color-accent) 8%, var(--nh-color-bg-base));
   box-shadow: var(--nh-highlight);
 }

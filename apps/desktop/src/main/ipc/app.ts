@@ -6,6 +6,7 @@ import { app, ipcMain } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import { appInfoSchema, type AppInfo } from '@shared/ipc/contracts';
 import { ok, type Result } from '@shared/ipc/result';
+import desktopPackage from '../../../package.json';
 
 /**
  * 注册应用信息处理器；只暴露非敏感字段。
@@ -14,7 +15,7 @@ export const registerAppIpc = (): void => {
   ipcMain.handle(IPC_CHANNELS.appGetInfo, async (): Promise<Result<AppInfo>> => {
     const info = appInfoSchema.parse({
       name: app.getName(),
-      version: app.getVersion(),
+      version: desktopPackage.version,
       platform: process.platform
     });
 
