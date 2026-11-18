@@ -5,6 +5,7 @@
 /**
  * 工具调用在 UI 中的生命周期。
  */
+import type { OutputFile } from '@shared/ipc/contracts';
 import type { AskQuestion, AskUserAnswer } from '@shared/ask-user';
 
 export type ToolCallStatus =
@@ -37,6 +38,7 @@ export interface ChatMessageView {
   superseded?: boolean;
   hidden?: boolean;
   runId?: string;
+  files?: OutputFile[];
 }
 
 /**
@@ -68,7 +70,6 @@ export interface ChatAskUser {
   answers?: AskUserAnswer[];
   messageId?: string;
   runId?: string;
-  merged?: boolean;
 }
 
 export interface ChatProjection {

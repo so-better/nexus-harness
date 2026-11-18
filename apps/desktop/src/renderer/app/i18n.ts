@@ -8,6 +8,10 @@ import type { AppLanguage } from '@shared/ipc/contracts';
 const zhCN = {
   'app.brand': 'Nexus',
   'app.chooseRoot': '选择工作区',
+  'app.removeRoot': '移除工作区',
+  'app.rootAddFailed': '添加工作区失败',
+  'app.rootRemoveFailed': '移除工作区失败',
+  'app.rootAuthorizedRetry': '工作区已授权，请重新发送消息以重试。',
   'app.noRoot': '未选择工作区',
   'app.provider': '模型',
   'app.noProvider': '未配置模型',
@@ -80,6 +84,12 @@ const zhCN = {
   'chat.askUserCancelled': '提问已取消',
   'chat.askUserFailed': '提交回答失败',
   'chat.sendFailed': '发送消息失败',
+  'file.preview': '预览',
+  'file.saveAs': '另存为',
+  'file.previewUnsupported': '该文件类型暂不支持内联预览，请另存后查看。',
+  'file.previewFailed': '预览文件失败',
+  'file.saveFailed': '保存文件失败',
+  'file.saved': '文件已保存',
   'chat.askUserNotPending': '提问已失效，请重试',
   'chat.edit': '编辑',
   'chat.copy': '复制',
@@ -129,7 +139,8 @@ const zhCN = {
   'settings.cleared': '缓存已清理',
   'settings.loadFailed': '读取设置失败',
   'settings.provider': '模型提供商',
-  'settings.providerHint': '配置 OpenAI 兼容服务；API Key 保存在本地 Provider 配置中。',
+  'settings.providerHint':
+    '配置 OpenAI、Anthropic 或 Ollama 服务；API Key 保存在本地 Provider 配置中。',
   'settings.newProvider': '新增提供商',
   'settings.providerCountOne': '个供应商',
   'settings.providerCountMany': '个供应商',
@@ -147,6 +158,7 @@ const zhCN = {
   'settings.deleteProvider': '删除当前配置',
   'settings.save': '保存',
   'settings.name': '供应商名称',
+  'settings.protocol': '协议',
   'settings.baseUrl': 'Base URL',
   'settings.model': '模型',
   'settings.models': '模型',
@@ -194,7 +206,8 @@ const zhCN = {
   'tool.failed': '失败',
   'tool.artifactId': '产物',
   'tool.input': '参数',
-  'tool.output': '输出'
+  'tool.output': '输出',
+  'tool.authorizeRoot': '授权工作区'
 } as const;
 
 export type MessageKey = keyof typeof zhCN;
@@ -202,6 +215,10 @@ export type MessageKey = keyof typeof zhCN;
 const enUS: Record<MessageKey, string> = {
   'app.brand': 'Nexus',
   'app.chooseRoot': 'Choose workspace',
+  'app.removeRoot': 'Remove workspace',
+  'app.rootAddFailed': 'Failed to add workspace',
+  'app.rootRemoveFailed': 'Failed to remove workspace',
+  'app.rootAuthorizedRetry': 'Workspace authorized. Send the message again to retry.',
   'app.noRoot': 'No workspace selected',
   'app.provider': 'Model',
   'app.noProvider': 'No model configured',
@@ -275,6 +292,12 @@ const enUS: Record<MessageKey, string> = {
   'chat.askUserCancelled': 'Question cancelled',
   'chat.askUserFailed': 'Failed to submit answer',
   'chat.sendFailed': 'Failed to send message',
+  'file.preview': 'Preview',
+  'file.saveAs': 'Save as',
+  'file.previewUnsupported': 'This file type cannot be previewed inline. Save it to view.',
+  'file.previewFailed': 'Failed to preview file',
+  'file.saveFailed': 'Failed to save file',
+  'file.saved': 'File saved',
   'chat.askUserNotPending': 'This question is no longer pending',
   'chat.edit': 'Edit',
   'chat.copy': 'Copy',
@@ -326,7 +349,7 @@ const enUS: Record<MessageKey, string> = {
   'settings.loadFailed': 'Failed to load settings',
   'settings.provider': 'Model providers',
   'settings.providerHint':
-    'Configure an OpenAI-compatible service. API keys are stored only in system secure storage.',
+    'Configure OpenAI, Anthropic or Ollama. API keys are stored in the local provider config.',
   'settings.newProvider': 'Add provider',
   'settings.providerCountOne': 'provider',
   'settings.providerCountMany': 'providers',
@@ -344,6 +367,7 @@ const enUS: Record<MessageKey, string> = {
   'settings.deleteProvider': 'Delete this provider',
   'settings.save': 'Save',
   'settings.name': 'Provider name',
+  'settings.protocol': 'Protocol',
   'settings.baseUrl': 'Base URL',
   'settings.model': 'Model',
   'settings.models': 'Models',
@@ -391,7 +415,8 @@ const enUS: Record<MessageKey, string> = {
   'tool.failed': 'Failed',
   'tool.artifactId': 'Artifact',
   'tool.input': 'Input',
-  'tool.output': 'Output'
+  'tool.output': 'Output',
+  'tool.authorizeRoot': 'Authorize workspace'
 };
 
 const dictionaries: Record<AppLanguage, Record<MessageKey, string>> = {

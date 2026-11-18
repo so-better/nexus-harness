@@ -9,7 +9,9 @@
     <span>{{ message.content }}</span>
   </article>
   <article
-    v-else-if="message.content || displayToolCalls.length || askUser"
+    v-else-if="
+      message.content || displayToolCalls.length || askUsers.length || message.files?.length
+    "
     class="nh-message"
     :class="[
       `nh-message--${message.role}`,
@@ -19,10 +21,13 @@
   >
     <div class="nh-message__body" :class="{ 'nh-message__body--editing': editing }">
       <div
-        v-if="message.content || displayToolCalls.length || askUser"
+        v-if="
+          message.content || displayToolCalls.length || askUsers.length || message.files?.length
+        "
         class="nh-message__bubble"
         :class="{
-          'nh-message__bubble--tools': displayToolCalls.length > 0 || askUser?.status === 'pending',
+          'nh-message__bubble--tools':
+            displayToolCalls.length > 0 || askUsers.some((ask) => ask.status === 'pending'),
           'nh-message__bubble--editing': editing
         }"
       >
@@ -45,31 +50,47 @@
         </template>
         <template v-else>
           <AskUserCard
-            v-if="askUser && askFirst"
+            v-for="ask in resolvedAsks"
+            :key="ask.requestId"
             class="nh-message__ask nh-message__ask--first"
             embedded
-            :ask="askUser"
-            @submit="submitAsk"
-            @cancel="cancelAsk"
+            :ask="ask"
+            @submit="(answers) => submitAsk(ask, answers)"
+            @cancel="cancelAsk(ask)"
           />
           <p v-if="message.content" class="nh-message__content">
             {{ contentText }}<span v-if="isTyping" class="nh-message__caret" />
           </p>
           <div
+            v-if="message.files?.length"
+            class="nh-message__files"
+            :class="{ 'nh-message__files--after-content': Boolean(message.content) }"
+          >
+            <OutputFileCard v-for="file in message.files" :key="file.id" :file="file" />
+          </div>
+
+          <div
             v-if="displayToolCalls.length"
             class="nh-message__tools"
             :class="{ 'nh-message__tools--after-content': Boolean(message.content) }"
           >
-            <ToolCallCard v-for="tool in displayToolCalls" :key="tool.id" :tool="tool" flush />
+            <ToolCallCard
+              v-for="tool in displayToolCalls"
+              :key="tool.id"
+              :tool="tool"
+              flush
+              @authorize-root="emit('request-root')"
+            />
           </div>
 
           <AskUserCard
-            v-if="askUser && !askFirst"
+            v-for="ask in otherAsks"
+            :key="ask.requestId"
             class="nh-message__ask"
             embedded
-            :ask="askUser"
-            @submit="submitAsk"
-            @cancel="cancelAsk"
+            :ask="ask"
+            @submit="(answers) => submitAsk(ask, answers)"
+            @cancel="cancelAsk(ask)"
           />
         </template>
       </div>
@@ -123,6 +144,7 @@ import type { AskUserAnswer } from '@shared/ask-user';
 import type { ChatAskUser, ChatMessageView } from '../types';
 import AppIcon from '@/components/AppIcon.vue';
 import AskUserCard from './AskUserCard.vue';
+import OutputFileCard from './OutputFileCard.vue';
 import ToolCallCard from './ToolCallCard.vue';
 
 const props = withDefaults(
@@ -130,16 +152,14 @@ const props = withDefaults(
     message: ChatMessageView;
     grouped?: boolean;
     highlighted?: boolean;
-    askUser?: ChatAskUser | undefined;
-    askFirst?: boolean;
+    askUsers?: ChatAskUser[];
     isLastAssistant?: boolean;
     actionsDisabled?: boolean;
   }>(),
   {
     grouped: false,
     highlighted: false,
-    askUser: undefined,
-    askFirst: false,
+    askUsers: () => [],
     isLastAssistant: false,
     actionsDisabled: false
   }
@@ -150,6 +170,7 @@ const emit = defineEmits<{
   'answer-user': [requestId: string, answers: AskUserAnswer[] | undefined];
   'edit-message': [content: string];
   'regenerate-message': [];
+  'request-root': [];
 }>();
 
 const messageApi = useMessage();
@@ -194,15 +215,15 @@ const startPump = (): void => {
 /**
  * 回传当前提问的回答。
  */
-const submitAsk = (answers: AskUserAnswer[]): void => {
-  if (props.askUser) emit('answer-user', props.askUser.requestId, answers);
+const submitAsk = (ask: ChatAskUser, answers: AskUserAnswer[]): void => {
+  emit('answer-user', ask.requestId, answers);
 };
 
 /**
  * 取消当前提问。
  */
-const cancelAsk = (): void => {
-  if (props.askUser) emit('answer-user', props.askUser.requestId, undefined);
+const cancelAsk = (ask: ChatAskUser): void => {
+  emit('answer-user', ask.requestId, undefined);
 };
 
 /**
@@ -246,8 +267,11 @@ const copyMessage = async (): Promise<void> => {
   }
 };
 
+const resolvedAsks = computed(() => props.askUsers.filter((ask) => ask.status === 'resolved'));
+const otherAsks = computed(() => props.askUsers.filter((ask) => ask.status !== 'resolved'));
+
 const displayToolCalls = computed(() =>
-  props.message.toolCalls.filter((tool) => tool.name !== 'ask_user')
+  props.message.toolCalls.filter((tool) => tool.name !== 'ask_user' && tool.name !== 'save_file')
 );
 
 const contentText = computed(() =>
@@ -397,6 +421,16 @@ const timeLabel = computed(() =>
   50% {
     opacity: 0;
   }
+}
+
+.nh-message__files {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nh-message__files--after-content {
+  margin-top: 9px;
 }
 
 .nh-message__tools {

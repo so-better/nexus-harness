@@ -18,12 +18,14 @@
         :disabled-reason="disabledReason"
         :running="running"
         :root-label="rootLabel"
+        :roots="roots"
         :providers="providers"
         :models="models"
         :mode="mode"
         :provider-id="providerId"
         :model-id="modelId"
         @choose-root="emit('choose-root')"
+        @remove-root="emit('remove-root', $event)"
         @update-provider="emit('update-provider', $event)"
         @update-model="emit('update-model', $event)"
         @update-mode="emit('update-mode', $event)"
@@ -40,7 +42,7 @@
  * 会话内空状态：一条简短提示与主输入区。
  */
 
-import type { AgentMode, ProviderModel, ProviderPublic } from '@shared/ipc/contracts';
+import type { AgentMode, ProviderModel, ProviderPublic, SessionRoot } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import ComposerBox from './ComposerBox.vue';
@@ -49,6 +51,7 @@ defineProps<{
   disabledReason?: string | undefined;
   running: boolean;
   rootLabel: string;
+  roots: SessionRoot[];
   providers: ProviderPublic[];
   models: ProviderModel[];
   mode: AgentMode;
@@ -60,6 +63,7 @@ const emit = defineEmits<{
   send: [prompt: string];
   stop: [];
   'choose-root': [];
+  'remove-root': [rootId: string];
   'update-provider': [id: string];
   'update-model': [id: string];
   'update-mode': [mode: AgentMode];

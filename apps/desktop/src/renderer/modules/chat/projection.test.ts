@@ -188,12 +188,40 @@ describe('projectEvents', () => {
     ]);
 
     expect(projection.messages).toHaveLength(1);
-    expect(projection.messages[0]).toMatchObject({ id: 'assistant-2', content: '继续处理' });
+    expect(projection.messages[0]).toMatchObject({ id: 'assistant-1', content: '继续处理' });
     expect(projection.askUsers[0]).toMatchObject({
       status: 'resolved',
-      messageId: 'assistant-2',
-      merged: true
+      messageId: 'assistant-1'
     });
+  });
+
+  it('attaches created files to the latest assistant message', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: { messageId: 'assistant-1', role: 'assistant', content: '已生成' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'file.created',
+        payload: {
+          fileId: 'file-1',
+          name: 'report.md',
+          mime: 'text/markdown',
+          bytes: 12,
+          source: 'generated'
+        }
+      })
+    ]);
+
+    expect(projection.messages[0]?.files).toMatchObject([
+      { id: 'file-1', name: 'report.md', source: 'generated' }
+    ]);
   });
 
   it('hides superseded messages from the visible conversation', () => {

@@ -20,6 +20,15 @@ export const eventPayloadSchemas = {
     providerId: z.string(),
     modelId: z.string()
   }),
+  'scope.granted': z.object({
+    path: z.string(),
+    kind: z.enum(['file', 'directory']),
+    access: z.enum(['read', 'write']),
+    source: z.enum(['session', 'workspace'])
+  }),
+  'scope.revoked': z.object({
+    path: z.string()
+  }),
   'session.renamed': z.object({
     title: z.string(),
     source: z.enum(['auto', 'user'])

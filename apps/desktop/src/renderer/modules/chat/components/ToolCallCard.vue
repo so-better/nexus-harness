@@ -22,6 +22,14 @@
         <p v-if="tool.error" class="nh-tool__error">
           {{ tool.error.code }}: {{ tool.error.message }}
         </p>
+        <NButton
+          v-if="tool.error?.code === 'PATH_OUTSIDE_ROOT'"
+          size="tiny"
+          secondary
+          @click="emit('authorize-root')"
+        >
+          {{ t('tool.authorizeRoot') }}
+        </NButton>
         <p v-if="tool.artifactId" class="nh-tool__meta">
           {{ t('tool.artifactId') }}: {{ tool.artifactId }}
         </p>
@@ -36,7 +44,7 @@
  */
 
 import { computed } from 'vue';
-import { NCollapse, NCollapseItem, NTag } from 'naive-ui';
+import { NButton, NCollapse, NCollapseItem, NTag } from 'naive-ui';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import type { ChatToolCall } from '../types';
@@ -44,6 +52,8 @@ import type { ChatToolCall } from '../types';
 const props = withDefaults(defineProps<{ tool: ChatToolCall; flush?: boolean }>(), {
   flush: false
 });
+
+const emit = defineEmits<{ 'authorize-root': [] }>();
 
 const toolIcon = computed<
   'file' | 'edit' | 'terminal' | 'globe' | 'spark' | 'settings' | 'history'

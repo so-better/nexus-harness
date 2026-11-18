@@ -110,6 +110,9 @@ export const registerSettingsIpc = (): void => {
           { files: paths.files, artifacts: paths.artifacts, logs: paths.logs },
           parsed.data
         );
+        if ((parsed.data === 'files' || parsed.data === 'all') && !info.failed.includes('files')) {
+          db.prepare('DELETE FROM files').run();
+        }
         if (
           (parsed.data === 'artifacts' || parsed.data === 'all') &&
           !info.failed.includes('artifacts')

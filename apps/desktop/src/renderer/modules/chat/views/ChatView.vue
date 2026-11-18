@@ -17,12 +17,14 @@
       :disabled-reason="disabledReason"
       :running="projection.running"
       :root-label="rootLabel"
+      :roots="roots"
       :providers="providers"
       :models="models"
       :mode="mode"
       :provider-id="providerId"
       :model-id="modelId"
       @choose-root="emit('choose-root')"
+      @remove-root="emit('remove-root', $event)"
       @update-provider="emit('update-provider', $event)"
       @update-model="emit('update-model', $event)"
       @update-mode="emit('update-mode', $event)"
@@ -43,6 +45,7 @@
         @answer-user="(requestId, answers) => emit('answer-user', requestId, answers)"
         @edit-message="(messageId, content) => emit('edit-message', messageId, content)"
         @regenerate-message="(messageId) => emit('regenerate-message', messageId)"
+        @request-root="emit('request-root')"
       />
 
       <div class="nh-chat__bottom">
@@ -61,12 +64,14 @@
           :disabled-reason="disabledReason"
           :running="projection.running"
           :root-label="rootLabel"
+          :roots="roots"
           :providers="providers"
           :models="models"
           :mode="mode"
           :provider-id="providerId"
           :model-id="modelId"
           @choose-root="emit('choose-root')"
+          @remove-root="emit('remove-root', $event)"
           @update-provider="emit('update-provider', $event)"
           @update-model="emit('update-model', $event)"
           @update-mode="emit('update-mode', $event)"
@@ -89,6 +94,7 @@ import type {
   AgentMode,
   ProviderModel,
   ProviderPublic,
+  SessionRoot,
   SessionSummary
 } from '@shared/ipc/contracts';
 import type { AskUserAnswer } from '@shared/ask-user';
@@ -104,6 +110,7 @@ const props = defineProps<{
   session?: SessionSummary | undefined;
   projection: ChatProjection;
   rootLabel: string;
+  roots: SessionRoot[];
   providers: ProviderPublic[];
   models: ProviderModel[];
   mode: AgentMode;
@@ -117,6 +124,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'choose-root': [];
+  'remove-root': [rootId: string];
   'update-provider': [id: string];
   'update-model': [id: string];
   'update-mode': [mode: AgentMode];
@@ -128,6 +136,7 @@ const emit = defineEmits<{
   'answer-user': [requestId: string, answers: AskUserAnswer[] | undefined];
   'edit-message': [messageId: string, content: string];
   'regenerate-message': [messageId: string];
+  'request-root': [];
 }>();
 
 const isEmpty = computed(() => !props.session || props.projection.messages.length === 0);

@@ -12,6 +12,8 @@ import {
   type AgentToolDefinition
 } from '@nexus/core';
 import {
+  AnthropicProvider,
+  OllamaProvider,
   OpenAICompatibleProvider,
   type ChatMessage,
   type ChatProvider,
@@ -19,6 +21,7 @@ import {
 } from '@nexus/providers';
 import { createFileToolset } from '@nexus/tools';
 import { ArtifactService } from '../artifacts/artifact-service';
+import { FileService } from '../files/file-service';
 import { CheckpointService } from '../checkpoint/checkpoint-service';
 import {
   AgentContextService,
@@ -43,6 +46,7 @@ export type ProviderFactory = (config: AgentProviderConfig) => ChatProvider;
  * AgentService 依赖；测试可注入 Provider 工厂、产物目录与数据库。
  */
 export interface AgentServiceOptions {
+  fileBaseDir?: string;
   createProvider?: ProviderFactory;
   artifactBaseDir?: string;
   database?: DatabaseSync;
@@ -75,6 +79,45 @@ const getCreateDirsArgument = (input: unknown): boolean =>
   typeof input === 'object' &&
   'createDirs' in input &&
   (input as { createDirs?: unknown }).createDirs === true;
+
+interface SaveFileInput {
+  name: string;
+  content: string;
+  mime?: string;
+}
+
+/**
+ * 校验 save_file 参数，避免把非文本内容写入输出目录。
+ */
+const parseSaveFileInput = (input: unknown): SaveFileInput | undefined => {
+  if (!input || typeof input !== 'object') return undefined;
+  const record = input as Record<string, unknown>;
+  if (typeof record['name'] !== 'string' || !record['name'].trim()) return undefined;
+  if (typeof record['content'] !== 'string' || record['content'].length > 5_000_000)
+    return undefined;
+  if (record['mime'] !== undefined && typeof record['mime'] !== 'string') return undefined;
+  return {
+    name: record['name'].trim(),
+    content: record['content'],
+    ...(typeof record['mime'] === 'string' && record['mime'] ? { mime: record['mime'] } : {})
+  };
+};
+
+const saveFileToolDefinition: AgentToolDefinition = {
+  name: 'save_file',
+  description: '把生成的文本文件保存到 Nexus 输出文件目录，返回可预览/另存为的 fileId。',
+  permission: 'write',
+  requiresApproval: false,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: '文件名，包含扩展名，例如 report.md' },
+      content: { type: 'string', description: '文件文本内容' },
+      mime: { type: 'string', description: '可选 MIME 类型' }
+    },
+    required: ['name', 'content']
+  }
+};
 
 const askUserToolDefinition: AgentToolDefinition = {
   name: 'ask_user',
@@ -136,21 +179,28 @@ const modeSystemPrompt = (mode: AgentMode): string =>
     ? '当前处于 Plan 模式：只能读取、分析和制定计划，不得写文件、执行命令、发起网络请求或启动 MCP 工具。需要澄清时使用 ask_user；需要执行时提示用户切换到 Build。'
     : '当前处于 Build 模式：可以按权限和审批要求使用读写与执行工具；高风险操作仍需用户审批。需要澄清时使用 ask_user。';
 
-export const createAgentProvider: ProviderFactory = (config) =>
-  new OpenAICompatibleProvider({
+export const createAgentProvider: ProviderFactory = (config) => {
+  const shared = {
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
     ...(config.headers ? { headers: config.headers } : {})
-  });
+  };
+
+  if (config.protocol === 'anthropic') return new AnthropicProvider(shared);
+  if (config.protocol === 'ollama') return new OllamaProvider(shared);
+  return new OpenAICompatibleProvider(shared);
+};
 
 export class AgentService {
   private readonly createProvider: ProviderFactory;
   private readonly artifactBaseDir: string | undefined;
+  private readonly fileBaseDir: string | undefined;
   private readonly database: DatabaseSync | undefined;
 
   constructor(options: AgentServiceOptions = {}) {
     this.createProvider = options.createProvider ?? createAgentProvider;
     this.artifactBaseDir = options.artifactBaseDir;
+    this.fileBaseDir = options.fileBaseDir;
     this.database = options.database;
   }
 
@@ -179,6 +229,7 @@ export class AgentService {
         input.rootPaths.length > 0 ? await createFileToolset(input.rootPaths) : undefined;
       const provider = this.createProvider(providerConfig);
       const artifacts = new ArtifactService(this.artifactBaseDir, this.database);
+      const files = this.database ? new FileService(this.database, this.fileBaseDir) : undefined;
       const checkpoints = new CheckpointService();
       const context = new AgentContextService({
         provider,
@@ -247,6 +298,57 @@ export class AgentService {
             output: '',
             error: { code: 'TOOL_MODE_DENIED', message: `Plan 模式不可用工具：${call.name}` }
           };
+        }
+        if (call.name === 'save_file') {
+          const parsed = parseSaveFileInput(call.arguments);
+          if (!parsed) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'FILE_INVALID_INPUT', message: '文件参数不合法' }
+            };
+          }
+          if (!files) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'FILE_SERVICE_UNAVAILABLE', message: '文件服务不可用' }
+            };
+          }
+          try {
+            const file = await files.save({
+              sessionId: input.sessionId,
+              runId,
+              name: parsed.name,
+              content: parsed.content,
+              ...(parsed.mime ? { mime: parsed.mime } : {})
+            });
+            eventBus.publish(
+              createNexusEvent({
+                sessionId: input.sessionId,
+                runId,
+                seq: 1,
+                type: 'file.created',
+                payload: {
+                  fileId: file.id,
+                  name: file.name,
+                  mime: file.mime,
+                  bytes: file.bytes,
+                  source: file.source
+                }
+              })
+            );
+            return { ok: true, output: JSON.stringify(file) };
+          } catch (error) {
+            return {
+              ok: false,
+              output: '',
+              error: {
+                code: 'FILE_SAVE_FAILED',
+                message: error instanceof Error ? error.message : '保存文件失败'
+              }
+            };
+          }
         }
         if (!toolset || !checkpointRoot) {
           return {
@@ -332,7 +434,11 @@ export class AgentService {
         );
       }
 
-      const allToolDefinitions = [...(toolset?.definitions ?? []), askUserToolDefinition];
+      const allToolDefinitions = [
+        ...(toolset?.definitions ?? []),
+        askUserToolDefinition,
+        saveFileToolDefinition
+      ];
       const visibleDefinitions =
         mode === 'plan'
           ? allToolDefinitions.filter((definition) => PLAN_ALLOWED_TOOLS.has(definition.name))

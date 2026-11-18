@@ -2,7 +2,7 @@
  * 文件工具测试：读取、列目录与路径越界保护。
  */
 
-import { access, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -43,6 +43,22 @@ describe('file tools', () => {
 
     expect(result.ok).toBe(true);
     expect(result.output).toContain('file a.txt');
+  });
+
+  it('skips missing roots when at least one root is valid', async () => {
+    const recovered = await createFileToolset([join(root, 'missing'), root]);
+    const result = await recovered.execute('read_file', { path: 'a.txt' });
+    expect(result).toEqual({ ok: true, output: 'hello' });
+  });
+
+  it('blocks sensitive paths even inside a valid root', async () => {
+    const ssh = join(root, '.ssh');
+    await mkdir(ssh);
+    await writeFile(join(ssh, 'id_rsa'), 'secret', 'utf8');
+
+    const result = await toolset.execute('read_file', { path: '.ssh/id_rsa' });
+    expect(result.ok).toBe(false);
+    expect(result.error?.code).toBe('PATH_SENSITIVE');
   });
 
   it('rejects paths outside the root', async () => {

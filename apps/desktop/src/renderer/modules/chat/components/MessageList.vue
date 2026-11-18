@@ -7,14 +7,14 @@
         :message="message"
         :grouped="isGrouped(index)"
         :highlighted="message.id === highlightedId"
-        :ask-user="askForMessage(message.id)"
-        :ask-first="askForMessage(message.id)?.merged === true"
+        :ask-users="askForMessage(message.id)"
         :is-last-assistant="message.id === lastAssistantId"
         :actions-disabled="actionsDisabled"
         @content-growth="handleContentGrowth"
         @answer-user="(requestId, answers) => emit('answer-user', requestId, answers)"
         @edit-message="(content) => emit('edit-message', message.id, content)"
         @regenerate-message="emit('regenerate-message', message.id)"
+        @request-root="emit('request-root')"
       />
     </div>
   </div>
@@ -35,6 +35,7 @@ const emit = defineEmits<{
   'answer-user': [requestId: string, answers: AskUserAnswer[] | undefined];
   'edit-message': [messageId: string, content: string];
   'regenerate-message': [messageId: string];
+  'request-root': [];
 }>();
 
 const props = defineProps<{
@@ -54,12 +55,12 @@ const lastAssistantId = computed(
 );
 
 /**
- * 按投影给出的 messageId 关联提问；同一消息有多次提问时保留最新一条。
+ * 按投影给出的 messageId 关联提问，同一消息保留全部提问。
  */
 const asksByMessage = computed(() => indexAskUsersByMessage(props.askUsers ?? []));
 
-const askForMessage = (messageId: string): ChatAskUser | undefined =>
-  asksByMessage.value.get(messageId);
+const askForMessage = (messageId: string): ChatAskUser[] =>
+  asksByMessage.value.get(messageId) ?? [];
 const highlightedId = ref<string>();
 let highlightTimer: ReturnType<typeof setTimeout> | undefined;
 let focusRequest = 0;

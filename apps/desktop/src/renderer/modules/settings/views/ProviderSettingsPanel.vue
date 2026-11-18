@@ -22,6 +22,17 @@
           <h3 class="nh-provider-settings__section-title">{{ t('settings.connection') }}</h3>
           <div class="nh-provider-settings__panel">
             <div class="nh-provider-settings__grid">
+              <NFormItem
+                class="nh-provider-settings__item"
+                :label="t('settings.protocol')"
+                path="protocol"
+              >
+                <NSelect
+                  :value="providerForm.protocol"
+                  :options="protocolOptions"
+                  @update:value="(value: ProviderProtocol) => (providerForm.protocol = value)"
+                />
+              </NFormItem>
               <NFormItem class="nh-provider-settings__item" :label="t('settings.name')" path="name">
                 <NInput
                   ref="nameInputRef"
@@ -30,18 +41,19 @@
                   @update:value="(value: string) => (providerForm.name = value)"
                 />
               </NFormItem>
-              <NFormItem
-                class="nh-provider-settings__item"
-                :label="t('settings.baseUrl')"
-                path="baseUrl"
-              >
-                <NInput
-                  :value="providerForm.baseUrl"
-                  :placeholder="t('settings.baseUrlPlaceholder')"
-                  @update:value="(value: string) => (providerForm.baseUrl = value)"
-                />
-              </NFormItem>
             </div>
+
+            <NFormItem
+              class="nh-provider-settings__item"
+              :label="t('settings.baseUrl')"
+              path="baseUrl"
+            >
+              <NInput
+                :value="providerForm.baseUrl"
+                :placeholder="baseUrlPlaceholder"
+                @update:value="(value: string) => (providerForm.baseUrl = value)"
+              />
+            </NFormItem>
 
             <div class="nh-provider-settings__grid">
               <NFormItem
@@ -101,8 +113,17 @@
  * 模型服务商设置：列表、连接、多模型、API Key 与模型预算。
  */
 
-import { NForm, NFormItem, NInput, NSwitch, type FormInst, type InputInst } from 'naive-ui';
-import { ref } from 'vue';
+import {
+  NForm,
+  NFormItem,
+  NInput,
+  NSelect,
+  NSwitch,
+  type FormInst,
+  type InputInst
+} from 'naive-ui';
+import { computed, ref } from 'vue';
+import type { ProviderProtocol } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import ProviderEmptyState from '../components/ProviderEmptyState.vue';
 import ProviderListView from '../components/ProviderListView.vue';
@@ -134,6 +155,18 @@ const {
 });
 
 const rules = createProviderRules(selectedId, providerForm);
+const protocolOptions = computed(() => [
+  { label: 'OpenAI', value: 'openai' },
+  { label: 'Anthropic', value: 'anthropic' },
+  { label: 'Ollama', value: 'ollama' }
+]);
+const baseUrlPlaceholder = computed(() =>
+  providerForm.value.protocol === 'ollama'
+    ? 'http://127.0.0.1:11434/v1'
+    : providerForm.value.protocol === 'anthropic'
+      ? 'https://api.anthropic.com'
+      : t('settings.baseUrlPlaceholder')
+);
 const formRef = ref<FormInst | null>(null);
 const nameInputRef = ref<InputInst | null>(null);
 

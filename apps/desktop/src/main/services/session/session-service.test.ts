@@ -2,7 +2,7 @@
  * 会话、事件与 Run 存储测试：投影、事件顺序与级联删除。
  */
 
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -75,6 +75,34 @@ describe('session storage', () => {
     const renamed = sessions.rename({ id: session.id, title: '用户标题' });
     expect(renamed.titleSource).toBe('user');
     expect(sessions.setAutoTitle(session.id, '不能覆盖')).toBeUndefined();
+  });
+
+  it('persists and revokes session roots', async () => {
+    const session = sessions.create();
+    const root = await mkdtemp(join(directory, 'root-'));
+    const added = await sessions.addRoots(session.id, [root, root]);
+
+    expect(added).toHaveLength(1);
+    expect(added[0]).toMatchObject({
+      path: await realpath(root),
+      kind: 'directory',
+      access: 'write'
+    });
+    expect(events.list(session.id).filter((event) => event.type === 'scope.granted')).toHaveLength(
+      1
+    );
+
+    expect(sessions.removeRoot(session.id, added[0]!.id)).toEqual([]);
+    expect(events.list(session.id).some((event) => event.type === 'scope.revoked')).toBe(true);
+  });
+
+  it('rejects sensitive roots and filesystem roots', async () => {
+    const session = sessions.create();
+    const sensitive = join(directory, '.ssh');
+    await mkdir(sensitive, { recursive: true });
+
+    await expect(sessions.addRoots(session.id, ['/'])).rejects.toThrow();
+    await expect(sessions.addRoots(session.id, [sensitive])).rejects.toThrow();
   });
 
   it('rejects oversized event payloads', () => {

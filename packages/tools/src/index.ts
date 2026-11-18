@@ -3,3 +3,4 @@
  */
 
 export * from './file-tools';
+export * from './path-policy';

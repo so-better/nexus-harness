@@ -61,6 +61,20 @@ describe('ProviderStore', () => {
     expect(full?.models).toEqual([model('gpt-test')]);
   });
 
+  it('persists protocol and allows keyless Ollama configs', async () => {
+    const saved = await save({
+      protocol: 'ollama',
+      name: 'Ollama',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      apiKey: ''
+    });
+
+    expect(saved.protocol).toBe('ollama');
+    expect(saved.apiKey).toBe('');
+    const full = await store.get(saved.id);
+    expect(full).toMatchObject({ protocol: 'ollama', apiKey: '' });
+  });
+
   it('stores custom headers locally and keeps them out of public configs', async () => {
     const saved = await save({ headers: { Authorization: 'Bearer header-secret' } });
 

@@ -60,16 +60,20 @@ export const registerProviderIpc = (): void => {
         return fail('PROVIDER_NOT_FOUND', `Provider 不存在：${parsed.data.id}`);
       }
 
+      const protocol = parsed.data.protocol ?? stored?.protocol ?? 'openai';
       const apiKey = parsed.data.apiKey ?? stored?.apiKey;
-      if (!apiKey) return fail('PROVIDER_INVALID_INPUT', '连接测试需要 API Key');
+      if (!apiKey && protocol !== 'ollama') {
+        return fail('PROVIDER_INVALID_INPUT', '连接测试需要 API Key');
+      }
 
       const headers = parsed.data.headers ?? stored?.headers;
 
       try {
         return ok(
           await probeProvider({
+            protocol,
             baseUrl: parsed.data.baseUrl,
-            apiKey,
+            ...(apiKey ? { apiKey } : {}),
             ...(headers === undefined ? {} : { headers })
           })
         );

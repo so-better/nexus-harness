@@ -1,0 +1,190 @@
+/**
+ * AI 输出文件服务：写入 userData/files，记录元数据并支持预览与另存为。
+ */
+
+import { randomUUID } from 'node:crypto';
+import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { dirname, extname, join } from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
+import type { OutputFile } from '@shared/ipc/contracts';
+import { getAppDataPaths } from '../storage/paths';
+
+interface FileRow {
+  id: string;
+  session_id: string;
+  run_id: string | null;
+  name: string;
+  mime: string;
+  bytes: number;
+  source: string;
+  stored_path: string;
+  created_at: number;
+}
+
+export interface SaveFileInput {
+  sessionId: string;
+  runId?: string;
+  name: string;
+  mime?: string;
+  content: string | Uint8Array;
+  source?: 'generated' | 'downloaded';
+}
+
+const MAX_PREVIEW_BYTES = 10 * 1024 * 1024;
+
+const toOutputFile = (row: FileRow): OutputFile => ({
+  id: row.id,
+  sessionId: row.session_id,
+  ...(row.run_id ? { runId: row.run_id } : {}),
+  name: row.name,
+  mime: row.mime,
+  bytes: Number(row.bytes),
+  source: row.source === 'downloaded' ? 'downloaded' : 'generated',
+  createdAt: Number(row.created_at)
+});
+
+const mimeForName = (name: string): string => {
+  switch (extname(name).toLowerCase()) {
+    case '.md':
+      return 'text/markdown';
+    case '.json':
+      return 'application/json';
+    case '.csv':
+      return 'text/csv';
+    case '.html':
+      return 'text/html';
+    case '.png':
+      return 'image/png';
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.webp':
+      return 'image/webp';
+    case '.pdf':
+      return 'application/pdf';
+    default:
+      return 'text/plain';
+  }
+};
+
+const safeName = (name: string): string => {
+  const cleaned = name
+    .replace(/[\\/:*?"<>|\0]/g, '_')
+    .trim()
+    .slice(0, 120);
+  return cleaned || 'output.txt';
+};
+
+/**
+ * 文件元数据与磁盘内容统一由本服务管理。
+ */
+export class FileService {
+  constructor(
+    private readonly db: DatabaseSync,
+    private readonly baseDir?: string
+  ) {}
+
+  private get directory(): string {
+    return this.baseDir ?? getAppDataPaths().files;
+  }
+
+  private get(fileId: string, sessionId: string): (FileRow & { stored_path: string }) | undefined {
+    return this.db
+      .prepare('SELECT * FROM files WHERE id = ? AND session_id = ?')
+      .get(fileId, sessionId) as FileRow | undefined;
+  }
+
+  /**
+   * 保存生成或下载的文件，返回可被 UI 引用的元数据。
+   */
+  async save(input: SaveFileInput): Promise<OutputFile> {
+    const id = randomUUID();
+    const name = safeName(input.name);
+    const directory = join(this.directory, input.sessionId);
+    await mkdir(directory, { recursive: true });
+    const storedPath = join(directory, `${id}-${name}`);
+    const data =
+      typeof input.content === 'string' ? Buffer.from(input.content, 'utf8') : input.content;
+    await writeFile(storedPath, data);
+    const createdAt = Date.now();
+    const mime = input.mime ?? mimeForName(name);
+    const source = input.source ?? 'generated';
+
+    this.db
+      .prepare(
+        `INSERT INTO files
+          (id, session_id, run_id, name, mime, bytes, source, stored_path, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        input.sessionId,
+        input.runId ?? null,
+        name,
+        mime,
+        data.byteLength,
+        source,
+        storedPath,
+        createdAt
+      );
+
+    return {
+      id,
+      sessionId: input.sessionId,
+      ...(input.runId ? { runId: input.runId } : {}),
+      name,
+      mime,
+      bytes: data.byteLength,
+      source,
+      createdAt
+    };
+  }
+
+  /**
+   * 列出会话内保存的文件。
+   */
+  list(sessionId: string): OutputFile[] {
+    const rows = this.db
+      .prepare('SELECT * FROM files WHERE session_id = ? ORDER BY created_at ASC')
+      .all(sessionId) as unknown as FileRow[];
+    return rows.map(toOutputFile);
+  }
+
+  /**
+   * 读取文件并转成 data URL，供渲染层预览。
+   */
+  async readDataUrl(
+    fileId: string,
+    sessionId: string
+  ): Promise<{ file: OutputFile; dataUrl: string }> {
+    const row = this.get(fileId, sessionId);
+    if (!row) throw new Error('文件不存在');
+    const info = await stat(row.stored_path);
+    if (info.size > MAX_PREVIEW_BYTES) throw new Error('文件过大，无法预览');
+
+    const data = await readFile(row.stored_path);
+    return {
+      file: toOutputFile(row),
+      dataUrl: `data:${row.mime};base64,${data.toString('base64')}`
+    };
+  }
+
+  /**
+   * 把文件复制到用户选择的位置。
+   */
+  async saveAs(fileId: string, sessionId: string, targetPath: string): Promise<string> {
+    const row = this.get(fileId, sessionId);
+    if (!row) throw new Error('文件不存在');
+    await mkdir(dirname(targetPath), { recursive: true });
+    await copyFile(row.stored_path, targetPath);
+    return targetPath;
+  }
+
+  /**
+   * 获取文件元数据，供保存对话框默认文件名使用。
+   */
+  getMeta(fileId: string, sessionId: string): OutputFile | undefined {
+    const row = this.get(fileId, sessionId);
+    return row ? toOutputFile(row) : undefined;
+  }
+}

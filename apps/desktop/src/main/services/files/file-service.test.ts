@@ -1,0 +1,54 @@
+/**
+ * 输出文件服务测试：落盘、元数据、预览与另存为。
+ */
+
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createDatabase } from '../storage/database';
+import { FileService } from './file-service';
+
+describe('FileService', () => {
+  let root = '';
+  let db: DatabaseSync;
+  let files: FileService;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'nexus-files-'));
+    db = createDatabase(join(root, 'nexus.db'));
+    files = new FileService(db, join(root, 'output'));
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('saves, lists and previews a generated file', async () => {
+    const file = await files.save({
+      sessionId: 'session-1',
+      runId: 'run-1',
+      name: 'report.md',
+      content: '# 报告'
+    });
+
+    expect(file).toMatchObject({ name: 'report.md', mime: 'text/markdown', source: 'generated' });
+    expect(files.list('session-1')).toHaveLength(1);
+    const preview = await files.readDataUrl(file.id, 'session-1');
+    expect(preview.dataUrl).toContain('data:text/markdown;base64,');
+  });
+
+  it('copies a file to a user-selected path', async () => {
+    const file = await files.save({
+      sessionId: 'session-1',
+      name: 'output.txt',
+      content: 'hello'
+    });
+    const target = join(root, 'copy.txt');
+    await files.saveAs(file.id, 'session-1', target);
+
+    expect(await readFile(target, 'utf8')).toBe('hello');
+  });
+});

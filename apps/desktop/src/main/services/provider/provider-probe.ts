@@ -2,14 +2,17 @@
  * Provider 探测：通过 /models 接口验证连接并获取可用模型。
  */
 
+import { normalizeOllamaBaseUrl } from '@nexus/providers';
+
 const PROBE_TIMEOUT_MS = 15_000;
 
 /**
  * 探测所需的最小 Provider 配置。
  */
 export interface ProviderProbeConfig {
+  protocol?: 'openai' | 'anthropic' | 'ollama';
   baseUrl: string;
-  apiKey: string;
+  apiKey?: string;
   headers?: Record<string, string>;
 }
 
@@ -57,15 +60,30 @@ const errorForStatus = (status: number): ProviderProbeError => {
  * 请求 /models；成功返回去重后的模型列表。
  */
 export const probeProvider = async (config: ProviderProbeConfig): Promise<ProviderProbeResult> => {
-  const baseUrl = config.baseUrl.replace(/\/+$/, '');
+  const baseUrl =
+    config.protocol === 'ollama'
+      ? normalizeOllamaBaseUrl(config.baseUrl)
+      : config.baseUrl.replace(/\/+$/, '');
+  const isAnthropic = config.protocol === 'anthropic';
+  const modelsUrl = isAnthropic
+    ? `${baseUrl.endsWith('/v1') ? baseUrl : `${baseUrl}/v1`}/models`
+    : `${baseUrl}/models`;
   const startedAt = Date.now();
+  const authHeaders = isAnthropic
+    ? {
+        'x-api-key': config.apiKey ?? '',
+        'anthropic-version': '2023-06-01'
+      }
+    : config.apiKey
+      ? { Authorization: `Bearer ${config.apiKey}` }
+      : {};
 
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}/models`, {
+    response = await fetch(modelsUrl, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${config.apiKey}`,
+        ...authHeaders,
         ...config.headers
       },
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS)

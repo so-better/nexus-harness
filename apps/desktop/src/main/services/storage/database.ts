@@ -112,6 +112,43 @@ const migrate = (db: DatabaseSync): void => {
     }
     db.exec('PRAGMA user_version = 5');
   }
+
+  if (version < 6) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS session_roots (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        access TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'session',
+        created_at INTEGER NOT NULL,
+        UNIQUE(session_id, path)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_session_roots_session ON session_roots(session_id);
+    `);
+    db.exec('PRAGMA user_version = 6');
+  }
+
+  if (version < 7) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS files (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        run_id TEXT,
+        name TEXT NOT NULL,
+        mime TEXT NOT NULL,
+        bytes INTEGER NOT NULL,
+        source TEXT NOT NULL,
+        stored_path TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_files_session ON files(session_id);
+    `);
+    db.exec('PRAGMA user_version = 7');
+  }
 };
 
 /**

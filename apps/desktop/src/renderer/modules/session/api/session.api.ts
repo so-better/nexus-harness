@@ -7,6 +7,7 @@ import type {
   AgentMode,
   SessionCreateInput,
   SessionRenameInput,
+  SessionRoot,
   SessionSearchResult,
   SessionSummary
 } from '@shared/ipc/contracts';
@@ -57,6 +58,24 @@ export const setSessionModel = async (
  */
 export const setSessionMode = async (id: string, mode: AgentMode): Promise<SessionSummary> =>
   unwrap(await window.nexus.session.setMode({ id, mode }));
+
+/**
+ * 读取会话已授权的工作区 root。
+ */
+export const getSessionRoots = async (id: string): Promise<SessionRoot[]> =>
+  unwrap(await window.nexus.session.roots(id));
+
+/**
+ * 授权一组工作区路径。
+ */
+export const addSessionRoots = async (id: string, paths: string[]): Promise<SessionRoot[]> =>
+  unwrap(await window.nexus.session.addRoots({ sessionId: id, paths }));
+
+/**
+ * 撤销一个工作区 root。
+ */
+export const removeSessionRoot = async (id: string, rootId: string): Promise<SessionRoot[]> =>
+  unwrap(await window.nexus.session.removeRoot({ sessionId: id, rootId }));
 
 /**
  * 删除会话。

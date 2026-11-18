@@ -31,7 +31,9 @@
               }}
             </span>
           </span>
-          <span class="nh-provider-item__url">{{ provider.baseUrl }}</span>
+          <span class="nh-provider-item__url">
+            {{ provider.protocol }} · {{ provider.baseUrl }}
+          </span>
           <span class="nh-provider-item__meta">
             <span>
               {{ provider.models.length }} {{ modelCountLabel(provider.models.length) }}

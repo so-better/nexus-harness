@@ -18,6 +18,7 @@
         :session="sessions.activeSession"
         :projection="projection"
         :root-label="rootLabel"
+        :roots="roots"
         :providers="providers"
         :models="models"
         :mode="activeMode"
@@ -27,7 +28,9 @@
         :focus-message-id="focusMessage?.id"
         :focus-token="focusMessage?.token"
         :focus-session-id="focusMessage?.sessionId"
-        @choose-root="chat.addRoot"
+        @choose-root="chooseRoot"
+        @remove-root="removeRoot"
+        @request-root="authorizeRootAndRetry"
         @update-provider="updateProvider"
         @update-model="updateModel"
         @update-mode="changeMode"
@@ -86,7 +89,8 @@ const sessions = useSessionStore();
 const chat = useChatStore();
 const message = useMessage();
 const { sessions: sessionList, activeId } = storeToRefs(sessions);
-const { providers, providerId, modelId, models, rootPaths, runningBySession } = storeToRefs(chat);
+const { providers, providerId, modelId, models, roots, rootPaths, runningBySession } =
+  storeToRefs(chat);
 
 const { version, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
 const focusMessage = ref<{ id: string; token: number; sessionId: string }>();
@@ -123,6 +127,7 @@ watch(
   activeId,
   async (id) => {
     if (!id) return;
+    await chat.loadRoots(id);
     await chat.loadHistory(id);
     const sessionProvider = sessionList.value.find(
       (session: SessionSummary) => session.id === id
@@ -204,6 +209,51 @@ const clearAllSessions = async (): Promise<void> => {
     return;
   }
   await ensureSession();
+};
+
+/**
+ * 添加工作区；没有会话时先创建。
+ */
+const authorizeWorkspace = async (): Promise<boolean> => {
+  if (!activeId.value) {
+    const created = await sessions.create(providerId.value, modelId.value);
+    if (!created) {
+      message.error(sessions.error ?? t('session.createFailed'));
+      return false;
+    }
+  }
+  if (!activeId.value) return false;
+
+  const result = await chat.addRoot(activeId.value);
+  if (result === 'failed') {
+    message.error(chat.error ?? t('app.rootAddFailed'));
+    return false;
+  }
+  return result === 'added';
+};
+
+/**
+ * 从工具错误授权工作区，并提示用户重试原操作。
+ */
+const authorizeRootAndRetry = async (): Promise<void> => {
+  if (await authorizeWorkspace()) message.info(t('app.rootAuthorizedRetry'));
+};
+
+/**
+ * 添加工作区。
+ */
+const chooseRoot = async (): Promise<void> => {
+  await authorizeWorkspace();
+};
+
+/**
+ * 撤销当前会话的工作区授权。
+ */
+const removeRoot = async (rootId: string): Promise<void> => {
+  if (activeId.value) {
+    const removed = await chat.removeRoot(activeId.value, rootId);
+    if (!removed) message.error(chat.error ?? t('app.rootRemoveFailed'));
+  }
 };
 
 /**

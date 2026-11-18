@@ -3,18 +3,31 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { realpath, stat } from 'node:fs/promises';
 import { createNexusEvent } from '@nexus/core';
+import { assertGrantableRoot } from '@nexus/tools';
 import type { DatabaseSync } from 'node:sqlite';
 import type {
   AgentMode,
   SessionCreateInput,
   SessionRenameInput,
+  SessionRoot,
   SessionSetModeInput,
   SessionSetModelInput,
   SessionStatus,
   SessionSummary
 } from '@shared/ipc/contracts';
 import type { EventStore } from './event-store';
+
+interface SessionRootRow {
+  id: string;
+  session_id: string;
+  path: string;
+  kind: string;
+  access: string;
+  source: string;
+  created_at: number;
+}
 
 interface SessionRow {
   id: string;
@@ -32,6 +45,16 @@ interface SessionRow {
 }
 
 const DEFAULT_SESSION_TITLE = '新会话';
+
+const toRoot = (row: SessionRootRow): SessionRoot => ({
+  id: row.id,
+  sessionId: row.session_id,
+  path: row.path,
+  kind: row.kind === 'file' ? 'file' : 'directory',
+  access: row.access === 'read' ? 'read' : 'write',
+  source: row.source === 'workspace' ? 'workspace' : 'session',
+  createdAt: Number(row.created_at)
+});
 
 const toSummary = (row: SessionRow): SessionSummary => ({
   id: row.id,
@@ -96,6 +119,87 @@ export class SessionService {
 
       return this.getRequired(id);
     });
+  }
+
+  /**
+   * 列出会话已授权的 root。
+   */
+  listRoots(sessionId: string): SessionRoot[] {
+    const rows = this.db
+      .prepare('SELECT * FROM session_roots WHERE session_id = ? ORDER BY created_at ASC')
+      .all(sessionId) as unknown as SessionRootRow[];
+    return rows.map(toRoot);
+  }
+
+  /**
+   * 授权一组路径；目录可写，单文件只授予读权限。
+   */
+  async addRoots(sessionId: string, paths: string[]): Promise<SessionRoot[]> {
+    const now = Date.now();
+    const resolved = await Promise.all(
+      paths.map(async (path) => {
+        const canonical = await realpath(path);
+        assertGrantableRoot(canonical);
+        const info = await stat(canonical);
+        return {
+          path: canonical,
+          kind: info.isDirectory() ? ('directory' as const) : ('file' as const),
+          access: info.isDirectory() ? ('write' as const) : ('read' as const)
+        };
+      })
+    );
+
+    this.transaction(() => {
+      for (const root of resolved) {
+        const id = randomUUID();
+        const inserted = this.db
+          .prepare(
+            `INSERT OR IGNORE INTO session_roots
+              (id, session_id, path, kind, access, source, created_at)
+             VALUES (?, ?, ?, ?, ?, 'session', ?)`
+          )
+          .run(id, sessionId, root.path, root.kind, root.access, now);
+        if (Number(inserted.changes) === 0) continue;
+        this.events.append(
+          createNexusEvent({
+            sessionId,
+            seq: 1,
+            type: 'scope.granted',
+            payload: {
+              path: root.path,
+              kind: root.kind,
+              access: root.access,
+              source: 'session'
+            }
+          })
+        );
+      }
+    });
+
+    return this.listRoots(sessionId);
+  }
+
+  /**
+   * 撤销 root 授权；只删除授权记录，不删除用户文件。
+   */
+  removeRoot(sessionId: string, rootId: string): SessionRoot[] {
+    const root = this.db
+      .prepare('SELECT * FROM session_roots WHERE session_id = ? AND id = ?')
+      .get(sessionId, rootId) as SessionRootRow | undefined;
+    if (!root) return this.listRoots(sessionId);
+
+    this.transaction(() => {
+      this.db.prepare('DELETE FROM session_roots WHERE id = ?').run(rootId);
+      this.events.append(
+        createNexusEvent({
+          sessionId,
+          seq: 1,
+          type: 'scope.revoked',
+          payload: { path: root.path }
+        })
+      );
+    });
+    return this.listRoots(sessionId);
   }
 
   /**
@@ -190,6 +294,7 @@ export class SessionService {
       this.events.append(
         createNexusEvent({ sessionId: id, seq: 1, type: 'session.removed', payload: {} })
       );
+      this.db.prepare('DELETE FROM session_roots WHERE session_id = ?').run(id);
       this.db
         .prepare('UPDATE sessions SET deleted_at = ?, updated_at = ? WHERE id = ?')
         .run(now, now, id);
@@ -210,6 +315,7 @@ export class SessionService {
         this.events.append(
           createNexusEvent({ sessionId: row.id, seq: 1, type: 'session.removed', payload: {} })
         );
+        this.db.prepare('DELETE FROM session_roots WHERE session_id = ?').run(row.id);
         this.db
           .prepare('UPDATE sessions SET deleted_at = ?, updated_at = ? WHERE id = ?')
           .run(now, now, row.id);

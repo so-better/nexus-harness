@@ -55,7 +55,7 @@ export const createProviderRules = (
       }
     };
 
-    if (!selectedId.value) {
+    if (!selectedId.value && providerForm.value.protocol !== 'ollama') {
       baseRules['apiKey'] = {
         required: true,
         message: t('settings.validationApiKey'),

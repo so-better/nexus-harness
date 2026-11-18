@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, open, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { z } from 'zod';
+import { isSensitivePath } from './path-policy';
 
 export interface FileToolDefinition {
   name: string;
@@ -90,6 +91,9 @@ const resolveWithinRoots = async (
 
   const allowed = roots.some((root) => resolved === root || resolved.startsWith(`${root}${sep}`));
   if (!allowed) throw new FileToolError('PATH_OUTSIDE_ROOT', `路径不在授权范围内：${target}`);
+  if (isSensitivePath(resolved)) {
+    throw new FileToolError('PATH_SENSITIVE', `敏感路径不可访问：${target}`);
+  }
 
   return resolved;
 };
@@ -373,9 +377,13 @@ const runCommandTool = async (
 export const createFileToolset = async (rootPaths: readonly string[]): Promise<FileToolset> => {
   if (rootPaths.length === 0) throw new Error('至少需要一个授权 root');
 
-  const roots = await Promise.all(rootPaths.map((root) => realpath(root)));
+  const settled = await Promise.allSettled(rootPaths.map((root) => realpath(root)));
+  const roots = settled
+    .filter((item): item is PromiseFulfilledResult<string> => item.status === 'fulfilled')
+    .map((item) => item.value)
+    .filter((root) => !isSensitivePath(root));
   const primaryRoot = roots[0];
-  if (!primaryRoot) throw new Error('至少需要一个授权 root');
+  if (!primaryRoot) throw new Error('没有可用的授权 root');
 
   const definitions: FileToolDefinition[] = [
     {

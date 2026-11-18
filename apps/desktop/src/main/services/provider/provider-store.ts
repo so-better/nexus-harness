@@ -9,6 +9,7 @@ import { safeStorage } from 'electron';
 import type {
   AgentProviderConfig,
   ProviderModel,
+  ProviderProtocol,
   ProviderPublic,
   ProviderSettings
 } from '@shared/ipc/contracts';
@@ -17,6 +18,7 @@ import { getAppDataPaths } from '../storage/paths';
 
 interface StoredProvider {
   id: string;
+  protocol?: ProviderProtocol;
   name: string;
   baseUrl: string;
   enabled: boolean;
@@ -128,6 +130,7 @@ const toPublic = (provider: StoredProvider): ProviderPublic => {
   const normalized = normalizeModels(provider);
   return {
     id: provider.id,
+    protocol: provider.protocol ?? 'openai',
     name: provider.name,
     baseUrl: provider.baseUrl,
     apiKey: provider.apiKey ?? '',
@@ -225,14 +228,16 @@ export class ProviderStore {
       ? input.defaultModelId
       : input.models[0]!.id;
 
-    const apiKey = input.apiKey || existing?.apiKey;
-    if (!apiKey) throw new Error('保存 Provider 需要 API Key');
+    const protocol = input.protocol ?? existing?.protocol ?? 'openai';
+    const apiKey = input.apiKey || existing?.apiKey || '';
+    if (!apiKey && protocol !== 'ollama') throw new Error('保存 Provider 需要 API Key');
 
     const headers = input.headers !== undefined ? input.headers : existing?.headers;
     const extraParams = input.extraParams !== undefined ? input.extraParams : existing?.extraParams;
 
     const provider: StoredProvider = {
       id,
+      protocol,
       name: input.name,
       baseUrl: input.baseUrl,
       enabled: input.enabled ?? existing?.enabled ?? true,
@@ -262,7 +267,6 @@ export class ProviderStore {
     if (!provider) return undefined;
 
     const publicConfig = toPublic(provider);
-    if (!publicConfig.apiKey) return undefined;
 
     return {
       ...publicConfig,

@@ -4,11 +4,17 @@
 
 import { computed, onMounted, ref, type ComputedRef, type Ref } from 'vue';
 import { useMessage, type SelectOption } from 'naive-ui';
-import type { ProviderModel, ProviderPublic, ProviderSettings } from '@shared/ipc/contracts';
+import type {
+  ProviderModel,
+  ProviderProtocol,
+  ProviderPublic,
+  ProviderSettings
+} from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import { listProviders, removeProvider, saveProvider, testProvider } from '../api/settings.api';
 
 export interface ProviderFormState {
+  protocol: ProviderProtocol;
   name: string;
   baseUrl: string;
   apiKey: string;
@@ -46,6 +52,7 @@ export const useProviderSettings = (
   const testing = ref(false);
 
   const providerForm = ref<ProviderFormState>({
+    protocol: 'openai',
     name: '',
     baseUrl: '',
     apiKey: '',
@@ -82,6 +89,7 @@ export const useProviderSettings = (
     if (!provider) return;
     selectedId.value = provider.id;
     providerForm.value = {
+      protocol: provider.protocol,
       name: provider.name,
       baseUrl: provider.baseUrl,
       apiKey: provider.apiKey,
@@ -98,6 +106,7 @@ export const useProviderSettings = (
   const newProvider = (): void => {
     selectedId.value = null;
     providerForm.value = {
+      protocol: 'openai',
       name: '',
       baseUrl: '',
       apiKey: '',
@@ -124,6 +133,7 @@ export const useProviderSettings = (
         : (models[0]?.id ?? '');
 
       const input: ProviderSettings = {
+        protocol: providerForm.value.protocol,
         name: providerForm.value.name.trim(),
         baseUrl: providerForm.value.baseUrl.trim(),
         enabled: providerForm.value.enabled,
@@ -148,7 +158,11 @@ export const useProviderSettings = (
    * 测试当前表单连接；新配置无需先保存。
    */
   const testConnection = async (): Promise<void> => {
-    if (!providerForm.value.apiKey.trim() && !selectedId.value) {
+    if (
+      providerForm.value.protocol !== 'ollama' &&
+      !providerForm.value.apiKey.trim() &&
+      !selectedId.value
+    ) {
       message.warning(t('settings.testRequiresApiKey'));
       return;
     }
@@ -156,6 +170,7 @@ export const useProviderSettings = (
     testing.value = true;
     try {
       const result = await testProvider({
+        protocol: providerForm.value.protocol,
         baseUrl: providerForm.value.baseUrl.trim(),
         ...(providerForm.value.apiKey.trim() ? { apiKey: providerForm.value.apiKey.trim() } : {}),
         ...(selectedId.value ? { id: selectedId.value } : {})

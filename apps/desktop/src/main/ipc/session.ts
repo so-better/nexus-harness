@@ -6,13 +6,16 @@ import { ipcMain } from 'electron';
 import type { NexusEvent } from '@shared/events';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import {
+  sessionAddRootsInputSchema,
   sessionCreateInputSchema,
+  sessionRemoveRootInputSchema,
   sessionRenameInputSchema,
   sessionSetModeInputSchema,
   sessionSetModelInputSchema,
   sessionSetPinnedInputSchema,
   type SessionClearAllResult,
   type SessionRemoveResult,
+  type SessionRoot,
   type SessionSearchResult,
   type SessionSummary
 } from '@shared/ipc/contracts';
@@ -200,6 +203,54 @@ export const registerSessionIpc = (): void => {
           error instanceof Error ? error.message : '更新会话模式失败'
         );
       }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.sessionRoots,
+    async (_event, rawId: unknown): Promise<Result<SessionRoot[]>> => {
+      if (typeof rawId !== 'string' || !rawId) {
+        return fail('SESSION_INVALID_INPUT', '会话 id 不合法');
+      }
+      if (!sessions.get(rawId)) return fail('SESSION_NOT_FOUND', `会话不存在：${rawId}`);
+      return ok(sessions.listRoots(rawId));
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.sessionAddRoots,
+    async (_event, rawInput: unknown): Promise<Result<SessionRoot[]>> => {
+      const parsed = sessionAddRootsInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return fail('SESSION_INVALID_INPUT', '工作区路径不合法', parsed.error.flatten());
+      }
+      if (!sessions.get(parsed.data.sessionId)) {
+        return fail('SESSION_NOT_FOUND', `会话不存在：${parsed.data.sessionId}`);
+      }
+
+      try {
+        return ok(await sessions.addRoots(parsed.data.sessionId, parsed.data.paths));
+      } catch (error) {
+        const code =
+          error instanceof Error && 'code' in error && error.code === 'ENOENT'
+            ? 'ROOT_NOT_FOUND'
+            : 'ROOT_ADD_FAILED';
+        return fail(code, error instanceof Error ? error.message : '添加工作区失败');
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.sessionRemoveRoot,
+    async (_event, rawInput: unknown): Promise<Result<SessionRoot[]>> => {
+      const parsed = sessionRemoveRootInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return fail('SESSION_INVALID_INPUT', '工作区授权参数不合法', parsed.error.flatten());
+      }
+      if (!sessions.get(parsed.data.sessionId)) {
+        return fail('SESSION_NOT_FOUND', `会话不存在：${parsed.data.sessionId}`);
+      }
+      return ok(sessions.removeRoot(parsed.data.sessionId, parsed.data.rootId));
     }
   );
 

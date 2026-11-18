@@ -266,8 +266,9 @@ export const registerAgentIpc = (): void => {
           }
         };
 
+        const rootPaths = sessions.listRoots(session.id).map((root) => root.path);
         agentService
-          .run({ ...parsed.data, mode: session.mode }, provider, {
+          .run({ ...parsed.data, rootPaths, mode: session.mode }, provider, {
             runId,
             history: runHistory,
             signal: controller.signal,

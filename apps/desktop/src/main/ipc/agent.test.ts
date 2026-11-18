@@ -40,6 +40,9 @@ vi.mock('../services/session/session-service', () => ({
     get() {
       return { id: 'session-1' };
     }
+    listRoots() {
+      return [];
+    }
     setStatus() {}
   }
 }));

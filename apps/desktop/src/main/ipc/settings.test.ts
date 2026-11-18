@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   clearCache: vi.fn(),
   saveAutoLaunch: vi.fn(),
   deleteArtifacts: vi.fn(),
+  deleteFiles: vi.fn(),
   clearHttpCache: vi.fn()
 }));
 
@@ -58,7 +59,9 @@ vi.mock('../services/storage/paths', () => ({
 
 vi.mock('../services/storage/database', () => ({
   getDatabase: () => ({
-    prepare: () => ({ run: state.deleteArtifacts })
+    prepare: (sql: string) => ({
+      run: sql.includes('files') ? state.deleteFiles : state.deleteArtifacts
+    })
   })
 }));
 
@@ -121,6 +124,7 @@ describe('settings IPC', () => {
     const result = (await handler({}, 'all')) as { ok: boolean };
     expect(result.ok).toBe(true);
     expect(state.deleteArtifacts).toHaveBeenCalledTimes(1);
+    expect(state.deleteFiles).toHaveBeenCalledTimes(1);
     expect(state.clearHttpCache).toHaveBeenCalledTimes(1);
   });
 });

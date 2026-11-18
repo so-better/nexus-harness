@@ -2,11 +2,12 @@
  * 聊天 store：缓存会话事件、运行状态、审批与临时工作目录。
  */
 
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { t } from '@/app/i18n';
 import { appendAgentEvent } from '../event-cache';
 import type { NexusEvent } from '@shared/events';
+import type { SessionRoot } from '@shared/ipc/contracts';
 import type { AskUserAnswer } from '@shared/ask-user';
 import {
   answerAskUser as answerAskUserApi,
@@ -18,12 +19,18 @@ import {
   subscribeAgentEvents
 } from '../api/chat.api';
 import { useProviderSelection } from '../provider-selection';
+import {
+  addSessionRoots,
+  getSessionRoots,
+  removeSessionRoot
+} from '@/modules/session/api/session.api';
 
 /**
  * 每个会话独立缓存事件，切换会话时不丢后台事件。
  */
 export const useChatStore = defineStore('chat', () => {
-  const rootPaths = ref<string[]>([]);
+  const roots = ref<SessionRoot[]>([]);
+  const rootPaths = computed(() => roots.value.map((root) => root.path));
   const error = ref<string | undefined>();
 
   const providerSelection = useProviderSelection((message) => {
@@ -160,14 +167,41 @@ export const useChatStore = defineStore('chat', () => {
   };
 
   /**
-   * 选择临时工作目录；多选后去重追加。
+   * 读取会话已持久化的 root；切换会话时刷新。
    */
-  const addRoot = async (): Promise<void> => {
+  const loadRoots = async (sessionId: string): Promise<void> => {
     try {
-      const paths = await chooseRoot();
-      rootPaths.value = [...new Set([...rootPaths.value, ...paths])];
+      roots.value = await getSessionRoots(sessionId);
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);
+    }
+  };
+
+  /**
+   * 选择并授权工作区目录，授权写入会话。
+   */
+  const addRoot = async (sessionId: string): Promise<'added' | 'cancelled' | 'failed'> => {
+    try {
+      const paths = await chooseRoot();
+      if (paths.length === 0) return 'cancelled';
+      roots.value = await addSessionRoots(sessionId, paths);
+      return 'added';
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+      return 'failed';
+    }
+  };
+
+  /**
+   * 撤销会话 root。
+   */
+  const removeRoot = async (sessionId: string, rootId: string): Promise<boolean> => {
+    try {
+      roots.value = await removeSessionRoot(sessionId, rootId);
+      return true;
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+      return false;
     }
   };
 
@@ -208,6 +242,7 @@ export const useChatStore = defineStore('chat', () => {
     providerId,
     modelId,
     models,
+    roots,
     rootPaths,
     error,
     eventsBySession,
@@ -222,7 +257,9 @@ export const useChatStore = defineStore('chat', () => {
     stop,
     decideApproval,
     answerAskUser,
+    loadRoots,
     addRoot,
+    removeRoot,
     setProvider,
     setModel,
     clearError

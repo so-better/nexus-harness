@@ -33,25 +33,36 @@ const finishStreaming = (messages: ChatMessageView[]): void => {
 };
 
 /**
- * 回答完成后，把回显卡片并入本轮后续的助手消息，避免拆成两条打断阅读。
+ * 同一 Run 的助手消息合并为一个气泡；工具调用、文件和文本按发生顺序拼接。
  */
-const mergeResolvedAskUsers = (messages: ChatMessageView[], askUsers: ChatAskUser[]): void => {
-  for (const ask of askUsers) {
-    if (ask.status !== 'resolved' || !ask.messageId || !ask.runId) continue;
-    const carrierIndex = messages.findIndex((message) => message.id === ask.messageId);
-    if (carrierIndex < 0) continue;
-    const carrier = messages[carrierIndex];
-    if (!carrier) continue;
-    const nextAssistant = messages
-      .slice(carrierIndex + 1)
-      .find((message) => message.role === 'assistant' && message.runId === ask.runId);
-    if (!nextAssistant) continue;
+const mergeAssistantRuns = (messages: ChatMessageView[], askUsers: ChatAskUser[]): void => {
+  const baseByRun = new Map<string, ChatMessageView>();
 
-    ask.messageId = nextAssistant.id;
-    ask.merged = true;
-    const onlyAskTool =
-      !carrier.content.trim() && carrier.toolCalls.every((tool) => tool.name === 'ask_user');
-    if (onlyAskTool) carrier.hidden = true;
+  for (const message of messages) {
+    if (message.role !== 'assistant' || !message.runId || message.hidden || message.superseded) {
+      continue;
+    }
+    const base = baseByRun.get(message.runId);
+    if (!base) {
+      baseByRun.set(message.runId, message);
+      continue;
+    }
+
+    const content = [base.content, message.content].filter(Boolean).join('\n\n');
+    base.content = content;
+    base.streaming = Boolean(base.streaming || message.streaming);
+    const knownTools = new Set(base.toolCalls.map((tool) => tool.id));
+    for (const tool of message.toolCalls) {
+      if (!knownTools.has(tool.id)) base.toolCalls.push(tool);
+    }
+    const knownFiles = new Set((base.files ?? []).map((file) => file.id));
+    for (const file of message.files ?? []) {
+      if (!knownFiles.has(file.id)) base.files = [...(base.files ?? []), file];
+    }
+    for (const ask of askUsers) {
+      if (ask.messageId === message.id) ask.messageId = base.id;
+    }
+    message.hidden = true;
   }
 };
 
@@ -81,6 +92,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
           toolCalls: [],
           createdAt: event.ts,
           streaming: true,
+          files: [],
           ...(event.runId ? { runId: event.runId } : {})
         };
         messages.push(message);
@@ -109,6 +121,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
           toolCalls: [],
           createdAt: event.ts,
           streaming: false,
+          files: [],
           ...(event.runId ? { runId: event.runId } : {})
         };
         messages.push(message);
@@ -127,6 +140,36 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       continue;
     }
 
+    if (event.type === 'file.created') {
+      const payload = event.payload as EventPayloadMap['file.created'];
+      if (!lastAssistant) {
+        lastAssistant = {
+          id: `assistant-${event.id}`,
+          role: 'assistant',
+          content: '',
+          toolCalls: [],
+          createdAt: event.ts,
+          files: [],
+          ...(event.runId ? { runId: event.runId } : {})
+        };
+        messages.push(lastAssistant);
+      }
+      lastAssistant.files = [
+        ...(lastAssistant.files ?? []),
+        {
+          id: payload.fileId,
+          sessionId: event.sessionId,
+          ...(event.runId ? { runId: event.runId } : {}),
+          name: payload.name,
+          mime: payload.mime,
+          bytes: payload.bytes,
+          source: payload.source,
+          createdAt: event.ts
+        }
+      ];
+      continue;
+    }
+
     if (event.type === 'tool.requested') {
       const payload = event.payload as EventPayloadMap['tool.requested'];
       if (!lastAssistant) {
@@ -136,6 +179,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
           content: '',
           toolCalls: [],
           createdAt: event.ts,
+          files: [],
           ...(event.runId ? { runId: event.runId } : {})
         };
         messages.push(lastAssistant);
@@ -283,7 +327,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
     }
   }
 
-  mergeResolvedAskUsers(messages, askUsers);
+  mergeAssistantRuns(messages, askUsers);
 
   return {
     messages: messages.filter((message) => !message.superseded && !message.hidden),

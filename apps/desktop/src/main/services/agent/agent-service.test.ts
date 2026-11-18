@@ -2,12 +2,14 @@
  * Agent 服务测试：用 MockProvider 和真实文件工具跑通闭环。
  */
 
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MockProvider, type ChatProvider, type ProviderRequest } from '@nexus/providers';
 import type { NexusEvent } from '@shared/events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FileService } from '../files/file-service';
+import { createDatabase } from '../storage/database';
 import { AgentService } from './agent-service';
 
 describe('AgentService', () => {
@@ -35,6 +37,7 @@ describe('AgentService', () => {
     const service = new AgentService({ createProvider: () => provider });
     const providerConfig = {
       id: 'provider-1',
+      protocol: 'openai' as const,
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -90,6 +93,7 @@ describe('AgentService', () => {
     const service = new AgentService({ createProvider: () => provider });
     const providerConfig = {
       id: 'provider-1',
+      protocol: 'openai' as const,
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -110,7 +114,7 @@ describe('AgentService', () => {
     );
 
     expect(result.finishReason).toBe('stop');
-    expect(requests[0]?.tools?.map((tool) => tool.name)).toEqual(['ask_user']);
+    expect(requests[0]?.tools?.map((tool) => tool.name)).toEqual(['ask_user', 'save_file']);
   });
 
   it('makes Plan mode read-only and blocks write tools', async () => {
@@ -142,6 +146,7 @@ describe('AgentService', () => {
     const service = new AgentService({ createProvider: () => provider });
     const providerConfig = {
       id: 'provider-1',
+      protocol: 'openai' as const,
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -170,6 +175,7 @@ describe('AgentService', () => {
       content: expect.stringContaining('Plan')
     });
     expect(requests[0]?.tools?.map((tool) => tool.name)).not.toContain('write_file');
+    expect(requests[0]?.tools?.map((tool) => tool.name)).not.toContain('save_file');
     const failed = events.find(
       (event): event is NexusEvent<'tool.failed'> => event.type === 'tool.failed'
     );
@@ -217,6 +223,7 @@ describe('AgentService', () => {
     const service = new AgentService({ createProvider: () => provider });
     const providerConfig = {
       id: 'provider-1',
+      protocol: 'openai' as const,
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -263,6 +270,7 @@ describe('AgentService', () => {
     });
     const providerConfig = {
       id: 'provider-1',
+      protocol: 'openai' as const,
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 4_096, maxOutputTokens: 1_024 }],
@@ -305,6 +313,7 @@ describe('AgentService', () => {
 
     const providerConfig = {
       id: 'provider-1',
+      protocol: 'openai' as const,
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -344,5 +353,144 @@ describe('AgentService', () => {
       'message.completed',
       'run.completed'
     ]);
+  });
+
+  it('writes a file, runs it, and returns the final response after approvals', async () => {
+    let step = 0;
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
+      async *stream() {
+        step += 1;
+        if (step === 1) {
+          const toolCall = {
+            id: 'write-1',
+            name: 'write_file',
+            arguments: { path: 'b.txt', content: 'hello' }
+          };
+          yield { type: 'tool-call-start', id: toolCall.id, name: toolCall.name };
+          yield {
+            type: 'tool-call-delta',
+            id: toolCall.id,
+            argumentsDelta: JSON.stringify(toolCall.arguments)
+          };
+          yield { type: 'tool-call-end', toolCall };
+          yield { type: 'finish', reason: 'tool_calls' };
+          return;
+        }
+        if (step === 2) {
+          const toolCall = {
+            id: 'run-1',
+            name: 'run_command',
+            arguments: {
+              command:
+                "node -e \"process.stdout.write(require('fs').readFileSync('b.txt','utf8'))\""
+            }
+          };
+          yield { type: 'tool-call-start', id: toolCall.id, name: toolCall.name };
+          yield {
+            type: 'tool-call-delta',
+            id: toolCall.id,
+            argumentsDelta: JSON.stringify(toolCall.arguments)
+          };
+          yield { type: 'tool-call-end', toolCall };
+          yield { type: 'finish', reason: 'tool_calls' };
+          return;
+        }
+        yield { type: 'text-delta', text: '写入并运行完成' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const service = new AgentService({ createProvider: () => provider });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+
+    const result = await service.run(
+      {
+        sessionId: 'session-1',
+        prompt: '写入并运行',
+        rootPaths: [root],
+        providerId: providerConfig.id,
+        modelId: 'mock-model'
+      },
+      providerConfig,
+      { approveTool: async () => true }
+    );
+
+    expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('hello');
+    expect(result.toolCalls).toBe(2);
+    expect(result.messages.at(-1)).toMatchObject({ role: 'assistant', content: '写入并运行完成' });
+  });
+
+  it('saves generated files without a workspace and emits file.created', async () => {
+    const db = createDatabase(join(root, 'nexus.db'));
+    const fileBaseDir = join(root, 'files');
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
+      async *stream(request) {
+        if (request.messages.length === 2) {
+          const toolCall = {
+            id: 'save-1',
+            name: 'save_file',
+            arguments: { name: 'report.md', content: '# 报告' }
+          };
+          yield { type: 'tool-call-start', id: toolCall.id, name: toolCall.name };
+          yield {
+            type: 'tool-call-delta',
+            id: toolCall.id,
+            argumentsDelta: JSON.stringify(toolCall.arguments)
+          };
+          yield { type: 'tool-call-end', toolCall };
+          yield { type: 'finish', reason: 'tool_calls' };
+          return;
+        }
+        yield { type: 'text-delta', text: '文件已保存' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const service = new AgentService({
+      createProvider: () => provider,
+      database: db,
+      fileBaseDir
+    });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+    const events: NexusEvent[] = [];
+
+    try {
+      await service.run(
+        {
+          sessionId: 'session-1',
+          prompt: '生成报告',
+          rootPaths: [],
+          providerId: providerConfig.id,
+          modelId: 'mock-model'
+        },
+        providerConfig,
+        { onEvent: (event) => events.push(event) }
+      );
+
+      const files = new FileService(db, fileBaseDir).list('session-1');
+      expect(files).toHaveLength(1);
+      expect(files[0]).toMatchObject({ name: 'report.md', mime: 'text/markdown' });
+      expect(events.some((event) => event.type === 'file.created')).toBe(true);
+    } finally {
+      db.close();
+    }
   });
 });

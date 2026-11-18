@@ -35,6 +35,11 @@ export type ThemeSource = z.infer<typeof themeSourceSchema>;
 export type ThemeInfo = z.infer<typeof themeInfoSchema>;
 
 /**
+ * Provider 协议：OpenAI 兼容、Anthropic 原生或 Ollama。
+ */
+export const providerProtocolSchema = z.enum(['openai', 'anthropic', 'ollama']);
+
+/**
  * Provider 下的单个模型配置。
  */
 export const providerModelSchema = z
@@ -54,6 +59,7 @@ export const providerModelSchema = z
 export const providerSettingsSchema = z
   .object({
     id: z.string().optional(),
+    protocol: providerProtocolSchema.optional(),
     name: z.string().min(1),
     baseUrl: z.string().min(1),
     apiKey: z.string().min(1).optional(),
@@ -73,9 +79,10 @@ export const providerSettingsSchema = z
  */
 export const providerPublicSchema = z.object({
   id: z.string().min(1),
+  protocol: providerProtocolSchema,
   name: z.string().min(1),
   baseUrl: z.string().min(1),
-  apiKey: z.string().min(1),
+  apiKey: z.string(),
   enabled: z.boolean(),
   models: z.array(providerModelSchema).min(1),
   defaultModelId: z.string().min(1)
@@ -96,6 +103,7 @@ export const providerRemoveResultSchema = z.object({ id: z.string().min(1) });
  */
 export const providerTestInputSchema = z.object({
   id: z.string().min(1).optional(),
+  protocol: providerProtocolSchema.optional(),
   baseUrl: z.string().min(1),
   apiKey: z.string().min(1).optional(),
   headers: z.record(z.string(), z.string()).optional()
@@ -106,6 +114,7 @@ export const providerProbeResultSchema = z.object({
   latencyMs: z.number().nonnegative()
 });
 
+export type ProviderProtocol = z.infer<typeof providerProtocolSchema>;
 export type ProviderModel = z.infer<typeof providerModelSchema>;
 export type ProviderProbeResult = z.infer<typeof providerProbeResultSchema>;
 export type ProviderTestInput = z.infer<typeof providerTestInputSchema>;
@@ -153,6 +162,9 @@ export interface NexusBridge {
     setPinned: (input: SessionSetPinnedInput) => Promise<Result<SessionSummary>>;
     setModel: (input: SessionSetModelInput) => Promise<Result<SessionSummary>>;
     setMode: (input: SessionSetModeInput) => Promise<Result<SessionSummary>>;
+    roots: (id: string) => Promise<Result<SessionRoot[]>>;
+    addRoots: (input: SessionAddRootsInput) => Promise<Result<SessionRoot[]>>;
+    removeRoot: (input: SessionRemoveRootInput) => Promise<Result<SessionRoot[]>>;
     remove: (id: string) => Promise<Result<SessionRemoveResult>>;
     clearAll: () => Promise<Result<SessionClearAllResult>>;
     search: (query: string) => Promise<Result<SessionSearchResult[]>>;
@@ -162,6 +174,11 @@ export interface NexusBridge {
   };
   artifact: {
     read: (input: ArtifactReadInput) => Promise<Result<ArtifactReadResult>>;
+  };
+  files: {
+    list: (sessionId: string) => Promise<Result<OutputFile[]>>;
+    read: (input: FileReadInput) => Promise<Result<FileReadResult>>;
+    saveAs: (input: FileSaveAsInput) => Promise<Result<FileSaveAsResult>>;
   };
   workspace: {
     chooseRoot: () => Promise<Result<WorkspaceRootSelection>>;
@@ -299,6 +316,26 @@ export const sessionSetModeInputSchema = z.object({
   mode: agentModeSchema
 });
 
+export const sessionRootSchema = z.object({
+  id: z.string().min(1),
+  sessionId: z.string().min(1),
+  path: z.string().min(1),
+  kind: z.enum(['file', 'directory']),
+  access: z.enum(['read', 'write']),
+  source: z.enum(['session', 'workspace']),
+  createdAt: z.number().nonnegative()
+});
+
+export const sessionAddRootsInputSchema = z.object({
+  sessionId: z.string().min(1),
+  paths: z.array(z.string().min(1)).min(1).max(32)
+});
+
+export const sessionRemoveRootInputSchema = z.object({
+  sessionId: z.string().min(1),
+  rootId: z.string().min(1)
+});
+
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 export type AgentMode = z.infer<typeof agentModeSchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
@@ -310,6 +347,9 @@ export type SessionSearchResult = z.infer<typeof sessionSearchResultSchema>;
 export type SessionSetPinnedInput = z.infer<typeof sessionSetPinnedInputSchema>;
 export type SessionSetModelInput = z.infer<typeof sessionSetModelInputSchema>;
 export type SessionSetModeInput = z.infer<typeof sessionSetModeInputSchema>;
+export type SessionRoot = z.infer<typeof sessionRootSchema>;
+export type SessionAddRootsInput = z.infer<typeof sessionAddRootsInputSchema>;
+export type SessionRemoveRootInput = z.infer<typeof sessionRemoveRootInputSchema>;
 
 /**
  * 用户通过系统对话框选择的临时 root 集合。
@@ -319,6 +359,41 @@ export const workspaceRootSelectionSchema = z.object({
 });
 
 export type WorkspaceRootSelection = z.infer<typeof workspaceRootSelectionSchema>;
+
+export const outputFileSchema = z.object({
+  id: z.string().min(1),
+  sessionId: z.string().min(1),
+  runId: z.string().optional(),
+  name: z.string().min(1),
+  mime: z.string().min(1),
+  bytes: z.number().nonnegative(),
+  source: z.enum(['generated', 'downloaded']),
+  createdAt: z.number().nonnegative()
+});
+
+export const fileReadInputSchema = z.object({
+  sessionId: z.string().min(1),
+  fileId: z.string().min(1)
+});
+
+export const fileReadResultSchema = z.object({
+  file: outputFileSchema,
+  dataUrl: z.string()
+});
+
+export const fileSaveAsInputSchema = fileReadInputSchema;
+
+export const fileSaveAsResultSchema = z.object({
+  fileId: z.string().min(1),
+  saved: z.boolean(),
+  path: z.string().optional()
+});
+
+export type OutputFile = z.infer<typeof outputFileSchema>;
+export type FileReadInput = z.infer<typeof fileReadInputSchema>;
+export type FileReadResult = z.infer<typeof fileReadResultSchema>;
+export type FileSaveAsInput = z.infer<typeof fileSaveAsInputSchema>;
+export type FileSaveAsResult = z.infer<typeof fileSaveAsResultSchema>;
 
 /**
  * 可清理的缓存类别。
