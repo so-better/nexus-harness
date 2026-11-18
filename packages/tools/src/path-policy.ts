@@ -19,6 +19,8 @@ const SENSITIVE_BASENAMES = new Set([
   'id_dsa',
   'id_ecdsa',
   'id_ed25519',
+  '.env',
+  '.env.local',
   '.netrc',
   '.npmrc',
   '.pypirc',

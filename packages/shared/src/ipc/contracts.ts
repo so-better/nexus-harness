@@ -182,6 +182,7 @@ export interface NexusBridge {
   };
   workspace: {
     chooseRoot: () => Promise<Result<WorkspaceRootSelection>>;
+    searchFiles: (input: WorkspaceFileSearchInput) => Promise<Result<WorkspaceFileReference[]>>;
   };
   approval: {
     resolve: (input: ApprovalResolveInput) => Promise<Result<ApprovalResolveResult>>;
@@ -359,6 +360,22 @@ export const workspaceRootSelectionSchema = z.object({
 });
 
 export type WorkspaceRootSelection = z.infer<typeof workspaceRootSelectionSchema>;
+
+export const workspaceFileReferenceSchema = z.object({
+  path: z.string().min(1),
+  root: z.string().min(1),
+  relativePath: z.string().min(1),
+  name: z.string().min(1)
+});
+
+export const workspaceFileSearchInputSchema = z.object({
+  sessionId: z.string().min(1),
+  query: z.string().max(200).default(''),
+  limit: z.number().int().min(1).max(50).optional()
+});
+
+export type WorkspaceFileReference = z.infer<typeof workspaceFileReferenceSchema>;
+export type WorkspaceFileSearchInput = z.infer<typeof workspaceFileSearchInputSchema>;
 
 export const outputFileSchema = z.object({
   id: z.string().min(1),

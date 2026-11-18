@@ -22,6 +22,7 @@
         :providers="providers"
         :models="models"
         :mode="mode"
+        :session-id="sessionId"
         :provider-id="providerId"
         :model-id="modelId"
         @choose-root="emit('choose-root')"
@@ -55,6 +56,7 @@ defineProps<{
   providers: ProviderPublic[];
   models: ProviderModel[];
   mode: AgentMode;
+  sessionId?: string | undefined;
   providerId?: string | undefined;
   modelId?: string | undefined;
 }>();

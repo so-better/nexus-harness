@@ -10,7 +10,13 @@
           {{ sessionStatusLabel(session.status) }}
         </NTag>
       </div>
-      <NButton text size="small" class="nh-chat__changes" @click="emit('toggle-changes')">
+      <NButton
+        v-if="changeCount > 0"
+        text
+        size="small"
+        class="nh-chat__changes"
+        @click="emit('toggle-changes')"
+      >
         <template #icon><AppIcon name="file" :size="14" /></template>
         {{ t('change.button') }} {{ changeCount }}
       </NButton>
@@ -25,6 +31,7 @@
       :providers="providers"
       :models="models"
       :mode="mode"
+      :session-id="session?.id"
       :provider-id="providerId"
       :model-id="modelId"
       @choose-root="emit('choose-root')"
@@ -72,6 +79,7 @@
           :providers="providers"
           :models="models"
           :mode="mode"
+          :session-id="session?.id"
           :provider-id="providerId"
           :model-id="modelId"
           @choose-root="emit('choose-root')"

@@ -33,6 +33,7 @@ export const IPC_CHANNELS = {
   sessionEvents: 'session:events',
   sessionChanged: 'session:changed',
   workspaceChooseRoot: 'workspace:chooseRoot',
+  workspaceSearchFiles: 'workspace:searchFiles',
   agentRun: 'agent:run',
   agentCancel: 'agent:cancel',
   agentEvent: 'agent:event',

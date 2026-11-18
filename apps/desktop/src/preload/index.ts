@@ -60,7 +60,8 @@ const bridge: NexusBridge = {
     saveAs: (input) => ipcRenderer.invoke(IPC_CHANNELS.filesSaveAs, input)
   },
   workspace: {
-    chooseRoot: () => ipcRenderer.invoke(IPC_CHANNELS.workspaceChooseRoot)
+    chooseRoot: () => ipcRenderer.invoke(IPC_CHANNELS.workspaceChooseRoot),
+    searchFiles: (input) => ipcRenderer.invoke(IPC_CHANNELS.workspaceSearchFiles, input)
   },
   approval: {
     resolve: (input) => ipcRenderer.invoke(IPC_CHANNELS.approvalResolve, input)
