@@ -1,12 +1,21 @@
 <template>
-  <article v-if="message.role === 'system'" class="nh-message nh-message--system">
+  <article
+    v-if="message.role === 'system'"
+    class="nh-message nh-message--system"
+    :data-message-id="message.id"
+    :class="{ 'nh-message--highlighted': highlighted }"
+  >
     <span class="nh-message__system-dot" />
     <span>{{ message.content }}</span>
   </article>
   <article
     v-else
     class="nh-message"
-    :class="[`nh-message--${message.role}`, { 'nh-message--grouped': grouped }]"
+    :class="[
+      `nh-message--${message.role}`,
+      { 'nh-message--grouped': grouped, 'nh-message--highlighted': highlighted }
+    ]"
+    :data-message-id="message.id"
   >
     <NAvatar
       v-if="message.role === 'assistant' && !grouped"
@@ -44,8 +53,9 @@ const props = withDefaults(
   defineProps<{
     message: ChatMessageView;
     grouped?: boolean;
+    highlighted?: boolean;
   }>(),
-  { grouped: false }
+  { grouped: false, highlighted: false }
 );
 
 const roleLabel = computed(() => {
@@ -72,8 +82,16 @@ const timeLabel = computed(() =>
 <style scoped lang="less">
 .nh-message {
   display: flex;
+  scroll-margin: 24px;
   gap: 12px;
   align-items: flex-start;
+  border-radius: 12px;
+  transition: background var(--nh-duration-base) var(--nh-ease-standard);
+}
+
+.nh-message--highlighted {
+  background: color-mix(in srgb, var(--nh-color-accent) 8%, transparent);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--nh-color-accent) 5%, transparent);
 }
 
 .nh-message--grouped {

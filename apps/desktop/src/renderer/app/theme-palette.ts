@@ -19,6 +19,7 @@ export interface ThemePalette {
   accent: string;
   accentHover: string;
   accentPressed: string;
+  idle: string;
   success: string;
   warning: string;
   danger: string;
@@ -39,6 +40,7 @@ export const lightPalette: ThemePalette = {
   accent: '#3b82f6',
   accentHover: '#2563eb',
   accentPressed: '#1d4ed8',
+  idle: '#6b63c9',
   success: '#15803d',
   warning: '#b45309',
   danger: '#b91c1c'
@@ -59,6 +61,7 @@ export const darkPalette: ThemePalette = {
   accent: '#7fb6ff',
   accentHover: '#a9cbff',
   accentPressed: '#c9deff',
+  idle: '#b6afff',
   success: '#4ade80',
   warning: '#fbbf24',
   danger: '#f87171'
@@ -82,6 +85,7 @@ const cssVariables: Record<keyof ThemePalette, string> = {
   accent: '--nh-color-accent',
   accentHover: '--nh-color-accent-hover',
   accentPressed: '--nh-color-accent-pressed',
+  idle: '--nh-color-idle',
   success: '--nh-color-success',
   warning: '--nh-color-warning',
   danger: '--nh-color-danger'

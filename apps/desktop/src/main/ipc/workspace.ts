@@ -16,7 +16,7 @@ export const registerWorkspaceIpc = (): void => {
     async (): Promise<Result<WorkspaceRootSelection>> => {
       try {
         const result = await dialog.showOpenDialog({
-          title: '选择工作目录',
+          title: '选择工作区',
           properties: ['openDirectory', 'multiSelections']
         });
         if (result.canceled) return ok({ paths: [] });
@@ -24,7 +24,7 @@ export const registerWorkspaceIpc = (): void => {
       } catch (error) {
         return fail(
           'WORKSPACE_CHOOSE_FAILED',
-          error instanceof Error ? error.message : '选择目录失败'
+          error instanceof Error ? error.message : '选择工作区失败'
         );
       }
     }

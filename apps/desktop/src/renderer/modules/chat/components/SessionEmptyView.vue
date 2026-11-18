@@ -1,16 +1,18 @@
 <template>
-  <section class="nh-welcome">
-    <div class="nh-welcome__inner">
-      <div class="nh-welcome__copy">
-        <p class="nh-welcome__eyebrow">{{ t('welcome.eyebrow') }}</p>
-        <h1 class="nh-welcome__title">{{ t('welcome.title') }}</h1>
-        <p class="nh-welcome__description">{{ t('welcome.description') }}</p>
+  <section class="nh-session-empty">
+    <div class="nh-session-empty__inner">
+      <div class="nh-session-empty__heading">
+        <span class="nh-session-empty__icon">
+          <AppIcon name="spark" :size="18" />
+        </span>
+        <div class="nh-session-empty__copy">
+          <h1 class="nh-session-empty__title">{{ t('chat.emptySessionTitle') }}</h1>
+          <p class="nh-session-empty__hint">{{ t('chat.emptySessionHint') }}</p>
+        </div>
       </div>
 
-      <WelcomeFlow />
-
       <ComposerBox
-        class="nh-welcome__composer"
+        class="nh-session-empty__composer"
         hero
         :disabled="Boolean(disabledReason)"
         :disabled-reason="disabledReason"
@@ -33,13 +35,13 @@
 
 <script setup lang="ts">
 /**
- * 欢迎页：品牌化首屏、能力说明与主输入区。
+ * 会话内空状态：一条简短提示与主输入区。
  */
 
 import type { ProviderModel, ProviderPublic } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
+import AppIcon from '@/components/AppIcon.vue';
 import ComposerBox from './ComposerBox.vue';
-import WelcomeFlow from './WelcomeFlow.vue';
 
 defineProps<{
   disabledReason?: string | undefined;
@@ -62,7 +64,7 @@ const emit = defineEmits<{
 </script>
 
 <style scoped lang="less">
-.nh-welcome {
+.nh-session-empty {
   position: relative;
   display: flex;
   flex: 1;
@@ -70,11 +72,11 @@ const emit = defineEmits<{
   align-items: center;
   justify-content: center;
   overflow: auto;
-  padding: 48px;
+  padding: 32px;
   isolation: isolate;
 }
 
-.nh-welcome::before {
+.nh-session-empty::before {
   position: absolute;
   z-index: -1;
   inset: 0;
@@ -96,7 +98,7 @@ const emit = defineEmits<{
   pointer-events: none;
 }
 
-.nh-welcome::after {
+.nh-session-empty::after {
   position: absolute;
   z-index: -1;
   top: 34%;
@@ -115,51 +117,58 @@ const emit = defineEmits<{
   transform: translate(-50%, -50%);
 }
 
-.nh-welcome__inner {
+.nh-session-empty__inner {
   display: flex;
   width: 100%;
-  max-width: 860px;
+  max-width: 820px;
   flex-direction: column;
   gap: 32px;
-  animation: welcome-in var(--nh-duration-panel) var(--nh-ease-standard) both;
+  animation: session-empty-in var(--nh-duration-panel) var(--nh-ease-standard) both;
 }
 
-.nh-welcome__eyebrow {
-  margin: 0 0 12px;
+.nh-session-empty__heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nh-session-empty__icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--nh-color-accent) 10%, transparent);
   color: var(--nh-color-accent);
-  font-family: var(--nh-font-mono);
-  font-size: 12px;
-  letter-spacing: 0.16em;
 }
 
-.nh-welcome__title {
-  max-width: 720px;
+.nh-session-empty__copy {
+  min-width: 0;
+}
+
+.nh-session-empty__title {
   margin: 0;
-  font-size: clamp(36px, 4.4vw, 56px);
+  font-size: 24px;
   font-weight: 600;
-  letter-spacing: -0.045em;
-  line-height: 1.05;
-  text-wrap: balance;
+  letter-spacing: -0.02em;
 }
 
-.nh-welcome__description {
-  max-width: 620px;
-  margin: 16px 0 0;
+.nh-session-empty__hint {
+  margin: 4px 0 0;
   color: var(--nh-color-text-secondary);
   font-size: 14px;
-  line-height: 1.8;
-  text-wrap: pretty;
 }
 
-.nh-welcome__composer {
+.nh-session-empty__composer {
   margin: 0;
-  max-width: none;
   width: 100%;
+  max-width: none;
   animation: composer-in var(--nh-duration-panel) var(--nh-duration-fast) var(--nh-ease-standard)
     both;
 }
 
-@keyframes welcome-in {
+@keyframes session-empty-in {
   from {
     opacity: 0;
     transform: translateY(10px);
@@ -170,12 +179,6 @@ const emit = defineEmits<{
   from {
     opacity: 0;
     transform: translateY(14px);
-  }
-}
-
-@media (width <= 1024px) {
-  .nh-welcome {
-    padding: 32px;
   }
 }
 </style>

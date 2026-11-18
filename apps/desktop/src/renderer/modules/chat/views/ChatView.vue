@@ -2,12 +2,17 @@
   <main class="nh-chat">
     <header v-if="session" class="nh-chat__header">
       <div class="nh-chat__title-group">
+        <span class="nh-chat__session-icon">
+          <AppIcon name="message" :size="14" />
+        </span>
         <h1 class="nh-chat__title">{{ session.title }}</h1>
-        <NTag size="small" :type="statusType" :bordered="false">{{ statusLabel }}</NTag>
+        <NTag size="small" :color="sessionStatusTagColor(session.status)" :bordered="false">
+          {{ sessionStatusLabel(session.status) }}
+        </NTag>
       </div>
     </header>
 
-    <WelcomeView
+    <SessionEmptyView
       v-if="isEmpty"
       :disabled-reason="disabledReason"
       :running="projection.running"
@@ -25,7 +30,11 @@
     />
 
     <template v-else>
-      <MessageList :messages="projection.messages" />
+      <MessageList
+        :messages="projection.messages"
+        :focus-message-id="focusMessageId"
+        :focus-token="focusToken"
+      />
 
       <div v-if="pendingApprovals.length" class="nh-chat__approvals">
         <ApprovalCard
@@ -64,11 +73,12 @@
 import { computed } from 'vue';
 import { NTag } from 'naive-ui';
 import type { ProviderModel, ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
-import { t } from '@/app/i18n';
+import { sessionStatusLabel, sessionStatusTagColor } from '@/app/session-status';
+import AppIcon from '@/components/AppIcon.vue';
 import ApprovalCard from '../components/ApprovalCard.vue';
 import ComposerBox from '../components/ComposerBox.vue';
 import MessageList from '../components/MessageList.vue';
-import WelcomeView from '../components/WelcomeView.vue';
+import SessionEmptyView from '../components/SessionEmptyView.vue';
 import type { ChatProjection } from '../types';
 
 const props = defineProps<{
@@ -80,6 +90,8 @@ const props = defineProps<{
   providerId?: string | undefined;
   modelId?: string | undefined;
   disabledReason?: string | undefined;
+  focusMessageId?: string | undefined;
+  focusToken?: number | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -97,39 +109,6 @@ const isEmpty = computed(() => !props.session || props.projection.messages.lengt
 const pendingApprovals = computed(() =>
   props.projection.approvals.filter((approval) => approval.status === 'pending')
 );
-
-const statusLabel = computed(() => {
-  if (!props.session) return t('app.idle');
-  switch (props.projection.status) {
-    case 'running':
-      return t('session.status.running');
-    case 'waiting_approval':
-      return t('session.status.waiting_approval');
-    case 'completed':
-      return t('session.status.completed');
-    case 'failed':
-      return t('session.status.failed');
-    case 'cancelled':
-      return t('session.status.cancelled');
-    default:
-      return t('session.status.idle');
-  }
-});
-
-const statusType = computed(() => {
-  switch (props.projection.status) {
-    case 'running':
-      return 'info' as const;
-    case 'waiting_approval':
-      return 'warning' as const;
-    case 'completed':
-      return 'success' as const;
-    case 'failed':
-      return 'error' as const;
-    default:
-      return 'default' as const;
-  }
-});
 </script>
 
 <style scoped lang="less">
@@ -156,6 +135,17 @@ const statusType = computed(() => {
   min-width: 0;
   align-items: center;
   gap: 8px;
+}
+
+.nh-chat__session-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--nh-color-bg-hover);
+  color: var(--nh-color-text-secondary);
 }
 
 .nh-chat__title {

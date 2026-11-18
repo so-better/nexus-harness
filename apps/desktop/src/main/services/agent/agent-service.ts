@@ -107,7 +107,8 @@ export class AgentService {
         throw new Error(`PROVIDER_MODEL_NOT_FOUND: ${input.modelId}`);
       }
 
-      const toolset = await createFileToolset(input.rootPaths);
+      const toolset =
+        input.rootPaths.length > 0 ? await createFileToolset(input.rootPaths) : undefined;
       const provider = this.createProvider(providerConfig);
       const artifacts = new ArtifactService(this.artifactBaseDir, this.database);
       const checkpoints = new CheckpointService();
@@ -122,9 +123,20 @@ export class AgentService {
         ...(providerConfig.extraParams ? { extraParams: providerConfig.extraParams } : {}),
         ...(hooks.signal ? { signal: hooks.signal } : {})
       });
-      const checkpointRoot = await toolset.resolvePath('.');
+      const checkpointRoot = toolset ? await toolset.resolvePath('.') : undefined;
 
       const executeTool = async (call: { name: string; arguments: unknown }) => {
+        if (!toolset || !checkpointRoot) {
+          return {
+            ok: false,
+            output: '',
+            error: {
+              code: 'TOOL_WORKSPACE_REQUIRED',
+              message: '未选择工作区，无法执行本地文件或命令操作'
+            }
+          };
+        }
+
         if (call.name === 'write_file' || call.name === 'apply_patch') {
           const pathArgument = getPathArgument(call.arguments);
           if (pathArgument) {
@@ -194,7 +206,7 @@ export class AgentService {
         })
       );
 
-      const tools: AgentToolDefinition[] = toolset.definitions.map((definition) => ({
+      const tools: AgentToolDefinition[] = (toolset?.definitions ?? []).map((definition) => ({
         name: definition.name,
         description: definition.description,
         inputSchema: definition.inputSchema,

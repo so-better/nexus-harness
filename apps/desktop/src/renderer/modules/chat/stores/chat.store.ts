@@ -85,11 +85,6 @@ export const useChatStore = defineStore('chat', () => {
       error.value = t('chat.needsModel');
       return;
     }
-    if (rootPaths.value.length === 0) {
-      error.value = t('chat.needsRoot');
-      return;
-    }
-
     error.value = undefined;
     runningBySession[sessionId] = true;
     try {

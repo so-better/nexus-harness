@@ -179,7 +179,7 @@ export interface NexusBridge {
 export const agentRunInputSchema = z.object({
   sessionId: z.string().min(1),
   prompt: z.string().min(1),
-  rootPaths: z.array(z.string().min(1)).min(1),
+  rootPaths: z.array(z.string().min(1)).default([]),
   providerId: z.string().min(1),
   modelId: z.string().min(1),
   maxSteps: z.number().int().positive().max(50).optional()
@@ -267,9 +267,12 @@ export const sessionClearAllResultSchema = z.object({
 
 export const sessionSearchResultSchema = z.object({
   sessionId: z.string().min(1),
-  title: z.string(),
+  sessionTitle: z.string(),
+  messageId: z.string().min(1),
+  role: z.enum(['user', 'assistant']),
   snippet: z.string(),
-  kind: z.enum(['title', 'message']),
+  matchStart: z.number().int().min(-1),
+  matchEnd: z.number().int().min(-1),
   matchedAt: z.number().nonnegative()
 });
 

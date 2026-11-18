@@ -1,74 +1,60 @@
 /**
- * 跨会话搜索：匹配会话标题与 message.completed 内容。
+ * 跨会话消息搜索：匹配 message.completed 内容并返回可定位的消息命中。
  */
 
 import type { DatabaseSync } from 'node:sqlite';
 import type { SessionSearchResult } from '@shared/ipc/contracts';
 
-interface TitleRow {
-  id: string;
-  title: string;
-  last_active_at: number;
-}
-
 interface MessageRow {
   sessionId: string;
-  title: string;
+  sessionTitle: string;
   ts: number;
   payload: string;
 }
 
 interface MessagePayload {
+  messageId?: unknown;
+  role?: unknown;
   content?: unknown;
 }
 
 const escapeLike = (value: string): string => value.replace(/[\\%_]/g, '\\$&');
 
 /**
- * 从消息正文截取查询附近片段，并压平换行。
+ * 压平消息正文并截取命中片段，同时返回片段内高亮下标。
  */
-const toSnippet = (content: string, query: string): string => {
+const buildSnippet = (
+  content: string,
+  query: string
+): { snippet: string; matchStart: number; matchEnd: number } | undefined => {
   const normalized = content.replace(/\s+/g, ' ').trim();
   const index = normalized.toLocaleLowerCase().indexOf(query.toLocaleLowerCase());
-  if (index < 0) return normalized.slice(0, 96);
-  const start = Math.max(0, index - 28);
-  const end = Math.min(normalized.length, index + query.length + 56);
-  return `${start > 0 ? '…' : ''}${normalized.slice(start, end)}${end < normalized.length ? '…' : ''}`;
+  if (index < 0) return undefined;
+
+  const start = Math.max(0, index - 30);
+  const end = Math.min(normalized.length, index + query.length + 60);
+  const prefix = start > 0 ? '…' : '';
+  const suffix = end < normalized.length ? '…' : '';
+  const snippet = `${prefix}${normalized.slice(start, end)}${suffix}`;
+  const matchStart = prefix.length + index - start;
+  return {
+    snippet,
+    matchStart,
+    matchEnd: matchStart + query.length
+  };
 };
 
 /**
- * 搜索标题与消息，同一会话只保留一条最相关结果。
+ * 搜索所有未删除会话的消息正文，按消息时间倒序返回。
  */
 export const searchSessions = (db: DatabaseSync, rawQuery: string): SessionSearchResult[] => {
   const query = rawQuery.trim();
   if (!query) return [];
 
   const pattern = `%${escapeLike(query)}%`;
-  const results = new Map<string, SessionSearchResult>();
-
-  const titleRows = db
+  const rows = db
     .prepare(
-      `SELECT id, title, last_active_at
-       FROM sessions
-       WHERE deleted_at IS NULL AND title LIKE ? ESCAPE '\\'
-       ORDER BY last_active_at DESC
-       LIMIT 30`
-    )
-    .all(pattern) as unknown as TitleRow[];
-
-  for (const row of titleRows) {
-    results.set(row.id, {
-      sessionId: row.id,
-      title: row.title,
-      snippet: '',
-      kind: 'title',
-      matchedAt: Number(row.last_active_at)
-    });
-  }
-
-  const messageRows = db
-    .prepare(
-      `SELECT e.session_id AS sessionId, s.title, e.ts, e.payload
+      `SELECT e.session_id AS sessionId, s.title AS sessionTitle, e.ts, e.payload
        FROM events e
        JOIN sessions s ON s.id = e.session_id
        WHERE s.deleted_at IS NULL
@@ -79,25 +65,33 @@ export const searchSessions = (db: DatabaseSync, rawQuery: string): SessionSearc
     )
     .all(pattern) as unknown as MessageRow[];
 
-  for (const row of messageRows) {
+  const results: SessionSearchResult[] = [];
+
+  for (const row of rows) {
     let payload: MessagePayload;
     try {
       payload = JSON.parse(row.payload) as MessagePayload;
     } catch {
       continue;
     }
-    if (typeof payload.content !== 'string') continue;
-    if (!payload.content.toLocaleLowerCase().includes(query.toLocaleLowerCase())) continue;
-    if (results.get(row.sessionId)?.kind === 'message') continue;
 
-    results.set(row.sessionId, {
+    if (typeof payload.content !== 'string' || typeof payload.messageId !== 'string') continue;
+    if (payload.role !== 'user' && payload.role !== 'assistant') continue;
+
+    const snippet = buildSnippet(payload.content, query);
+    if (!snippet) continue;
+
+    results.push({
       sessionId: row.sessionId,
-      title: row.title,
-      snippet: toSnippet(payload.content, query),
-      kind: 'message',
+      sessionTitle: row.sessionTitle,
+      messageId: payload.messageId,
+      role: payload.role,
+      snippet: snippet.snippet,
+      matchStart: snippet.matchStart,
+      matchEnd: snippet.matchEnd,
       matchedAt: Number(row.ts)
     });
   }
 
-  return [...results.values()].sort((a, b) => b.matchedAt - a.matchedAt).slice(0, 40);
+  return results;
 };

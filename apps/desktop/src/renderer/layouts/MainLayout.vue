@@ -10,6 +10,7 @@
         @remove="removeSession"
         @rename="renameSession"
         @clear-all="clearAllSessions"
+        @open-message="openSearchMessage"
         @toggle-pin="sessions.togglePinned"
       />
 
@@ -22,6 +23,8 @@
         :provider-id="providerId"
         :model-id="modelId"
         :disabled-reason="disabledReason"
+        :focus-message-id="focusMessage?.id"
+        :focus-token="focusMessage?.token"
         @choose-root="chat.addRoot"
         @update-provider="updateProvider"
         @update-model="updateModel"
@@ -55,7 +58,7 @@
  * 主布局容器：协调会话、聊天状态、Provider、设置与临时工作目录。
  */
 
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useMessage } from 'naive-ui';
 import { storeToRefs } from 'pinia';
 import type { ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
@@ -78,6 +81,8 @@ const { sessions: sessionList, activeId } = storeToRefs(sessions);
 const { providers, providerId, modelId, models, rootPaths, runningBySession } = storeToRefs(chat);
 
 const { version, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
+const focusMessage = ref<{ id: string; token: number }>();
+let focusSequence = 0;
 
 const projection = computed(() => {
   const id = activeId.value;
@@ -91,7 +96,6 @@ const rootLabel = computed(() =>
 const disabledReason = computed(() => {
   if (!providerId.value) return t('chat.needsProvider');
   if (!modelId.value) return t('chat.needsModel');
-  if (rootPaths.value.length === 0) return t('chat.needsRoot');
   return undefined;
 });
 useSessionStatusSync(sessions, projection, activeId);
@@ -133,6 +137,15 @@ const createSession = async (): Promise<void> => {
  */
 const selectSession = (id: string): void => {
   sessions.select(id);
+};
+
+/**
+ * 从跨会话搜索结果打开并定位消息。
+ */
+const openSearchMessage = (sessionId: string, messageId: string): void => {
+  sessions.select(sessionId);
+  focusSequence += 1;
+  focusMessage.value = { id: messageId, token: focusSequence };
 };
 
 /**

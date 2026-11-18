@@ -755,6 +755,18 @@ git 工具仅在检测到 Git 仓库时注册；非 Git 工作区不显示。
 - 打包后的 GUI 进程需要补齐 PATH，确保能找到 `node`、`npx`、`python` 等运行时。
 - 工作区文件写入前必须展示 diff，并创建逐文件检查点；写入 `files` 内部存储不触发工作区写审批。
 
+#### 无工作区会话
+
+Session 可以不绑定 Workspace，也没有任何 Session RootGrant；这是合法状态，不得阻止发送消息或开始 Run。
+
+- 空 scope 下 Run 仍可对话；只提供与本地路径无关的能力，当前不注册文件、Git、命令等本地工具，也不创建检查点。
+- 允许路径集合为空，所有本地路径访问一律拒绝；不因模型请求自动发起授权。
+- 不注入工作区索引、项目规则或文件上下文；只使用对话内容、技能元信息与用户显式输入。
+- 若残留工具调用或模型要求本地操作，返回 `TOOL_WORKSPACE_REQUIRED`，不得静默扩大 scope。
+- 会话中途新增 root 或绑定工作区后，从下一次 Run 起按新 scope 注入工具；当前 Run 不动态扩权。
+- UI 显示「未选择工作区」，选择工作区是可选动作；发送条件只要求会话、Provider 与模型有效。
+- `workspaceId`、RootGrant 与检查点均保持为空；事件中如实记录空 scope，不伪造路径。
+
 ### 4.4 技能系统
 
 `SKILL.md` 采用 frontmatter + 正文说明：
@@ -1306,6 +1318,7 @@ interface AskUserAnswer {
 --nh-color-accent: #3b82f6;
 --nh-color-accent-hover: #2563eb;
 --nh-color-accent-pressed: #1d4ed8;
+--nh-color-idle: #6b63c9;
 --nh-color-success: #15803d;
 --nh-color-warning: #b45309;
 --nh-color-danger: #b91c1c;
@@ -1786,6 +1799,7 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 上下文压缩保留不可压缩内容，写入 `context.compacted`，失败可降级为硬截断。
 - [ ] 系统提示包含反幻觉、工具诚实、链接真实性与文件生成自检约束。
 - [ ] 路径访问基于 Workspace roots + Session RootGrant，未授权路径必须走授权流程。
+- [ ] 无工作区会话可正常发送与对话；不注册本地工具、不创建检查点，越界调用返回 `TOOL_WORKSPACE_REQUIRED`。
 - [ ] RootGrant 按会话隔离并写入事件，不跨会话继承。
 - [ ] AI 输出文件只写入 `<userData>/files`，默认永久保留、手动清理，预览/下载走受控地址，另存为由用户确认。
 - [ ] 工具结果统一归一化，文件与媒体落盘并记录来源，不把二进制直接塞进上下文。

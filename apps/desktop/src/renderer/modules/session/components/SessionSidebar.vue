@@ -5,22 +5,45 @@
         <span class="nh-sidebar__mark">N</span>
         <span class="nh-sidebar__name">{{ t('app.brand') }}</span>
       </div>
-      <NButton class="nh-sidebar__create" text type="primary" @click="emit('create')">
-        <template #icon>
-          <AppIcon name="plus" />
-        </template>
-        {{ t('app.newSession') }}
-      </NButton>
+      <div class="nh-sidebar__header-actions">
+        <NButton
+          text
+          size="small"
+          class="nh-sidebar__icon-button"
+          :title="searchMode ? t('search.close') : t('search.open')"
+          :aria-label="searchMode ? t('search.close') : t('search.open')"
+          @click="toggleSearch"
+        >
+          <template #icon>
+            <AppIcon :name="searchMode ? 'close' : 'search'" :size="15" />
+          </template>
+        </NButton>
+        <NButton
+          v-if="!searchMode"
+          class="nh-sidebar__create"
+          text
+          type="primary"
+          @click="emit('create')"
+        >
+          <template #icon>
+            <AppIcon name="plus" />
+          </template>
+          {{ t('app.newSession') }}
+        </NButton>
+      </div>
     </header>
 
-    <div class="nh-sidebar__search">
+    <div v-if="searchMode" class="nh-sidebar__search">
       <NInput
+        ref="searchInput"
         v-model:value="query"
         size="small"
         clearable
         :placeholder="t('search.placeholder')"
         :aria-label="t('search.placeholder')"
-        @keydown.esc="clearSearch"
+        @keydown="handleSearchKeydown"
+        @compositionstart="searchComposing = true"
+        @compositionend="searchComposing = false"
       >
         <template #prefix>
           <AppIcon name="search" :size="14" />
@@ -29,23 +52,24 @@
     </div>
 
     <div class="nh-sidebar__scroll">
-      <div v-if="hasQuery" class="nh-sidebar__body">
-        <p class="nh-sidebar__group-title">{{ t('search.results') }}</p>
+      <div v-if="searchMode" class="nh-sidebar__body">
         <div v-if="searching" class="nh-sidebar__search-state">
           <NSpin size="small" />
         </div>
         <p v-else-if="searchError" class="nh-sidebar__search-error">{{ searchError }}</p>
         <p v-else-if="results.length === 0" class="nh-sidebar__search-empty">
-          {{ t('search.empty') }}
+          {{ query.trim() ? t('search.empty') : t('search.prompt') }}
         </p>
-        <template v-else>
+        <div v-else ref="resultsRef" class="nh-sidebar__search-results" role="listbox">
           <SessionSearchResultItem
-            v-for="result in results"
-            :key="result.sessionId"
+            v-for="(result, index) in results"
+            :key="result.messageId"
             :result="result"
-            @select="openSearchResult(result.sessionId)"
+            :active="index === activeHitIndex"
+            @mouseenter="activeHitIndex = index"
+            @select="openSearchResult(result)"
           />
-        </template>
+        </div>
       </div>
       <div v-else-if="loading" class="nh-sidebar__state">
         <NSpin size="small" />
@@ -77,7 +101,7 @@
       </div>
     </div>
 
-    <footer class="nh-sidebar__footer">
+    <footer v-if="!searchMode" class="nh-sidebar__footer">
       <span>{{ sessionCountLabel }}</span>
       <NPopconfirm v-if="sessions.length > 0" placement="top" @positive-click="emit('clear-all')">
         <template #trigger>
@@ -99,8 +123,8 @@
  * 会话侧栏：按置顶与日期分组展示会话，并转发新建、选择、删除与置顶操作。
  */
 
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { NButton, NEmpty, NInput, NPopconfirm, NSpin } from 'naive-ui';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { NButton, NEmpty, NInput, NPopconfirm, NSpin, type InputInst } from 'naive-ui';
 import type { SessionSearchResult, SessionSummary } from '@shared/ipc/contracts';
 import { locale, t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
@@ -126,22 +150,59 @@ const emit = defineEmits<{
   remove: [id: string];
   rename: [id: string, title: string];
   'clear-all': [];
+  'open-message': [sessionId: string, messageId: string];
   'toggle-pin': [id: string];
 }>();
 
+const searchMode = ref(false);
 const query = ref('');
 const results = ref<SessionSearchResult[]>([]);
 const searching = ref(false);
 const searchError = ref<string | undefined>();
+const activeHitIndex = ref(-1);
+const searchInput = ref<InputInst | null>(null);
+const resultsRef = ref<HTMLElement | null>(null);
+const searchComposing = ref(false);
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 let searchRequest = 0;
 
-const hasQuery = computed(() => query.value.trim().length > 0);
+/**
+ * 打开搜索面板并聚焦输入框。
+ */
+const openSearch = async (): Promise<void> => {
+  searchMode.value = true;
+  await nextTick();
+  searchInput.value?.focus();
+};
+
+/**
+ * 关闭搜索并清空结果。
+ */
+const closeSearch = (): void => {
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = undefined;
+  searchRequest += 1;
+  searchMode.value = false;
+  query.value = '';
+  results.value = [];
+  searching.value = false;
+  searchError.value = undefined;
+  activeHitIndex.value = -1;
+};
+
+/**
+ * 切换搜索面板。
+ */
+const toggleSearch = (): void => {
+  if (searchMode.value) closeSearch();
+  else void openSearch();
+};
 
 /**
  * 输入防抖搜索；只接受最后一次请求的结果。
  */
 watch(query, (value) => {
+  if (!searchMode.value) return;
   if (debounceTimer) clearTimeout(debounceTimer);
   const keyword = value.trim();
   searchRequest += 1;
@@ -151,6 +212,7 @@ watch(query, (value) => {
   if (!keyword) {
     results.value = [];
     searching.value = false;
+    activeHitIndex.value = -1;
     return;
   }
 
@@ -160,9 +222,11 @@ watch(query, (value) => {
       const found = await searchSessions(keyword);
       if (request !== searchRequest) return;
       results.value = found;
+      activeHitIndex.value = found.length > 0 ? 0 : -1;
     } catch (reason) {
       if (request !== searchRequest) return;
       results.value = [];
+      activeHitIndex.value = -1;
       searchError.value = reason instanceof Error ? reason.message : t('search.failed');
     } finally {
       if (request === searchRequest) searching.value = false;
@@ -171,18 +235,53 @@ watch(query, (value) => {
 });
 
 /**
- * 清空搜索并回到完整会话列表。
+ * 把键盘选中的结果滚动到可见区域。
  */
-const clearSearch = (): void => {
-  query.value = '';
+const scrollActiveHit = async (): Promise<void> => {
+  await nextTick();
+  const target = resultsRef.value?.querySelector<HTMLElement>(
+    `.nh-search-result:nth-child(${activeHitIndex.value + 1})`
+  );
+  target?.scrollIntoView({ block: 'nearest' });
 };
 
 /**
- * 打开搜索结果并退出搜索态。
+ * 搜索框键盘操作。
  */
-const openSearchResult = (id: string): void => {
-  emit('select', id);
-  query.value = '';
+const handleSearchKeydown = (event: KeyboardEvent): void => {
+  if (event.isComposing || searchComposing.value) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeSearch();
+    return;
+  }
+  if (!results.value.length) return;
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    activeHitIndex.value = Math.min(activeHitIndex.value + 1, results.value.length - 1);
+    void scrollActiveHit();
+    return;
+  }
+  if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    activeHitIndex.value = Math.max(activeHitIndex.value - 1, 0);
+    void scrollActiveHit();
+    return;
+  }
+  if (event.key === 'Enter') {
+    const hit = results.value[activeHitIndex.value];
+    if (!hit) return;
+    event.preventDefault();
+    openSearchResult(hit);
+  }
+};
+
+/**
+ * 打开消息命中：关闭搜索并交给主布局定位。
+ */
+const openSearchResult = (result: SessionSearchResult): void => {
+  emit('open-message', result.sessionId, result.messageId);
+  closeSearch();
 };
 
 onBeforeUnmount(() => {
@@ -248,6 +347,26 @@ const groups = computed<SessionGroup[]>(() => {
   box-shadow: inset 0 -1px 0 var(--nh-color-border);
 }
 
+.nh-sidebar__header-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.nh-sidebar__icon-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--nh-color-text-secondary);
+}
+
+.nh-sidebar__icon-button:hover {
+  background: var(--nh-color-bg-hover);
+  color: var(--nh-color-text-primary);
+}
+
 .nh-sidebar__brand {
   display: flex;
   min-width: 0;
@@ -287,6 +406,12 @@ const groups = computed<SessionGroup[]>(() => {
   display: grid;
   padding: 24px 0;
   place-items: center;
+}
+
+.nh-sidebar__search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .nh-sidebar__search-error,

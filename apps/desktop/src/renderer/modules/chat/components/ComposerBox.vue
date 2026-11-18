@@ -14,22 +14,35 @@
         {{ t('chat.configureModel') }}
       </NButton>
       <div v-else class="nh-composer__selectors">
-        <NSelect
-          class="nh-composer__provider"
-          size="tiny"
-          :value="providerId ?? null"
+        <NDropdown
+          trigger="click"
+          placement="bottom-start"
           :options="providerOptions"
-          :placeholder="t('app.noProvider')"
-          @update:value="onProviderChange"
-        />
-        <NSelect
-          class="nh-composer__model"
-          size="tiny"
-          :value="modelId ?? null"
+          @select="onProviderChange"
+        >
+          <button
+            type="button"
+            class="nh-composer__selector"
+            aria-haspopup="menu"
+            :title="providerLabel"
+            :aria-label="providerLabel"
+          >
+            <span class="nh-composer__selector-label">{{ providerLabel }}</span>
+            <AppIcon name="chevron-down" :size="12" />
+          </button>
+        </NDropdown>
+
+        <NDropdown
+          trigger="click"
+          placement="bottom-start"
           :options="modelOptions"
-          :placeholder="t('chat.needsModel')"
-          @update:value="onModelChange"
-        />
+          @select="onModelChange"
+        >
+          <NButton text size="small" class="nh-composer__selector" :disabled="models.length === 0">
+            <span class="nh-composer__selector-label">{{ modelLabel }}</span>
+            <AppIcon name="chevron-down" :size="12" />
+          </NButton>
+        </NDropdown>
       </div>
     </div>
     <NInput
@@ -46,10 +59,7 @@
         <NText v-if="disabledReason" depth="3" class="nh-composer__hint">
           {{ disabledReason }}
         </NText>
-        <span v-else class="nh-composer__keys">
-          <kbd>Enter</kbd>
-          <span>{{ t('chat.composerHint') }}</span>
-        </span>
+        <span v-else class="nh-composer__keys">{{ t('chat.composerHint') }}</span>
       </div>
       <NButton v-if="running" type="error" secondary @click="emit('stop')">
         <template #icon>
@@ -73,7 +83,7 @@
  */
 
 import { computed, ref } from 'vue';
-import { NButton, NInput, NSelect, NText, type SelectOption } from 'naive-ui';
+import { NButton, NDropdown, NInput, NText, type DropdownOption } from 'naive-ui';
 import type { ProviderModel, ProviderPublic } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
@@ -101,29 +111,37 @@ const emit = defineEmits<{
 
 const draft = ref('');
 const placeholder = computed(() => t('chat.composerPlaceholder'));
-const providerOptions = computed<SelectOption[]>(() =>
+const providerLabel = computed(
+  () =>
+    props.providers.find((provider) => provider.id === props.providerId)?.name ??
+    t('app.noProvider')
+);
+const modelLabel = computed(
+  () => props.models.find((model) => model.id === props.modelId)?.id ?? t('chat.needsModel')
+);
+const providerOptions = computed<DropdownOption[]>(() =>
   props.providers.map((provider) => ({
+    key: provider.id,
     label: provider.name,
-    value: provider.id,
     disabled: !provider.enabled
   }))
 );
-const modelOptions = computed<SelectOption[]>(() =>
-  props.models.map((model) => ({ label: model.id, value: model.id }))
+const modelOptions = computed<DropdownOption[]>(() =>
+  props.models.map((model) => ({ key: model.id, label: model.id }))
 );
 
 /**
  * 切换当前模型提供商。
  */
-const onProviderChange = (value: string): void => {
-  if (value) emit('update-provider', value);
+const onProviderChange = (key: string | number): void => {
+  if (typeof key === 'string' && key) emit('update-provider', key);
 };
 
 /**
  * 切换当前模型。
  */
-const onModelChange = (value: string): void => {
-  if (value) emit('update-model', value);
+const onModelChange = (key: string | number): void => {
+  if (typeof key === 'string' && key) emit('update-model', key);
 };
 
 /**
@@ -189,15 +207,50 @@ const onEnter = (event: KeyboardEvent): void => {
 .nh-composer__selectors {
   display: flex;
   min-width: 0;
-  gap: 8px;
+  align-items: center;
+  gap: 4px;
 }
 
-.nh-composer__provider {
-  width: 180px;
+.nh-composer__selector {
+  display: inline-flex;
+  overflow: hidden;
+  max-width: 220px;
+  height: 32px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--nh-color-text-secondary);
+  font-size: 14px;
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    background var(--nh-duration-fast) var(--nh-ease-standard),
+    color var(--nh-duration-fast) var(--nh-ease-standard);
 }
 
-.nh-composer__model {
-  width: 180px;
+.nh-composer__selector:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.nh-composer__selector:focus-visible {
+  outline: 2px solid var(--nh-color-accent);
+  outline-offset: 1px;
+}
+
+.nh-composer__selector:hover:not(:disabled) {
+  background: var(--nh-color-bg-hover);
+  color: var(--nh-color-text-primary);
+}
+
+.nh-composer__selector-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nh-composer__actions {
@@ -223,15 +276,6 @@ const onEnter = (event: KeyboardEvent): void => {
   align-items: center;
   gap: 6px;
   color: var(--nh-color-text-disabled);
-  font-size: 12px;
-}
-
-.nh-composer__keys kbd {
-  padding: 2px 6px;
-  border: 1px solid var(--nh-color-border);
-  border-radius: 4px;
-  background: var(--nh-color-bg-elevated);
-  font-family: var(--nh-font-mono);
   font-size: 12px;
 }
 </style>

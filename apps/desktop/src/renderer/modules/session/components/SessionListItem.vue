@@ -39,7 +39,10 @@
         />
       </div>
       <div v-if="!renaming" class="nh-session-item__meta">
-        <span class="nh-session-item__status" :class="`nh-session-item__status--${session.status}`">
+        <span
+          class="nh-session-item__status"
+          :class="`nh-session-item__status--${sessionStatusTone(session.status)}`"
+        >
           <span class="nh-session-item__status-dot" />
           {{ statusLabel }}
         </span>
@@ -101,7 +104,7 @@ import {
 } from 'naive-ui';
 import type { SessionSummary } from '@shared/ipc/contracts';
 import { locale, t } from '@/app/i18n';
-import { sessionStatusLabel } from '../session-status';
+import { sessionStatusLabel, sessionStatusTone } from '@/app/session-status';
 import AppIcon from '@/components/AppIcon.vue';
 
 const props = defineProps<{
@@ -307,21 +310,23 @@ const relativeTime = computed(() => {
   white-space: nowrap;
 }
 
-.nh-session-item__status--running {
+.nh-session-item__status--default {
+  color: var(--nh-color-idle);
+}
+
+.nh-session-item__status--info {
   color: var(--nh-color-accent);
 }
 
-.nh-session-item__status--waiting_approval,
-.nh-session-item__status--waiting_user,
-.nh-session-item__status--interrupted {
+.nh-session-item__status--warning {
   color: var(--nh-color-warning);
 }
 
-.nh-session-item__status--completed {
+.nh-session-item__status--success {
   color: var(--nh-color-success);
 }
 
-.nh-session-item__status--failed {
+.nh-session-item__status--error {
   color: var(--nh-color-danger);
 }
 

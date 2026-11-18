@@ -1,5 +1,5 @@
 /**
- * 跨会话搜索测试：标题、消息内容与已删除会话过滤。
+ * 跨会话搜索测试：消息命中、片段高亮与已删除会话过滤。
  */
 
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -31,39 +31,44 @@ describe('session search', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  const addMessage = (sessionId: string, content: string): void => {
+  const addMessage = (
+    sessionId: string,
+    content: string,
+    role: 'user' | 'assistant' = 'assistant'
+  ): string => {
+    const messageId = crypto.randomUUID();
     events.append(
       createNexusEvent({
         sessionId,
         seq: 1,
         type: 'message.completed',
-        payload: { messageId: crypto.randomUUID(), role: 'assistant', content }
+        payload: { messageId, role, content }
       })
     );
+    return messageId;
   };
 
-  it('matches message content and returns a snippet', () => {
+  it('returns a message hit with a highlighted snippet', () => {
     const session = sessions.create({ title: 'Provider 流式解析' });
-    addMessage(session.id, '工具调用参数在结束事件前被截断，需要补一次缓冲刷新。');
+    const messageId = addMessage(
+      session.id,
+      '工具调用参数在结束事件前被截断，需要补一次缓冲刷新。'
+    );
 
     const [result] = searchSessions(db, '截断');
     expect(result).toMatchObject({
       sessionId: session.id,
-      title: 'Provider 流式解析',
-      kind: 'message'
+      sessionTitle: 'Provider 流式解析',
+      messageId,
+      role: 'assistant'
     });
     expect(result?.snippet).toContain('截断');
+    expect(result?.snippet.slice(result.matchStart, result.matchEnd)).toBe('截断');
   });
 
-  it('matches session titles', () => {
-    const session = sessions.create({ title: '上下文压缩策略' });
-    const [result] = searchSessions(db, '压缩');
-
-    expect(result).toMatchObject({
-      sessionId: session.id,
-      kind: 'title',
-      snippet: ''
-    });
+  it('does not match session titles alone', () => {
+    sessions.create({ title: '上下文压缩策略' });
+    expect(searchSessions(db, '压缩')).toEqual([]);
   });
 
   it('excludes deleted sessions', () => {
