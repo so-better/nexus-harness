@@ -3,19 +3,14 @@
     <header class="nh-chat__header">
       <div class="nh-chat__title-group">
         <h1 class="nh-chat__title">{{ session?.title ?? t('app.noSession') }}</h1>
-        <span v-if="session" class="nh-chat__status">{{ statusLabel }}</span>
+        <NTag v-if="session" size="small" :type="statusType" :bordered="false">
+          {{ statusLabel }}
+        </NTag>
       </div>
-      <span class="nh-chat__meta">{{ providerLabel }}</span>
     </header>
 
-    <section v-if="!session" class="nh-chat__empty">
-      <h2>{{ t('app.emptyTitle') }}</h2>
-      <p>{{ t('app.emptyDescription') }}</p>
-    </section>
-
-    <section v-else-if="projection.messages.length === 0" class="nh-chat__empty">
-      <h2>{{ t('app.emptyTitle') }}</h2>
-      <p>{{ t('app.emptyDescription') }}</p>
+    <section v-if="!session || projection.messages.length === 0" class="nh-chat__empty">
+      <EmptyStateHero :show-create="!session" @create="emit('create')" />
     </section>
 
     <MessageList v-else :messages="projection.messages" />
@@ -34,6 +29,11 @@
       :disabled="Boolean(disabledReason)"
       :disabled-reason="disabledReason"
       :running="projection.running"
+      :root-label="rootLabel"
+      :providers="providers"
+      :provider-id="providerId"
+      @choose-root="emit('choose-root')"
+      @update-provider="emit('update-provider', $event)"
       @send="emit('send', $event)"
       @stop="emit('stop')"
     />
@@ -46,21 +46,28 @@
  */
 
 import { computed } from 'vue';
-import type { SessionSummary } from '@shared/ipc/contracts';
+import { NTag } from 'naive-ui';
+import type { ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import ApprovalCard from '../components/ApprovalCard.vue';
 import ComposerBox from '../components/ComposerBox.vue';
+import EmptyStateHero from '../components/EmptyStateHero.vue';
 import MessageList from '../components/MessageList.vue';
 import type { ChatProjection } from '../types';
 
 const props = defineProps<{
   session?: SessionSummary | undefined;
   projection: ChatProjection;
-  providerLabel: string;
+  rootLabel: string;
+  providers: ProviderPublic[];
+  providerId?: string | undefined;
   disabledReason?: string | undefined;
 }>();
 
 const emit = defineEmits<{
+  create: [];
+  'choose-root': [];
+  'update-provider': [id: string];
   send: [prompt: string];
   stop: [];
   approve: [approvalId: string];
@@ -88,6 +95,21 @@ const statusLabel = computed(() => {
       return t('session.status.idle');
   }
 });
+
+const statusType = computed(() => {
+  switch (props.projection.status) {
+    case 'running':
+      return 'info' as const;
+    case 'waiting_approval':
+      return 'warning' as const;
+    case 'completed':
+      return 'success' as const;
+    case 'failed':
+      return 'error' as const;
+    default:
+      return 'default' as const;
+  }
+});
 </script>
 
 <style scoped lang="less">
@@ -100,58 +122,47 @@ const statusLabel = computed(() => {
 
 .nh-chat__header {
   display: flex;
-  height: 44px;
+  height: 56px;
   flex: none;
   align-items: center;
   justify-content: space-between;
-  gap: var(--nh-space-md);
-  padding: 0 24px;
+  gap: 16px;
+  padding: 0 32px;
   border-bottom: 1px solid var(--nh-color-border);
 }
 
 .nh-chat__title-group {
   display: flex;
   min-width: 0;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
 }
 
 .nh-chat__title {
   overflow: hidden;
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.nh-chat__status,
-.nh-chat__meta {
-  color: var(--nh-color-text-secondary);
-  font-size: 12px;
 }
 
 .nh-chat__empty {
   display: flex;
   flex: 1;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 24px;
-  color: var(--nh-color-text-secondary);
-  text-align: center;
-}
-
-.nh-chat__empty h2,
-.nh-chat__empty p {
-  margin: 0;
+  padding: 32px;
 }
 
 .nh-chat__approvals {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 8px 24px 0;
+  width: calc(100% - 64px);
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 8px 0 0;
 }
 </style>

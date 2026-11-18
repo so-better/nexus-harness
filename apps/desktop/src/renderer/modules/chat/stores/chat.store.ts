@@ -35,20 +35,29 @@ export const useChatStore = defineStore('chat', () => {
   let initialized = false;
 
   /**
+   * 重新读取 Provider，并在当前选择失效时回退到第一个启用项。
+   */
+  const refreshProviders = async (): Promise<void> => {
+    try {
+      providers.value = await listProviders();
+      const current = providers.value.find(
+        (provider) => provider.id === providerId.value && provider.enabled
+      );
+      if (!current) {
+        providerId.value = providers.value.find((provider) => provider.enabled)?.id;
+      }
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+    }
+  };
+
+  /**
    * 初始化 Provider 列表与事件订阅；重复调用安全。
    */
   const initialize = async (): Promise<void> => {
     if (initialized) return;
     initialized = true;
-
-    try {
-      providers.value = await listProviders();
-      const enabled = providers.value.find((provider) => provider.enabled);
-      if (enabled) providerId.value = enabled.id;
-    } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
-    }
-
+    await refreshProviders();
     unsubscribe = subscribeAgentEvents(handleEvent);
   };
 
@@ -183,6 +192,7 @@ export const useChatStore = defineStore('chat', () => {
     eventsBySession,
     runningBySession,
     initialize,
+    refreshProviders,
     dispose,
     loadHistory,
     send,

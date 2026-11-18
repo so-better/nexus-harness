@@ -4,32 +4,33 @@
     :class="{ 'nh-session-item--active': active }"
     role="button"
     tabindex="0"
+    :aria-current="active ? 'page' : undefined"
     @click="emit('select')"
     @keydown.enter="emit('select')"
     @keydown.space.prevent="emit('select')"
   >
     <span class="nh-session-item__dot" :class="`nh-session-item__dot--${session.status}`" />
     <span class="nh-session-item__body">
-      <span class="nh-session-item__title">{{ session.title }}</span>
+      <span class="nh-session-item__title-row">
+        <span class="nh-session-item__title">{{ session.title }}</span>
+        <NTag v-if="session.pinned" size="tiny" type="info" :bordered="false">
+          {{ t('session.pin') }}
+        </NTag>
+      </span>
       <span class="nh-session-item__meta">{{ statusLabel }}</span>
     </span>
     <span class="nh-session-item__actions">
-      <button
-        type="button"
-        class="nh-session-item__action"
+      <NButton
+        text
+        size="tiny"
         :aria-label="session.pinned ? t('session.unpin') : t('session.pin')"
         @click.stop="emit('toggle-pin')"
       >
         {{ session.pinned ? t('session.unpin') : t('session.pin') }}
-      </button>
-      <button
-        type="button"
-        class="nh-session-item__action"
-        :aria-label="t('session.delete')"
-        @click.stop="emit('remove')"
-      >
+      </NButton>
+      <NButton text size="tiny" :aria-label="t('session.delete')" @click.stop="emit('remove')">
         {{ t('session.delete') }}
-      </button>
+      </NButton>
     </span>
   </div>
 </template>
@@ -40,6 +41,7 @@
  */
 
 import { computed } from 'vue';
+import { NButton, NTag } from 'naive-ui';
 import type { SessionSummary } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 
@@ -81,23 +83,30 @@ const statusLabel = computed(() => {
 
 <style scoped lang="less">
 .nh-session-item {
+  position: relative;
   display: flex;
   width: 100%;
-  gap: var(--nh-space-sm);
+  gap: 8px;
   align-items: center;
   padding: 10px 12px;
-  border: 0;
   border-radius: var(--nh-radius-md);
   background: transparent;
   color: var(--nh-color-text-primary);
   cursor: pointer;
   text-align: left;
-  transition: background var(--nh-duration-fast) var(--nh-ease-standard);
+  transition:
+    background var(--nh-duration-fast) var(--nh-ease-standard),
+    border-color var(--nh-duration-fast) var(--nh-ease-standard);
 }
 
-.nh-session-item:hover,
-.nh-session-item--active {
+.nh-session-item:hover {
   background: var(--nh-color-bg-hover);
+}
+
+.nh-session-item--active {
+  background: var(--nh-color-bg-elevated);
+  background: color-mix(in srgb, var(--nh-color-accent) 7%, var(--nh-color-bg-base));
+  box-shadow: var(--nh-highlight);
 }
 
 .nh-session-item__dot {
@@ -127,6 +136,14 @@ const statusLabel = computed(() => {
   min-width: 0;
   flex: 1;
   flex-direction: column;
+  gap: 2px;
+}
+
+.nh-session-item__title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
 }
 
 .nh-session-item__title,
@@ -148,25 +165,12 @@ const statusLabel = computed(() => {
 
 .nh-session-item__actions {
   display: none;
+  flex: none;
   gap: 4px;
 }
 
 .nh-session-item:hover .nh-session-item__actions,
 .nh-session-item:focus-within .nh-session-item__actions {
   display: flex;
-}
-
-.nh-session-item__action {
-  padding: 2px 4px;
-  border: 0;
-  border-radius: var(--nh-radius-sm);
-  background: transparent;
-  color: var(--nh-color-text-secondary);
-  font-size: 12px;
-}
-
-.nh-session-item__action:hover {
-  color: var(--nh-color-text-primary);
-  background: var(--nh-color-bg-elevated);
 }
 </style>

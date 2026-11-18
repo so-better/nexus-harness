@@ -1262,36 +1262,41 @@ interface AskUserAnswer {
 - **渐进披露**：低频高级选项折叠，主流程不出现无关配置。
 - **审批融入心流**：工具审批以行内面板或浮层呈现，必须展示将要执行的内容与影响范围，不能做成打断式网页弹窗。
 - **默认优于配置**：优先给出合理默认值，避免大面积设置页。
+- **组件优先 Naive UI**：按钮、输入框、选择器、弹窗、提示、标签等基础控件优先使用 Naive UI；不得无理由重复造原生控件。
+- 自定义组件只用于品牌化布局、消息流、diff 等 Naive UI 覆盖不到的区域，并必须补齐 hover / active / focus / disabled 状态。
+- 禁止把裸原生控件作为最终界面；原生控件只能作为底层实现或无法覆盖时的例外，并统一主题与尺寸。
 
 默认贴近 macOS 原生质感，保留自有品牌识别的演进空间；视觉方向调整必须评审并更新本文件。
 
 ### 5.2 语义 token 与主题
 
-`renderer/styles/tokens.less` 定义语义变量名与尺寸、字体、动效等与主题无关的 token；颜色赋值放在 `themes/light.less` 与 `themes/dark.less`。以下为完整语义清单，颜色值仅作 light 主题示例：
+`renderer/styles/global.less` 定义尺寸、字体、动效等与主题无关的 token；`renderer/app/theme-palette.ts` 是颜色与 Naive UI 覆盖的唯一来源，运行时注入 CSS 变量，不得再维护第二套色板。以下为完整语义清单，颜色值仅作 light 主题示例：
 
 ```less
 /**
  * 背景与表面
  */
---nh-color-bg-base: #ffffff;
---nh-color-bg-elevated: #f7f8fa;
---nh-color-bg-hover: #eef0f4;
+--nh-color-bg-base: #fcfbf9;
+--nh-color-bg-elevated: #f4f2ed;
+--nh-color-bg-hover: #ece9e2;
 
 /**
  * 文本
  */
---nh-color-text-primary: #1f2329;
---nh-color-text-secondary: #5c6570;
---nh-color-text-disabled: #a8b0ba;
+--nh-color-text-primary: #1c1b19;
+--nh-color-text-secondary: #6b675f;
+--nh-color-text-disabled: #a8a39a;
 
 /**
  * 边框、强调、状态
  */
---nh-color-border: #e3e6eb;
---nh-color-accent: #3b82f6;
---nh-color-success: #16a34a;
---nh-color-warning: #d97706;
---nh-color-danger: #dc2626;
+--nh-color-border: #e3dfd7;
+--nh-color-accent: #2f5bff;
+--nh-color-accent-hover: #244ce0;
+--nh-color-accent-pressed: #1c3fbf;
+--nh-color-success: #1e7a52;
+--nh-color-warning: #b66a1c;
+--nh-color-danger: #b23a3a;
 
 /**
  * 尺寸与动效
@@ -1300,6 +1305,8 @@ interface AskUserAnswer {
 --nh-radius-md: 8px;
 --nh-space-sm: 8px;
 --nh-space-md: 16px;
+--nh-shadow-card: 0 1px 2px rgb(28 27 25 / 4%), 0 8px 24px rgb(28 27 25 / 5%);
+--nh-shadow-float: 0 2px 8px rgb(28 27 25 / 6%), 0 16px 48px rgb(28 27 25 / 8%);
 --nh-shadow-popover: 0 8px 24px rgb(0 0 0 / 12%);
 
 /**
@@ -1749,6 +1756,7 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 命名符合第 6 节，无拼音、无无意义缩写。
 - [ ] 新能力通过 tool / skill / plugin 进入，`core` 中没有领域硬编码。
 - [ ] 所有导出成员与关键代码块有中文注释；没有 `/* ... */`，没有死代码。
+- [ ] 基础控件优先使用 Naive UI；自定义组件只用于 Naive UI 覆盖不到的区域，并补齐交互状态。
 - [ ] 所有颜色来自语义 token，深浅主题下均已检查。
 - [ ] 尺寸、间距、字号与圆角使用偶数（推荐 4 的倍数），1px 边框除外。
 - [ ] 异步调用未使用 `void` 抑制，已显式 `await` 或 `.catch()`。

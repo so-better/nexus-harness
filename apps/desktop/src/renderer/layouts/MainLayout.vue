@@ -1,13 +1,5 @@
 <template>
   <div class="nh-layout">
-    <AppTitlebar
-      :root-label="rootLabel"
-      :provider-id="providerId"
-      :providers="providers"
-      @choose-root="chat.addRoot"
-      @update-provider="chat.setProvider"
-    />
-
     <div class="nh-layout__body">
       <SessionSidebar
         :sessions="sessions.sessions"
@@ -22,47 +14,65 @@
       <ChatView
         :session="sessions.activeSession"
         :projection="projection"
-        :provider-label="providerLabel"
+        :root-label="rootLabel"
+        :providers="providers"
+        :provider-id="providerId"
         :disabled-reason="disabledReason"
+        @create="createSession"
+        @choose-root="chat.addRoot"
+        @update-provider="chat.setProvider"
         @send="send"
         @stop="stop"
         @approve="(id) => chat.decideApproval(id, true)"
         @reject="(id) => chat.decideApproval(id, false)"
       />
-
-      <AppInspector class="nh-layout__inspector" :usage="projection.usage" :errors="errors" />
     </div>
 
     <AppStatusbar
       :running="running"
-      :input-tokens="projection.usage.inputTokens"
-      :output-tokens="projection.usage.outputTokens"
+      :usage="projection.usage"
+      :model-label="providerLabel"
+      :errors="errors"
+      :theme="effectiveTheme"
+      :version="version"
+      @toggle-theme="toggleTheme"
+      @open-settings="settingsOpen = true"
+    />
+
+    <SettingsModal
+      :show="settingsOpen"
+      :version="version"
+      @update:show="settingsOpen = $event"
+      @changed="chat.refreshProviders"
     />
   </div>
 </template>
 
 <script setup lang="ts">
 /**
- * 主布局容器：协调会话、聊天状态、Provider 与临时工作目录。
+ * 主布局容器：协调会话、聊天状态、Provider、设置与临时工作目录。
  */
 
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import type { SessionStatus, SessionSummary } from '@shared/ipc/contracts';
+import type { ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import ChatView from '@/modules/chat/views/ChatView.vue';
 import { projectEvents } from '@/modules/chat/projection';
 import { useChatStore } from '@/modules/chat/stores/chat.store';
 import SessionSidebar from '@/modules/session/components/SessionSidebar.vue';
 import { useSessionStore } from '@/modules/session/stores/session.store';
-import AppInspector from './AppInspector.vue';
+import SettingsModal from '@/modules/settings/views/SettingsModal.vue';
 import AppStatusbar from './AppStatusbar.vue';
-import AppTitlebar from './AppTitlebar.vue';
+import { useAppMeta } from './use-app-meta';
+import { useSessionStatusSync } from './use-session-status';
 
 const sessions = useSessionStore();
 const chat = useChatStore();
 const { sessions: sessionList, activeId } = storeToRefs(sessions);
 const { providers, providerId, rootPaths, runningBySession, error } = storeToRefs(chat);
+
+const { version, settingsOpen, effectiveTheme, load: loadAppMeta, toggleTheme } = useAppMeta();
 
 const projection = computed(() => {
   const id = activeId.value;
@@ -71,10 +81,11 @@ const projection = computed(() => {
 
 const running = computed(() => Boolean(activeId.value && runningBySession.value[activeId.value]));
 const providerLabel = computed(
-  () => providers.value.find((provider) => provider.id === providerId.value)?.name ?? ''
+  () =>
+    providers.value.find((provider: ProviderPublic) => provider.id === providerId.value)?.name ?? ''
 );
 const rootLabel = computed(() =>
-  rootPaths.value.length ? `${t('app.chooseRoot')} (${rootPaths.value.length})` : t('app.noRoot')
+  rootPaths.value.length ? `${t('app.workspace')} · ${rootPaths.value.length}` : t('app.noRoot')
 );
 const disabledReason = computed(() => {
   if (!providerId.value) return t('chat.needsProvider');
@@ -87,24 +98,7 @@ const errors = computed(() =>
   )
 );
 
-const statusMap: Record<string, SessionStatus> = {
-  idle: 'idle',
-  running: 'running',
-  waiting_approval: 'waiting_approval',
-  completed: 'completed',
-  failed: 'failed',
-  cancelled: 'interrupted'
-};
-
-/**
- * 把投影状态同步到侧栏，保持运行状态可见。
- */
-watch(
-  () => projection.value.status,
-  (status) => {
-    if (activeId.value) sessions.setLocalStatus(activeId.value, statusMap[status] ?? 'idle');
-  }
-);
+useSessionStatusSync(sessions, projection, activeId);
 
 /**
  * 切换会话时读取历史，并优先使用会话保存的 Provider。
@@ -117,7 +111,10 @@ watch(
     const sessionProvider = sessionList.value.find(
       (session: SessionSummary) => session.id === id
     )?.providerId;
-    if (sessionProvider && providers.value.some((provider) => provider.id === sessionProvider)) {
+    if (
+      sessionProvider &&
+      providers.value.some((provider: ProviderPublic) => provider.id === sessionProvider)
+    ) {
       chat.setProvider(sessionProvider);
     }
   },
@@ -131,10 +128,16 @@ const createSession = async (): Promise<void> => {
   await sessions.create(providerId.value);
 };
 
+/**
+ * 选中会话。
+ */
 const selectSession = (id: string): void => {
   sessions.select(id);
 };
 
+/**
+ * 发送消息；没有会话时先创建。
+ */
 const send = async (prompt: string): Promise<void> => {
   if (!activeId.value) {
     const created = await sessions.create(providerId.value);
@@ -143,6 +146,9 @@ const send = async (prompt: string): Promise<void> => {
   if (activeId.value) await chat.send(activeId.value, prompt);
 };
 
+/**
+ * 停止当前会话的 Run。
+ */
 const stop = async (): Promise<void> => {
   if (activeId.value) await chat.stop(activeId.value);
 };
@@ -150,6 +156,7 @@ const stop = async (): Promise<void> => {
 onMounted(async () => {
   await chat.initialize();
   await sessions.load();
+  await loadAppMeta();
 });
 
 onBeforeUnmount(() => {
@@ -161,23 +168,19 @@ onBeforeUnmount(() => {
 .nh-layout {
   display: grid;
   height: 100%;
-  grid-template-rows: 44px minmax(0, 1fr) 24px;
+  grid-template-rows: minmax(0, 1fr) 32px;
   background: var(--nh-color-bg-base);
 }
 
 .nh-layout__body {
   display: grid;
   min-height: 0;
-  grid-template-columns: 240px minmax(0, 1fr) 240px;
+  grid-template-columns: 264px minmax(0, 1fr);
 }
 
-@media (width <= 1100px) {
+@media (width <= 1024px) {
   .nh-layout__body {
-    grid-template-columns: 220px minmax(0, 1fr);
-  }
-
-  .nh-layout__inspector {
-    display: none;
+    grid-template-columns: 240px minmax(0, 1fr);
   }
 }
 </style>

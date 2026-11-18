@@ -1,47 +1,23 @@
 /**
- * 全局基础样式：只定义语义 token、盒模型与基础排版，不承载页面设计。
+ * 全局基础样式：只定义尺寸、字体、动效与盒模型，颜色由 theme-palette 注入。
  */
 
 :root {
   color-scheme: light;
 
-  /**
-   * 背景与表面
-   */
-  --nh-color-bg-base: #fff;
-  --nh-color-bg-elevated: #f7f8fa;
-  --nh-color-bg-hover: #eef0f4;
-
-  /**
-   * 文本
-   */
-  --nh-color-text-primary: #1f2329;
-  --nh-color-text-secondary: #5c6570;
-  --nh-color-text-disabled: #a8b0ba;
-
-  /**
-   * 边框、强调、状态
-   */
-  --nh-color-border: #e3e6eb;
-  --nh-color-accent: #3b82f6;
-  --nh-color-success: #16a34a;
-  --nh-color-warning: #d97706;
-  --nh-color-danger: #dc2626;
-
-  /**
-   * 尺寸、间距与圆角
-   */
+  /** 尺寸、间距与圆角 */
   --nh-radius-sm: 4px;
   --nh-radius-md: 8px;
   --nh-radius-lg: 12px;
   --nh-space-sm: 8px;
   --nh-space-md: 16px;
   --nh-space-lg: 24px;
+  --nh-shadow-card: 0 1px 2px rgb(28 27 25 / 4%), 0 8px 24px rgb(28 27 25 / 5%);
+  --nh-shadow-float: 0 2px 8px rgb(28 27 25 / 6%), 0 16px 48px rgb(28 27 25 / 8%);
   --nh-shadow-popover: 0 8px 24px rgb(0 0 0 / 12%);
+  --nh-highlight: inset 0 1px 0 rgb(255 255 255 / 70%);
 
-  /**
-   * 字体与动效
-   */
+  /** 字体与动效 */
   --nh-font-sans: -apple-system, 'SF Pro Text', 'Segoe UI Variable', 'Segoe UI', sans-serif;
   --nh-font-mono: 'SF Mono', 'Cascadia Code', ui-monospace, monospace;
   --nh-duration-fast: 120ms;
@@ -53,22 +29,23 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --nh-color-bg-base: #0b0f14;
-  --nh-color-bg-elevated: #121821;
-  --nh-color-bg-hover: #1a2330;
-  --nh-color-text-primary: #e8edf5;
-  --nh-color-text-secondary: #9aa6b5;
-  --nh-color-text-disabled: #5c6778;
-  --nh-color-border: #263140;
-  --nh-color-accent: #5b9dff;
-  --nh-color-success: #4ade80;
-  --nh-color-warning: #fbbf24;
-  --nh-color-danger: #f87171;
+  --nh-shadow-card: 0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px rgb(0 0 0 / 20%);
+  --nh-shadow-float: 0 2px 8px rgb(0 0 0 / 35%), 0 16px 48px rgb(0 0 0 / 30%);
+  --nh-shadow-popover: 0 8px 24px rgb(0 0 0 / 40%);
+  --nh-highlight: inset 0 1px 0 rgb(255 255 255 / 6%);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 html,
 body,
-#app {
+#app,
+#app > *,
+.n-message-provider {
   height: 100%;
   margin: 0;
   background: var(--nh-color-bg-base);
@@ -81,22 +58,12 @@ body {
   line-height: 1.6;
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
 button,
 input,
 textarea,
 select {
   color: inherit;
   font: inherit;
-}
-
-button {
-  cursor: pointer;
 }
 
 button:disabled {
@@ -112,4 +79,35 @@ pre {
   margin: 0;
   font-family: var(--nh-font-mono);
   font-size: 12px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--nh-color-accent) 24%, transparent);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: var(--nh-color-border);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto;
+    transition-duration: 0.01ms;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
 }
