@@ -8,7 +8,7 @@
     :bordered="false"
     @update:show="emit('update:show', $event)"
   >
-    <NTabs v-if="show" default-value="provider" type="line" animated>
+    <NTabs default-value="provider" type="line" animated>
       <NTabPane name="provider" :tab="t('settings.provider')">
         <p class="nh-settings__hint">{{ t('settings.providerHint') }}</p>
         <ProviderSettingsPanel @changed="emit('changed')" />
