@@ -6,6 +6,7 @@ import type { EventPayloadMap, NexusEvent } from '@shared/events';
 import type {
   ChatAskUser,
   ChatApproval,
+  ChatChange,
   ChatMessageView,
   ChatProjection,
   ChatToolCall,
@@ -73,6 +74,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
   const messages: ChatMessageView[] = [];
   const approvals: ChatApproval[] = [];
   const askUsers: ChatAskUser[] = [];
+  const changes: ChatChange[] = [];
   const usage = emptyUsage();
   let lastAssistant: ChatMessageView | undefined;
   let runId: string | undefined;
@@ -137,6 +139,29 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
         message.superseded = true;
         if (lastAssistant === message) lastAssistant = undefined;
       }
+      continue;
+    }
+
+    if (event.type === 'checkpoint.created') {
+      const payload = event.payload as EventPayloadMap['checkpoint.created'];
+      if (payload.path) {
+        changes.push({
+          checkpointId: payload.checkpointId,
+          path: payload.path,
+          label: payload.label,
+          ...(payload.existed === undefined ? {} : { existed: payload.existed }),
+          ...(event.runId ? { runId: event.runId } : {}),
+          createdAt: event.ts,
+          restored: false
+        });
+      }
+      continue;
+    }
+
+    if (event.type === 'checkpoint.restored') {
+      const payload = event.payload as EventPayloadMap['checkpoint.restored'];
+      const change = changes.find((item) => item.checkpointId === payload.checkpointId);
+      if (change) change.restored = true;
       continue;
     }
 
@@ -333,6 +358,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
     messages: messages.filter((message) => !message.superseded && !message.hidden),
     approvals,
     askUsers,
+    changes,
     usage,
     running,
     status,

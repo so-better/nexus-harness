@@ -1,6 +1,6 @@
 <template>
   <div class="nh-layout">
-    <div class="nh-layout__body">
+    <div class="nh-layout__body" :class="{ 'nh-layout__body--inspector': changesOpen }">
       <SessionSidebar
         :sessions="sessions.sessions"
         :active-id="sessions.activeId"
@@ -42,6 +42,15 @@
         @answer-user="answerUser"
         @edit-message="editMessage"
         @regenerate-message="regenerateMessage"
+        @toggle-changes="changesOpen = !changesOpen"
+      />
+
+      <ChangeReviewPanel
+        v-if="changesOpen"
+        :changes="projection.changes"
+        :session-id="activeId"
+        @close="changesOpen = false"
+        @open-file="openFile"
       />
     </div>
 
@@ -74,6 +83,8 @@ import type { AgentMode, ProviderPublic, SessionSummary } from '@shared/ipc/cont
 import type { AskUserAnswer } from '@shared/ask-user';
 import { setLocale, t } from '@/app/i18n';
 import ChatView from '@/modules/chat/views/ChatView.vue';
+import ChangeReviewPanel from '@/modules/chat/components/ChangeReviewPanel.vue';
+import { openCheckpointFile } from '@/modules/chat/api/checkpoint.api';
 import { projectEvents } from '@/modules/chat/projection';
 import { useChatStore } from '@/modules/chat/stores/chat.store';
 import SessionSidebar from '@/modules/session/components/SessionSidebar.vue';
@@ -94,6 +105,7 @@ const { providers, providerId, modelId, models, roots, rootPaths, runningBySessi
 
 const { version, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
 const focusMessage = ref<{ id: string; token: number; sessionId: string }>();
+const changesOpen = ref(false);
 let unsubscribeSessionChanges: (() => void) | undefined;
 let focusSequence = 0;
 
@@ -159,6 +171,18 @@ const createSession = async (): Promise<void> => {
  */
 const selectSession = (id: string): void => {
   sessions.select(id);
+};
+
+/**
+ * 用系统默认应用打开变更文件。
+ */
+const openFile = async (checkpointId: string): Promise<void> => {
+  if (!activeId.value) return;
+  try {
+    await openCheckpointFile(activeId.value, checkpointId);
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : t('change.openFailed'));
+  }
 };
 
 /**
@@ -385,9 +409,17 @@ onBeforeUnmount(() => {
   grid-template-columns: 288px minmax(0, 1fr);
 }
 
+.nh-layout__body--inspector {
+  grid-template-columns: 288px minmax(0, 1fr) 520px;
+}
+
 @media (width <= 1024px) {
   .nh-layout__body {
     grid-template-columns: 268px minmax(0, 1fr);
+  }
+
+  .nh-layout__body--inspector {
+    grid-template-columns: 268px minmax(0, 1fr) 460px;
   }
 }
 </style>

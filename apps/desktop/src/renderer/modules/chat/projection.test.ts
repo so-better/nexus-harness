@@ -224,6 +224,36 @@ describe('projectEvents', () => {
     ]);
   });
 
+  it('collects checkpoint changes and marks restored files', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'checkpoint.created',
+        payload: { checkpointId: 'cp-1', label: 'write_file', path: '/tmp/a.txt' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'checkpoint.restored',
+        payload: { checkpointId: 'cp-1' }
+      })
+    ]);
+
+    expect(projection.changes).toEqual([
+      {
+        checkpointId: 'cp-1',
+        path: '/tmp/a.txt',
+        label: 'write_file',
+        runId: 'run-1',
+        createdAt: 1,
+        restored: true
+      }
+    ]);
+  });
+
   it('hides superseded messages from the visible conversation', () => {
     const projection = projectEvents([
       event({

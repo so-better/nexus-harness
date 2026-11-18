@@ -90,7 +90,10 @@ export const eventPayloadSchemas = {
   }),
   'checkpoint.created': z.object({
     checkpointId: z.string(),
-    label: z.string()
+    label: z.string(),
+    path: z.string().optional(),
+    existed: z.boolean().optional(),
+    toolCallId: z.string().optional()
   }),
   'checkpoint.restored': z.object({
     checkpointId: z.string()

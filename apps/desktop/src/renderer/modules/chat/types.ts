@@ -72,10 +72,21 @@ export interface ChatAskUser {
   runId?: string;
 }
 
+export interface ChatChange {
+  checkpointId: string;
+  path: string;
+  label: string;
+  existed?: boolean;
+  runId?: string;
+  createdAt: number;
+  restored: boolean;
+}
+
 export interface ChatProjection {
   messages: ChatMessageView[];
   approvals: ChatApproval[];
   askUsers: ChatAskUser[];
+  changes: ChatChange[];
   usage: ChatUsage;
   runId?: string;
   running: boolean;

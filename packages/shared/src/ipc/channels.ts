@@ -39,6 +39,8 @@ export const IPC_CHANNELS = {
   agentAnswerUser: 'agent:answerUser',
   filesSaveAs: 'files:saveAs',
   approvalResolve: 'approval:resolve',
+  checkpointDiff: 'checkpoint:diff',
+  checkpointOpenFile: 'checkpoint:openFile',
   checkpointRestore: 'checkpoint:restore',
   artifactRead: 'artifact:read'
 } as const;

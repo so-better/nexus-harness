@@ -39,6 +39,31 @@ describe('CheckpointService', () => {
     await expect(readFile(file, 'utf8')).resolves.toBe('before');
   });
 
+  it('returns the original and current text for review', async () => {
+    const file = join(workspace, 'review.txt');
+    await writeFile(file, 'before', 'utf8');
+    const checkpoint = await checkpoints.create({
+      sessionId: 'session-1',
+      rootPath: workspace,
+      filePath: file
+    });
+    await writeFile(file, 'after', 'utf8');
+
+    await expect(checkpoints.diff('session-1', checkpoint.checkpointId)).resolves.toMatchObject({
+      path: file,
+      existed: true,
+      oldText: 'before',
+      newText: 'after',
+      binary: false
+    });
+  });
+
+  it('rejects unsafe checkpoint ids', async () => {
+    await expect(checkpoints.diff('../session', '../checkpoint')).rejects.toThrow(
+      'CHECKPOINT_INVALID_ID'
+    );
+  });
+
   it('removes files that did not exist before', async () => {
     const file = join(workspace, 'new.txt');
     const checkpoint = await checkpoints.create({

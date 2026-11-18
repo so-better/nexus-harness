@@ -49,6 +49,8 @@ const bridge: NexusBridge = {
     test: (input) => ipcRenderer.invoke(IPC_CHANNELS.providerTest, input)
   },
   checkpoint: {
+    diff: (input) => ipcRenderer.invoke(IPC_CHANNELS.checkpointDiff, input),
+    openFile: (input) => ipcRenderer.invoke(IPC_CHANNELS.checkpointOpenFile, input),
     restore: (input) => ipcRenderer.invoke(IPC_CHANNELS.checkpointRestore, input)
   },
   artifact: {

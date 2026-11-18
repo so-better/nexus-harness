@@ -244,7 +244,7 @@ export class AgentService {
       });
       const checkpointRoot = toolset ? await toolset.resolvePath('.') : undefined;
 
-      const executeTool = async (call: { name: string; arguments: unknown }) => {
+      const executeTool = async (call: { id?: string; name: string; arguments: unknown }) => {
         if (call.name === 'ask_user') {
           const parsed = askUserInputSchema.safeParse(call.arguments);
           if (!parsed.success) {
@@ -361,6 +361,8 @@ export class AgentService {
           };
         }
 
+        let checkpointInfo:
+          { checkpointId: string; label: string; path: string; existed: boolean } | undefined;
         if (call.name === 'write_file' || call.name === 'apply_patch') {
           const pathArgument = getPathArgument(call.arguments);
           if (pathArgument) {
@@ -376,21 +378,32 @@ export class AgentService {
                 filePath,
                 label: call.name
               });
-              eventBus.publish(
-                createNexusEvent({
-                  sessionId: input.sessionId,
-                  runId,
-                  seq: 1,
-                  type: 'checkpoint.created',
-                  payload: { checkpointId: checkpoint.checkpointId, label: call.name }
-                })
-              );
+              checkpointInfo = {
+                checkpointId: checkpoint.checkpointId,
+                label: call.name,
+                path: filePath,
+                existed: checkpoint.existed
+              };
             } catch {
               // 路径非法时交由工具返回结构化错误，不创建检查点
             }
           }
         }
         const result = await toolset.execute(call.name, call.arguments);
+        if (result.ok && checkpointInfo) {
+          eventBus.publish(
+            createNexusEvent({
+              sessionId: input.sessionId,
+              runId,
+              seq: 1,
+              type: 'checkpoint.created',
+              payload: {
+                ...checkpointInfo,
+                ...(call.id ? { toolCallId: call.id } : {})
+              }
+            })
+          );
+        }
         if (!result.ok || result.output.length <= TOOL_OUTPUT_ARTIFACT_CHAR_LIMIT) return result;
 
         try {

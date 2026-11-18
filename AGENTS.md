@@ -85,13 +85,13 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 ### 1.4 核心体验流程
 
 1. **首次启动**：选择或配置模型提供商，API Key 随本地 Provider 配置保存；主题跟随系统。
-2. **打开工作区或直接开始**：可先选择工作区目录并确认信任级别，也可不打开工作区直接开始任务；建立文件索引，展示工作区文件树或临时 roots。
+2. **打开工作区或直接开始**：可先选择工作区目录并确认信任级别，也可不打开工作区直接开始任务；建立文件索引；临时 roots 在会话头展示。
 3. **描述任务**：在输入区写目标；输入 `@` 引用工作区或临时 root 内的文件，也可添加文件/文件夹作为临时 root；输入 `/` 浏览并主动调用 Skill；选择审批策略。
 4. **生成计划**：Plan 模式下 Agent 只读分析并给出步骤与验收标准，不执行任何本地操作；用户确认后切换到 Build 执行。
 5. **执行**：流式输出思考与工具调用；写文件前展示 diff，危险命令请求审批；需要澄清时以行内卡片提问，Run 暂停等待回答；工具生成或下载的文件保存到 `<userData>/files` 并在会话流中展示文件卡片；用户可随时停止回复、编辑用户消息重发，或对最后一条回复重新生成。
 6. **验证**：按任务类型运行验证命令（代码任务跑测试、类型检查与 lint，文档任务检查格式与引用，数据任务运行脚本校验输出）；失败则进入自修复循环。
 7. **审阅**：按文件或 hunk 查看 diff，接受或回滚；检查点可回到任意执行步骤。
-8. **完成**：给出变更摘要、验证结果、token 与费用；AI 输出文件可预览、下载或另存到用户指定目录；失败可一键回滚。
+8. **完成**：给出变更摘要、验证结果、token 与费用；AI 输出文件可另存到用户指定目录，由专业软件打开；失败可一键回滚。
 
 失败路径必须明确：模型超时、提供商报错、工具失败、审批拒绝、验证不通过，都要有可操作的下一步，不能停在无反馈的加载态。
 
@@ -103,7 +103,7 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 ├──────────┬──────────────────────┬────────────┤
 │ 侧栏      │ 主区                 │ 检查器      │
 │ 会话列表  │ 会话标签 / 会话流     │ 上下文/用量 │
-│ 文件树/roots │ diff / 编辑器 / 终端 │ 审批详情   │
+│ roots       │ 变更审阅 / diff / 终端 │ 审批详情   │
 │ 扩展面板  │                      │            │
 ├──────────┴──────────────────────┴────────────┤
 │ 状态栏：Agent 状态 / tokens / 成本 / 插件条目  │
@@ -115,7 +115,7 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 | 界面 | 职责 |
 | --- | --- |
 | Session 视图 | 多会话标签、对话流、工具调用、审批、文件卡片、计划与结果 |
-| Workspace 视图 | 工作区或临时 roots 的文件树、Monaco、diff、终端 |
+| Workspace 视图 | 临时 roots、变更审阅、diff、终端 |
 | Command Palette | 全局命令、文件跳转、设置入口 |
 | Settings | 提供商、模型、权限、外观、快捷键、高级、关于（弹窗） |
 | Extensions | 插件、Skill、MCP 的扫描结果、启用/禁用与权限查看（弹窗） |
@@ -265,7 +265,6 @@ Session   1 ── n Event
 | 状态 | Pinia | 4.x |
 | 契约校验 | zod | 4.x |
 | 打包 | electron-builder | 26.x |
-| 代码编辑器 | Monaco Editor | 0.57.x |
 | 终端 | @xterm/xterm | 6.x |
 | Markdown | markdown-it + shiki | 15.x / 4.x |
 | 文档生成 | docx / exceljs / pptxgenjs / pdfkit | 9.x / 4.x / 4.x / 0.20.x |
@@ -308,7 +307,7 @@ nexus-harness/
 │        │  │  ├─ mcp/           # MCP 配置扫描、进程与工具注册
 │        │  │  ├─ plugin-host/   # 插件发现、加载、权限、事件分发
 │        │  │  ├─ storage/       # 持久化（会话、设置、工作区索引）
-│        │  │  ├─ files/         # AI 输出文件存储、预览地址与另存为
+│        │  │  ├─ files/         # AI 输出文件存储与另存为
 │        │  │  ├─ search/        # 跨会话全文索引与查询
 │        │  │  ├─ export/        # 会话导出（Markdown/HTML/PDF/PNG）
 │        │  └─ security/         # 沙箱、路径白名单、命令拦截
@@ -580,7 +579,7 @@ interface ImageProvider {
 - 工具输出超过阈值时截断，并把完整内容落为 Artifact，事件中保留引用。
 - 优先按需读取文件，不把整个工作区或全部 roots 塞入上下文。
 - `@` 在所有 roots 内检索，标注 root、路径与行号；普通文件引用只插入路径，图片引用读取内容并作为视觉内容发送。
-- AI 输出文件默认放入元数据与文件引用；图片作为视觉内容发送，其他二进制内容由用户预览或按需读取。
+- AI 输出文件默认放入元数据与文件引用；图片作为视觉内容发送，其他二进制内容只保留文件引用，由用户另存后用专业软件打开。
 - 本地 PDF / Word / Excel / PPT / ZIP 在读取时抽取文本注入上下文，限制文件大小、条目数与解压后体积，防止解压炸弹。
 - 扫描版 PDF 无文本层时明确提示，不编造内容。
 - 图片输入受大小上限约束，超限时压缩或拒绝并提示。
@@ -627,7 +626,6 @@ interface ImageProvider {
 | `read_file` | read | 否 |
 | `list_dir` / `glob` | read | 否 |
 | `grep` | read | 否 |
-| `git_status` / `git_diff` | read | 否 |
 | `write_file` | write | 是 |
 | `apply_patch` | write | 是 |
 | `run_command` | execute | 是 |
@@ -640,8 +638,6 @@ interface ImageProvider {
 | `fetch` | network | 是（默认关闭） |
 | `search_images` / `search_videos` | network | 是 |
 | `generate_image` | network | 是（计费操作） |
-
-git 工具仅在检测到 Git 仓库时注册；非 Git 工作区不显示。
 
 `save_*` 工具写入 `<userData>/files`，不触发工作区写审批，但必须记录 `file.created` 并受大小与类型限制。
 
@@ -681,14 +677,6 @@ git 工具仅在检测到 Git 仓库时注册；非 Git 工作区不显示。
 - `stdio` 使用 `command` / `args` / `env`；`http` 使用 `url` / `headers`。
 - `autoStart` 默认 `false`；首次启用必须由用户在扩展页确认。
 
-#### Git 策略
-
-- Git 工具默认只读：`status`、`diff`、`log`；不自动 `commit`、`push`、`checkout`、`reset`。
-- 写入前若工作区有未提交改动，提示用户并展示涉及文件；不得自动 stash 或丢弃改动。
-- 禁止强制推送、改写历史或切换分支；这些只能由用户显式执行。
-- 合并冲突、分离 HEAD、未跟踪大文件等情况必须如实展示，不自动处理。
-- 检查点不依赖 Git，不改变仓库状态；回滚只恢复被修改文件。
-
 执行顺序固定为：
 
 1. 写入 `tool.requested`，记录完整输入。
@@ -714,7 +702,7 @@ git 工具仅在检测到 Git 仓库时注册；非 Git 工作区不显示。
 - 写入 `files` 目录属于宿主内部存储，不触发工作区写审批，但必须记录 `file.created` 并受大小与类型限制。
 - `fetch` 下载的内容作为文件保存，不把二进制内容直接塞进上下文。
 - 不把 `files` 目录加入工作区白名单；Agent 通过工具返回的文件引用访问，路径解析由宿主完成。
-- 会话流展示文件卡片，提供预览、下载与另存为；预览/下载地址映射到 `files` 目录，不暴露任意路径。
+- 会话流展示文件卡片，只提供另存为；不内联预览或暴露任意路径。
 - 另存为通过系统文件对话框选择目标目录，由用户确认后复制。
 - AI 输出文件默认永久保留，不自动清理；用户可手动清理，删除会话时可选择清理关联文件。
 
@@ -723,7 +711,7 @@ git 工具仅在检测到 Git 仓库时注册；非 Git 工作区不显示。
 - 文本模型通过 `generate_image` 工具调用配置好的图像模型；用户也可以显式发起。
 - 对话模型不支持工具调用时，用户仍可通过显式命令发起图像生成。
 - 参数包含 prompt、size、count、referenceFileIds（图生图）与 seed；返回 fileId 列表、尺寸与用量。
-- 结果写入 `<userData>/files`，会话流以图片卡片展示，支持预览、下载与另存为。
+- 结果写入 `<userData>/files`，会话流以图片卡片展示并支持另存为。
 - 生成结果同时作为图片内容返回给对话模型，模型可基于结果继续修改。
 - 未配置图像模型时不注册该工具，返回结构化提示并引导用户到设置。
 - 图像生成按次计费，记录 `usage.recorded`（`modality: image`）；默认逐次审批，可配置预算与速率限制。
@@ -760,7 +748,7 @@ git 工具仅在检测到 Git 仓库时注册；非 Git 工作区不显示。
 
 Session 可以不绑定 Workspace，也没有任何 Session RootGrant；这是合法状态，不得阻止发送消息或开始 Run。
 
-- 空 scope 下 Run 仍可对话；只提供与本地路径无关的能力，当前不注册文件、Git、命令等本地工具，也不创建检查点。
+- 空 scope 下 Run 仍可对话；只提供与本地路径无关的能力，当前不注册文件、命令等本地工具，也不创建检查点。
 - 允许路径集合为空，所有本地路径访问一律拒绝；不因模型请求自动发起授权。
 - 不注入工作区索引、项目规则或文件上下文；只使用对话内容、技能元信息与用户显式输入。
 - 若残留工具调用或模型要求本地操作，返回 `TOOL_WORKSPACE_REQUIRED`，不得静默扩大 scope。
@@ -905,8 +893,7 @@ requires: [read, write, execute]
 | 消息 | `message.user.footer` / `.actions` | 用户消息尾、操作 |
 | 工具 | `toolcall.body` / `toolcall.footer` | 工具调用内容与尾部 |
 | 审批 | `approval.details` | 审批详情附加信息 |
-| 工作区 | `filetree.header` / `filetree.row` / `filetree.actions` | 文件树顶部、行装饰、操作 |
-| 工作区 | `editor.toolbar` / `diff.toolbar` / `diff.hunk.footer` | 编辑器与 diff |
+| 工作区 | `diff.toolbar` / `diff.hunk.footer` | 变更审阅与 diff |
 | 工作区 | `terminal.toolbar` | 终端工具条 |
 | 文件 | `filecard.actions` / `filecard.footer` | 输出文件卡片 |
 | 设置 | `settings.section` | 设置页附加区 |
@@ -914,7 +901,7 @@ requires: [read, write, execute]
 
 插件只能渲染在宿主给定的容器内，不得改变布局或遮挡宿主操作。
 
-文件预览器、导出格式、首次启动引导等扩展点需要执行逻辑或影响主流程，当前不开放；后续以 `previewers`、`exporters`、`onboarding` 贡献点单独评审。
+导出格式、首次启动引导等扩展点需要执行逻辑或影响主流程，当前不开放；后续以 `exporters`、`onboarding` 贡献点单独评审。
 
 #### 事件钩子
 
@@ -1072,7 +1059,7 @@ interface SlotContext {
 - 文件系统是扩展的唯一事实来源，数据库只保存投影状态，启动时以扫描结果为准。
 - RootGrant 以 `session_roots` 持久化；会话删除时清理授权记录，不删除用户文件。
 - 检查点把改动文件复制到 `<userData>/checkpoints/<sessionId>/<checkpointId>/`；恢复时按文件覆盖并先展示 diff。
-- AI 输出文件只写入 `<userData>/files`，元数据写 `files` 表；预览/下载 URL 由主进程映射到该目录，不暴露任意路径。
+- AI 输出文件只写入 `<userData>/files`，元数据写 `files` 表；文件通过 fileId 访问，不暴露任意路径。
 - 搜索索引随 `message.completed` 增量更新，结果中的会话标题实时从 `sessions` 读取；删除会话时清理索引，短关键词或 FTS5 不可用时降级为 LIKE。
 - 会话导出写入 `<userData>/files/exports`，通过文件服务分配 fileId；最终保存路径由用户选择。
 - 另存为通过系统文件对话框选择目标目录，用户确认后复制；不自动写入工作区。
@@ -1107,9 +1094,9 @@ interface SlotContext {
 | 插件目录篡改 | `<userData>/plugins` | 入口 `realpath` 限制、权限网关、事件审计 |
 | MCP 服务不可信 | 外部 MCP Server | 逐服务启用与信任、工具命名空间隔离、默认不自动启动 |
 | 渲染层 XSS | Markdown、插件 UI | 禁用原始 HTML、CSP、输出转义、不向渲染层暴露 Node |
-| 不可信输出文件 | 下载或生成的文件 | 限制大小与类型、预览沙箱、不自动打开或执行 |
+| 不可信输出文件 | 下载或生成的文件 | 限制大小与类型、不内联预览、不自动打开或执行 |
 | 图像生成滥用 | `generate_image` | 内容策略、逐次审批、预算与速率限制 |
-| 文件路径泄露 | 预览/下载地址 | 受控协议映射 `<userData>/files`，不暴露任意路径 |
+| 文件路径泄露 | 文件访问/另存为 | 仅通过 fileId 访问 `<userData>/files`，不暴露任意路径 |
 | SSRF | `fetch`、图像、MCP HTTP | DNS 解析后拒绝私网/回环/元数据地址，限制重定向与响应大小 |
 | 供应链风险 | 依赖包 | 锁定版本、最小依赖、依赖变更评审 |
 
@@ -1227,7 +1214,7 @@ interface SlotContext {
 ### 4.11 Agent 模式（Plan / Build）
 
 - 每个 Session 有一个当前模式 `plan | build`，默认 `build`；未信任工作区默认 `plan`，确认信任后可切换。
-- Plan 模式只读：允许 `read_file`、`list_dir`、`glob`、`grep`、`git_status`、`git_diff`、`ask_user`、`search_skills`、`read_skill`。
+- Plan 模式只读：允许 `read_file`、`list_dir`、`glob`、`grep`、`ask_user`、`search_skills`、`read_skill`。
 - Plan 模式禁止所有有副作用的本地操作：不写文件、不执行命令、不联网、不启动 MCP、不创建检查点、不修改设置与授权。
 - Plan 模式下 `write_file`、`apply_patch`、`run_command`、`checkpoint`、`fetch`、`generate_image` 与全部 MCP 工具均不可用。
 - Plan 产出目标、步骤、涉及文件、风险与验收标准；用户确认后切换到 Build 执行。
@@ -1391,7 +1378,7 @@ interface AskUserAnswer {
 
 - 冷启动到可交互目标 < 1.5s（Apple Silicon 基准）；Windows 同档硬件不得明显劣化。
 - 输入与滚动保持 60fps；单次主线程任务 < 16ms，重计算放入 Worker 或主进程。
-- 编辑器、终端、图表等重模块全部懒加载，首屏只加载当前界面。
+- 终端、图表等重模块全部懒加载，首屏只加载当前界面。
 - 列表超过 50 项必须虚拟化；流式消息采用增量更新，禁止整列表重渲染。
 - 新增依赖必须评估包体积与启动开销，核心界面不引入重型 UI 依赖。
 - token 属于产品预算：同等任务优先低 token 方案；新增提示词、工具 schema、自动注入上下文与默认工具输出必须有成本依据。
@@ -1539,7 +1526,7 @@ Pinia：
 - 不引入 URL 路由；当前会话、surface、面板与弹窗状态由 Pinia 管理。
 - 设置与扩展以弹窗展示；命令面板、通知与 IPC 只切换状态，不跳转路由。
 - 深链接通过带 `sessionId` 的 IPC 激活窗口并切换会话。
-- 编辑器、终端、图表等重面板使用 `defineAsyncComponent` 懒加载。
+- 终端、图表等重面板使用 `defineAsyncComponent` 懒加载。
 - 禁止在组件内维护独立导航状态或硬编码视图字符串。
 
 Composables：
@@ -1554,7 +1541,7 @@ Composables：
 - preload 只通过 `contextBridge` 暴露 `window.nexus`，按命名空间组织：`nexus.agent`、`nexus.session`、`nexus.workspace`、`nexus.files`、`nexus.artifact`、`nexus.search`、`nexus.plugin`、`nexus.settings`。
 - 会话重命名、置顶、导出与跨会话搜索必须走 `nexus.session` / `nexus.search` 的类型化方法。
 - 工作区绑定、root 授权与撤销必须走 `nexus.workspace` / `nexus.session` 的类型化方法，渲染层不得直接拼接路径或修改授权状态。
-- `nexus.files` 提供文件列表、预览地址与另存为，禁止渲染层直接拼接 `files` 路径。
+- `nexus.files` 提供另存为，禁止渲染层直接拼接 `files` 路径。
 - 通道常量与 zod schema 统一定义在 `packages/shared`，主进程与 preload 共用。
 - 主进程在处理前必须 `schema.parse`，禁止信任渲染进程输入。
 - 统一返回结构：
@@ -1613,7 +1600,7 @@ type Result<T> =
 - 提示词与上下文组装需要快照测试，防止无意改变行为。
 - 权限、SSRF、MCP 连接治理与工具结果归一化需要有集成测试。
 - 会话导出、跨会话搜索与消息编辑/重新生成需要有回归测试。
-- 工作区索引、diff hunk 审阅、Git 只读策略与通知需要有集成或回归测试。
+- 工作区索引、diff hunk 审阅、文件引用与通知需要有集成或回归测试。
 - 插件宿主需有 manifest 校验、权限拒绝、激活失败、热重载测试。
 - 关键用户流程用 Playwright 做 Electron 端到端测试。
 - 新增功能与修复缺陷必须附带对应测试；无法测试时需在提交说明中写明原因。
@@ -1671,7 +1658,7 @@ pnpm format         # Prettier
 | --- | --- |
 | M0 | 规范、monorepo 骨架、electron-vite + Vue、类型化 IPC、深浅主题与动效 token、布局占位、事件总线与扩展点骨架、CI 门禁 |
 | M1 | 单 Agent 闭环：多提供商、流式对话、工具调用、审批、多会话与重命名/置顶、自动标题、消息编辑/重生成/停止、可选工作区与路径授权、事件流持久化、文件输出与另存为、读改跑测验证 |
-| M2 | 工作区与多 root：文件树、Monaco、按 hunk 审阅、逐文件检查点回滚、工作区索引、Git 只读策略、终端、跨会话搜索、会话导出、后台任务通知 |
+| M2 | 变更审阅与回滚：改动文件列表、diff、按 hunk 审阅、逐文件检查点回滚；输入框 `@` 文件引用与轻量索引；终端与后台任务；跨会话搜索；会话导出；后台通知。明确不做文件树、Monaco、文件 IDE 与 Git 集成 |
 | M3 | 工具完善、图像生成、Office 生成、媒体搜索、Skill/MCP 目录扫描与注册 |
 | M4 | 插件宿主、目录扫描、Extensions 管理页、`token-usage` 示例 |
 | M5 | 产品化打包：发布流水线、签名、公证、自动更新、崩溃恢复 |
@@ -1681,8 +1668,8 @@ pnpm format         # Prettier
 | 阶段 | 完成标准 |
 | --- | --- |
 | M0 | 应用可启动；深浅主题可切换；IPC 往返成功；事件总线与插槽注册表骨架可用；`typecheck`、`lint` 全绿；渲染层无 Node 访问 |
-| M1 | 完成 3 个任务（代码修复、文档修改、脚本数据处理，可用临时会话）；未授权路径触发授权；多会话切换不中断后台 Run；标题可自动生成、重命名与置顶；消息可编辑重发、重新生成与停止；AI 输出文件可预览并另存；重启后会话与 roots 可恢复 |
-| M2 | 工作区与临时 roots 的文件树、编辑器、按 hunk diff 审阅可用；工作区索引尊重 `.gitignore`；逐文件检查点可恢复；终端 `cwd` 受 root 限制；跨会话搜索可跳转；会话可导出 Markdown/HTML/PDF/PNG；后台完成/失败有系统通知 |
+| M1 | 完成 3 个任务（代码修复、文档修改、脚本数据处理，可用临时会话）；未授权路径触发授权；多会话切换不中断后台 Run；标题可自动生成、重命名与置顶；消息可编辑重发、重新生成与停止；AI 输出文件可另存；重启后会话与 roots 可恢复 |
+| M2 | 改动文件可查看 diff 并按 hunk 审阅；逐文件检查点可恢复；`@` 可在 roots 内检索文件并尊重 `.gitignore`；终端 `cwd` 受 root 限制；跨会话搜索可跳转；会话可导出；后台完成/失败有系统通知 |
 | M3 | 工具覆盖既定清单；图像模型可配置并生成图片；Office 文件与媒体搜索可用；`<userData>/mcp` 可自动扫描接入；`<userData>/skills` 可自动注册并通过 `/skill` 调用 |
 | M4 | 将示例插件放入 `<userData>/plugins` 后自动注册；可启用/禁用；越权调用被拒绝；热重载不残留副作用 |
 | M5 | dmg 与 nsis 可安装；签名与公证通过；自动更新可用；崩溃恢复不丢事件；性能达标 |
@@ -1743,7 +1730,7 @@ CHANGELOG.md         # 版本变更记录
 | 路由 | 不引入 | 单主窗口 + 弹窗，视图由导航状态驱动 |
 | 路径授权 | 会话级 | 未授权路径弹窗，敏感目录始终拒绝 |
 | 检查点 | 逐文件快照 | 不依赖 git，工作区与临时会话通用 |
-| AI 输出文件 | `<userData>/files` | 永久保留，手动清理；预览/下载走受控地址，用户可另存为 |
+| AI 输出文件 | `<userData>/files` | 永久保留，手动清理；仅通过 fileId 另存为 |
 | Office/媒体工具 | 核心工具 | `save_*` 与图片/视频搜索内置 |
 | Prompt 策略 | 静态前缀 + 动态追加 | 动态上下文追加到用户消息，保护 prompt cache |
 | Prompt 行为 | 内置约束 | 反幻觉、工具诚实、链接真实性、文件生成自检 |
@@ -1756,7 +1743,7 @@ CHANGELOG.md         # 版本变更记录
 | 消息操作 | 编辑重发 / 重新生成 / 停止 | 旧消息标记 `superseded`，不物理删除 |
 | Diff 审阅 | 按 hunk 接受/拒绝 | 支持单文件与整个 Run 回滚 |
 | 工作区索引 | SQLite 增量索引 | 尊重 `.gitignore`，跳过二进制与大文件 |
-| Git 策略 | 只读 | 不自动 commit/push，脏工作区提示 |
+| Git 集成 | 不做 | 不提供 Git 工具、状态或提交能力 |
 | 通知 | 系统通知 + Dock/托盘 | 后台完成、失败或等待时提醒 |
 | 模型配置 | 支持 `extra_params` 与自定义 headers | 上下文窗口、token 价格、连接测试 |
 | 预算触发 | 交互提示可继续 | 后台或无人值守 Run 硬停 |
@@ -1803,7 +1790,7 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 路径访问基于 Workspace roots + Session RootGrant，未授权路径必须走授权流程。
 - [ ] 无工作区会话可正常发送与对话；不注册本地工具、不创建检查点，越界调用返回 `TOOL_WORKSPACE_REQUIRED`。
 - [ ] RootGrant 按会话隔离并写入事件，不跨会话继承。
-- [ ] AI 输出文件只写入 `<userData>/files`，默认永久保留、手动清理，预览/下载走受控地址，另存为由用户确认。
+- [ ] AI 输出文件只写入 `<userData>/files`，默认永久保留、手动清理，仅通过 fileId 另存为。
 - [ ] 工具结果统一归一化，文件与媒体落盘并记录来源，不把二进制直接塞进上下文。
 - [ ] Office 与文本生成文件写入 `files`，记录 `file.created`，不直接写工作区。
 - [ ] 本地 PDF/Word/Excel/PPT/ZIP 抽取有大小、条目数与解压体积限制。
@@ -1821,7 +1808,6 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 消息编辑/重发/重新生成/停止写入事件，旧消息标记 `superseded`。
 - [ ] Diff 支持按 hunk 接受/拒绝，未审阅变更会提示。
 - [ ] 工作区索引尊重 `.gitignore`，跳过二进制与大文件，文件监听防抖。
-- [ ] Git 工具只读，不自动 commit/push，脏工作区会提示。
 - [ ] 后台完成/失败/等待时发送系统通知，后台任务可终止。
 - [ ] 网络访问默认拒绝，按域名与提供商显式放行；URL 经 SSRF 校验并限制重定向与响应大小。
 - [ ] 发布产物已签名/公证，升级失败可回退。

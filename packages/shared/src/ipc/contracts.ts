@@ -170,6 +170,8 @@ export interface NexusBridge {
     search: (query: string) => Promise<Result<SessionSearchResult[]>>;
   };
   checkpoint: {
+    diff: (input: CheckpointDiffInput) => Promise<Result<CheckpointDiffResult>>;
+    openFile: (input: CheckpointOpenInput) => Promise<Result<CheckpointOpenResult>>;
     restore: (input: CheckpointRestoreInput) => Promise<Result<CheckpointRestoreResult>>;
   };
   artifact: {
@@ -449,10 +451,28 @@ export const checkpointRestoreInputSchema = z.object({
   checkpointId: z.string().min(1)
 });
 
+export const checkpointDiffInputSchema = checkpointRestoreInputSchema;
+export const checkpointOpenInputSchema = checkpointRestoreInputSchema;
+export const checkpointOpenResultSchema = z.object({ opened: z.boolean() });
+
+export const checkpointDiffResultSchema = z.object({
+  checkpointId: z.string().min(1),
+  path: z.string().min(1),
+  existed: z.boolean(),
+  oldText: z.string(),
+  newText: z.string(),
+  truncated: z.boolean(),
+  binary: z.boolean()
+});
+
 export const checkpointRestoreResultSchema = z.object({
   checkpointId: z.string().min(1),
   restored: z.number().int().nonnegative()
 });
 
 export type CheckpointRestoreInput = z.infer<typeof checkpointRestoreInputSchema>;
+export type CheckpointDiffInput = z.infer<typeof checkpointDiffInputSchema>;
+export type CheckpointOpenInput = z.infer<typeof checkpointOpenInputSchema>;
+export type CheckpointOpenResult = z.infer<typeof checkpointOpenResultSchema>;
+export type CheckpointDiffResult = z.infer<typeof checkpointDiffResultSchema>;
 export type CheckpointRestoreResult = z.infer<typeof checkpointRestoreResultSchema>;

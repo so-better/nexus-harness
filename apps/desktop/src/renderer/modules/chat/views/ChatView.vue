@@ -10,6 +10,10 @@
           {{ sessionStatusLabel(session.status) }}
         </NTag>
       </div>
+      <NButton text size="small" class="nh-chat__changes" @click="emit('toggle-changes')">
+        <template #icon><AppIcon name="file" :size="14" /></template>
+        {{ t('change.button') }} {{ changeCount }}
+      </NButton>
     </header>
 
     <SessionEmptyView
@@ -89,7 +93,7 @@
  */
 
 import { computed } from 'vue';
-import { NTag } from 'naive-ui';
+import { NButton, NTag } from 'naive-ui';
 import type {
   AgentMode,
   ProviderModel,
@@ -98,6 +102,7 @@ import type {
   SessionSummary
 } from '@shared/ipc/contracts';
 import type { AskUserAnswer } from '@shared/ask-user';
+import { t } from '@/app/i18n';
 import { sessionStatusLabel, sessionStatusTagColor } from '@/app/session-status';
 import AppIcon from '@/components/AppIcon.vue';
 import ApprovalCard from '../components/ApprovalCard.vue';
@@ -137,9 +142,16 @@ const emit = defineEmits<{
   'edit-message': [messageId: string, content: string];
   'regenerate-message': [messageId: string];
   'request-root': [];
+  'toggle-changes': [];
 }>();
 
 const isEmpty = computed(() => !props.session || props.projection.messages.length === 0);
+const changeCount = computed(
+  () =>
+    new Set(
+      props.projection.changes.filter((change) => !change.restored).map((change) => change.path)
+    ).size
+);
 const pendingApprovals = computed(() =>
   props.projection.approvals.filter((approval) => approval.status === 'pending')
 );
@@ -192,6 +204,10 @@ const pendingApprovals = computed(() =>
   letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.nh-chat__changes {
+  margin-left: auto;
 }
 
 .nh-chat__bottom {
