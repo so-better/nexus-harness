@@ -24,6 +24,11 @@ export const hasRunForSession = (sessionId: string): boolean =>
   getRunForSession(sessionId) !== undefined;
 
 /**
+ * 是否存在任意活跃 Run。
+ */
+export const hasActiveRuns = (): boolean => activeRuns.size > 0;
+
+/**
  * 按 runId 查询活跃 Run。
  */
 export const getRun = (runId: string): ActiveRun | undefined => activeRuns.get(runId);

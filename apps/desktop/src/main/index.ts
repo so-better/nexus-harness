@@ -19,6 +19,7 @@ import { EventStore } from './services/session/event-store';
 import { RunStore } from './services/session/run-store';
 import { SessionService } from './services/session/session-service';
 import { syncBuiltinPlugins } from './services/plugins/builtin-plugin-service';
+import { initializeAutoLaunch } from './services/settings/startup-settings';
 
 app.setName('Nexus');
 
@@ -44,6 +45,7 @@ if (!hasSingleInstanceLock) {
         destinationDir: getAppDataPaths().plugins
       });
       nativeTheme.themeSource = await loadThemeSource();
+      await initializeAutoLaunch();
 
       const db = initDatabase();
       const runStore = new RunStore(db);

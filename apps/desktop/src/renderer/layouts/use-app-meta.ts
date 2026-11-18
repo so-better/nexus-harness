@@ -3,7 +3,7 @@
  */
 
 import { ref } from 'vue';
-import { effectiveTheme } from '@/app/theme';
+import { themeSource } from '@/app/theme';
 import { getAppInfo, setThemeSource } from '@/modules/settings/api/settings.api';
 
 /**
@@ -27,13 +27,13 @@ export const useAppMeta = () => {
   /**
    * 在浅色与深色之间快速切换。
    */
-  const toggleTheme = async (): Promise<void> => {
+  const setTheme = async (source: 'system' | 'light' | 'dark'): Promise<void> => {
     try {
-      await setThemeSource(effectiveTheme.value === 'dark' ? 'light' : 'dark');
+      await setThemeSource(source);
     } catch {
       // 主题切换失败时保持当前主题
     }
   };
 
-  return { version, settingsOpen, effectiveTheme, load, toggleTheme };
+  return { version, settingsOpen, themeSource, load, setTheme };
 };

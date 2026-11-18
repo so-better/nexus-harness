@@ -3,7 +3,7 @@
  */
 
 import { ref } from 'vue';
-import type { ThemeInfo } from '@shared/ipc/contracts';
+import type { ThemeInfo, ThemeSource } from '@shared/ipc/contracts';
 import { applyPalette, getPalette } from './theme-palette';
 
 /**
@@ -12,6 +12,8 @@ import { applyPalette, getPalette } from './theme-palette';
 export const effectiveTheme = ref<'light' | 'dark'>(
   document.documentElement.dataset['theme'] === 'dark' ? 'dark' : 'light'
 );
+
+export const themeSource = ref<ThemeSource>('system');
 
 applyPalette(getPalette(effectiveTheme.value));
 
@@ -23,6 +25,7 @@ const applyTheme = (info: ThemeInfo): void => {
   root.dataset['theme'] = info.effective;
   root.style.colorScheme = info.effective;
   effectiveTheme.value = info.effective;
+  themeSource.value = info.source;
   applyPalette(getPalette(info.effective));
 };
 

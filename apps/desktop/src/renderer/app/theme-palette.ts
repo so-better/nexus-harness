@@ -27,38 +27,38 @@ export interface ThemePalette {
  * 浅色主题。
  */
 export const lightPalette: ThemePalette = {
-  bgBase: '#fcfbf9',
-  bgElevated: '#f4f2ed',
-  bgHover: '#ece9e2',
-  textPrimary: '#1c1b19',
-  textSecondary: '#6b675f',
-  textDisabled: '#a8a39a',
-  border: '#e3dfd7',
-  accent: '#2f5bff',
-  accentHover: '#244ce0',
-  accentPressed: '#1c3fbf',
-  success: '#1e7a52',
-  warning: '#b66a1c',
-  danger: '#b23a3a'
+  bgBase: '#ffffff',
+  bgElevated: '#f5f8fc',
+  bgHover: '#edf3fa',
+  textPrimary: '#111827',
+  textSecondary: '#5b6472',
+  textDisabled: '#9ca3af',
+  border: '#e2e8f0',
+  accent: '#3b82f6',
+  accentHover: '#2563eb',
+  accentPressed: '#1d4ed8',
+  success: '#15803d',
+  warning: '#b45309',
+  danger: '#b91c1c'
 };
 
 /**
  * 深色主题。
  */
 export const darkPalette: ThemePalette = {
-  bgBase: '#101112',
-  bgElevated: '#17181b',
-  bgHover: '#222428',
-  textPrimary: '#f1eee8',
-  textSecondary: '#a7a29a',
-  textDisabled: '#6d6962',
-  border: '#2a2b2e',
-  accent: '#6c8cff',
-  accentHover: '#8aa3ff',
-  accentPressed: '#a6b7ff',
-  success: '#4dbe8b',
-  warning: '#e0a34e',
-  danger: '#e06a6a'
+  bgBase: '#090d13',
+  bgElevated: '#101720',
+  bgHover: '#172233',
+  textPrimary: '#f3f7ff',
+  textSecondary: '#93a4bd',
+  textDisabled: '#5b6a80',
+  border: '#243246',
+  accent: '#7fb6ff',
+  accentHover: '#a9cbff',
+  accentPressed: '#c9deff',
+  success: '#4ade80',
+  warning: '#fbbf24',
+  danger: '#f87171'
 };
 
 /**

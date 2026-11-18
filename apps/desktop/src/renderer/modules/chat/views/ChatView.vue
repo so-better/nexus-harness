@@ -1,32 +1,14 @@
 <template>
   <main class="nh-chat">
-    <header class="nh-chat__header">
+    <header v-if="session" class="nh-chat__header">
       <div class="nh-chat__title-group">
-        <h1 class="nh-chat__title">{{ session?.title ?? t('app.noSession') }}</h1>
-        <NTag v-if="session" size="small" :type="statusType" :bordered="false">
-          {{ statusLabel }}
-        </NTag>
+        <h1 class="nh-chat__title">{{ session.title }}</h1>
+        <NTag size="small" :type="statusType" :bordered="false">{{ statusLabel }}</NTag>
       </div>
     </header>
 
-    <section v-if="!session || projection.messages.length === 0" class="nh-chat__empty">
-      <EmptyStateHero :show-create="!session" @create="emit('create')" />
-    </section>
-
-    <MessageList v-else :messages="projection.messages" />
-
-    <div v-if="pendingApprovals.length" class="nh-chat__approvals">
-      <ApprovalCard
-        v-for="approval in pendingApprovals"
-        :key="approval.id"
-        :approval="approval"
-        @approve="emit('approve', approval.id)"
-        @reject="emit('reject', approval.id)"
-      />
-    </div>
-
-    <ComposerBox
-      :disabled="Boolean(disabledReason)"
+    <WelcomeView
+      v-if="isEmpty"
       :disabled-reason="disabledReason"
       :running="projection.running"
       :root-label="rootLabel"
@@ -37,12 +19,39 @@
       @send="emit('send', $event)"
       @stop="emit('stop')"
     />
+
+    <template v-else>
+      <MessageList :messages="projection.messages" />
+
+      <div v-if="pendingApprovals.length" class="nh-chat__approvals">
+        <ApprovalCard
+          v-for="approval in pendingApprovals"
+          :key="approval.id"
+          :approval="approval"
+          @approve="emit('approve', approval.id)"
+          @reject="emit('reject', approval.id)"
+        />
+      </div>
+
+      <ComposerBox
+        :disabled="Boolean(disabledReason)"
+        :disabled-reason="disabledReason"
+        :running="projection.running"
+        :root-label="rootLabel"
+        :providers="providers"
+        :provider-id="providerId"
+        @choose-root="emit('choose-root')"
+        @update-provider="emit('update-provider', $event)"
+        @send="emit('send', $event)"
+        @stop="emit('stop')"
+      />
+    </template>
   </main>
 </template>
 
 <script setup lang="ts">
 /**
- * 会话主区：标题、消息流、审批与输入区。
+ * 会话主区：欢迎页、消息流、审批与输入区。
  */
 
 import { computed } from 'vue';
@@ -51,8 +60,8 @@ import type { ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import ApprovalCard from '../components/ApprovalCard.vue';
 import ComposerBox from '../components/ComposerBox.vue';
-import EmptyStateHero from '../components/EmptyStateHero.vue';
 import MessageList from '../components/MessageList.vue';
+import WelcomeView from '../components/WelcomeView.vue';
 import type { ChatProjection } from '../types';
 
 const props = defineProps<{
@@ -65,7 +74,6 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  create: [];
   'choose-root': [];
   'update-provider': [id: string];
   send: [prompt: string];
@@ -74,6 +82,7 @@ const emit = defineEmits<{
   reject: [approvalId: string];
 }>();
 
+const isEmpty = computed(() => !props.session || props.projection.messages.length === 0);
 const pendingApprovals = computed(() =>
   props.projection.approvals.filter((approval) => approval.status === 'pending')
 );
@@ -148,18 +157,7 @@ const statusType = computed(() => {
   white-space: nowrap;
 }
 
-.nh-chat__empty {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-}
-
 .nh-chat__approvals {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
   width: calc(100% - 64px);
   max-width: 820px;
   margin: 0 auto;

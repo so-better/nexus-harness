@@ -4,6 +4,8 @@
 
 import type {
   AppInfo,
+  CacheInfo,
+  CacheTarget,
   ProviderPublic,
   ProviderSettings,
   ThemeInfo,
@@ -46,3 +48,27 @@ export const getThemeInfo = async (): Promise<ThemeInfo> =>
  */
 export const setThemeSource = async (source: ThemeSource): Promise<ThemeInfo> =>
   unwrap(await window.nexus.theme.setSource(source));
+
+/**
+ * 读取开机自启设置。
+ */
+export const getAutoLaunch = async (): Promise<boolean> =>
+  unwrap(await window.nexus.settings.getAutoLaunch());
+
+/**
+ * 保存开机自启设置。
+ */
+export const setAutoLaunch = async (enabled: boolean): Promise<boolean> =>
+  unwrap(await window.nexus.settings.setAutoLaunch(enabled));
+
+/**
+ * 读取缓存占用。
+ */
+export const getCacheInfo = async (): Promise<CacheInfo> =>
+  unwrap(await window.nexus.cache.getInfo());
+
+/**
+ * 清理缓存。
+ */
+export const clearCache = async (target: CacheTarget): Promise<CacheInfo> =>
+  unwrap(await window.nexus.cache.clear(target));

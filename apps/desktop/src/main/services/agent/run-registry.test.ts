@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getRun,
   getRunForSession,
+  hasActiveRuns,
   hasRunForSession,
   registerRun,
   unregisterRun
@@ -24,8 +25,10 @@ describe('run registry', () => {
     expect(getRun('run-1')).toBe(run);
     expect(getRunForSession('session-1')).toBe(run);
     expect(hasRunForSession('session-1')).toBe(true);
+    expect(hasActiveRuns()).toBe(true);
 
     unregisterRun('run-1');
+    expect(hasActiveRuns()).toBe(false);
     expect(hasRunForSession('session-1')).toBe(false);
   });
 

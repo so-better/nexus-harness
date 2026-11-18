@@ -98,6 +98,14 @@ export interface NexusBridge {
     setSource: (source: ThemeSource) => Promise<Result<ThemeInfo>>;
     onChange: (handler: (info: ThemeInfo) => void) => Unsubscribe;
   };
+  settings: {
+    getAutoLaunch: () => Promise<Result<boolean>>;
+    setAutoLaunch: (enabled: boolean) => Promise<Result<boolean>>;
+  };
+  cache: {
+    getInfo: () => Promise<Result<CacheInfo>>;
+    clear: (target: CacheTarget) => Promise<Result<CacheInfo>>;
+  };
   provider: {
     list: () => Promise<Result<ProviderPublic[]>>;
     save: (input: ProviderSettings) => Promise<Result<ProviderPublic>>;
@@ -237,6 +245,25 @@ export const workspaceRootSelectionSchema = z.object({
 });
 
 export type WorkspaceRootSelection = z.infer<typeof workspaceRootSelectionSchema>;
+
+/**
+ * 可清理的缓存类别。
+ */
+export const cacheTargetSchema = z.enum(['files', 'artifacts', 'logs', 'all']);
+
+/**
+ * 缓存占用统计。
+ */
+export const cacheInfoSchema = z.object({
+  filesBytes: z.number().nonnegative(),
+  artifactsBytes: z.number().nonnegative(),
+  logsBytes: z.number().nonnegative(),
+  totalBytes: z.number().nonnegative(),
+  failed: z.array(cacheTargetSchema)
+});
+
+export type CacheTarget = z.infer<typeof cacheTargetSchema>;
+export type CacheInfo = z.infer<typeof cacheInfoSchema>;
 
 /**
  * 读取长输出产物；路径只由主进程解析。

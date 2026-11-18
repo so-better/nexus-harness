@@ -20,6 +20,14 @@ const bridge: NexusBridge = {
     setPinned: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionSetPinned, input),
     remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.sessionRemove, id)
   },
+  settings: {
+    getAutoLaunch: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetAutoLaunch),
+    setAutoLaunch: (enabled) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetAutoLaunch, enabled)
+  },
+  cache: {
+    getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.cacheGetInfo),
+    clear: (target) => ipcRenderer.invoke(IPC_CHANNELS.cacheClear, target)
+  },
   provider: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.providerList),
     save: (input) => ipcRenderer.invoke(IPC_CHANNELS.providerSave, input),

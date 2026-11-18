@@ -32,7 +32,23 @@
     </div>
 
     <div class="nh-statusbar__group">
-      <NButton text size="tiny" @click="emit('toggle-theme')">{{ themeLabel }}</NButton>
+      <div class="nh-theme-control" role="group" :aria-label="t('app.theme')">
+        <NButton
+          v-for="option in themeOptions"
+          :key="option.value"
+          size="tiny"
+          quaternary
+          :type="themeSource === option.value ? 'primary' : 'default'"
+          :aria-label="option.label"
+          :aria-pressed="themeSource === option.value"
+          :title="option.label"
+          @click="emit('update-theme', option.value)"
+        >
+          <template #icon>
+            <AppIcon :name="option.icon" :size="14" />
+          </template>
+        </NButton>
+      </div>
       <NButton text size="tiny" @click="emit('open-settings')">{{ t('app.settings') }}</NButton>
       <NText depth="3">{{ t('app.version') }} {{ version }}</NText>
     </div>
@@ -46,24 +62,28 @@
 
 import { computed } from 'vue';
 import { NButton, NDivider, NPopover, NTag, NText } from 'naive-ui';
+import type { ThemeSource } from '@shared/ipc/contracts';
 import type { ChatUsage } from '@/modules/chat/types';
 import { t } from '@/app/i18n';
+import AppIcon from '@/components/AppIcon.vue';
 
 const props = defineProps<{
   running: boolean;
   usage: ChatUsage;
   modelLabel: string;
   errors: string[];
-  theme: 'light' | 'dark';
+  themeSource: ThemeSource;
   version: string;
 }>();
 
-const emit = defineEmits<{ 'toggle-theme': []; 'open-settings': [] }>();
+const emit = defineEmits<{ 'update-theme': [source: ThemeSource]; 'open-settings': [] }>();
 
 const totalTokens = computed(() => props.usage.inputTokens + props.usage.outputTokens);
-const themeLabel = computed(() =>
-  props.theme === 'dark' ? t('settings.themeDark') : t('settings.themeLight')
-);
+const themeOptions = computed(() => [
+  { value: 'system' as const, icon: 'monitor' as const, label: t('settings.themeSystem') },
+  { value: 'light' as const, icon: 'sun' as const, label: t('settings.themeLight') },
+  { value: 'dark' as const, icon: 'moon' as const, label: t('settings.themeDark') }
+]);
 </script>
 
 <style scoped lang="less">
@@ -81,6 +101,15 @@ const themeLabel = computed(() =>
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.nh-theme-control {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--nh-color-border);
+  border-radius: 6px;
+  background: var(--nh-color-bg-base);
 }
 
 .nh-usage {

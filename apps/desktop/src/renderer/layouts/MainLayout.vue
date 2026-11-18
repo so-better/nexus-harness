@@ -18,7 +18,6 @@
         :providers="providers"
         :provider-id="providerId"
         :disabled-reason="disabledReason"
-        @create="createSession"
         @choose-root="chat.addRoot"
         @update-provider="chat.setProvider"
         @send="send"
@@ -33,15 +32,16 @@
       :usage="projection.usage"
       :model-label="providerLabel"
       :errors="errors"
-      :theme="effectiveTheme"
+      :theme-source="themeSource"
       :version="version"
-      @toggle-theme="toggleTheme"
+      @update-theme="setTheme"
       @open-settings="settingsOpen = true"
     />
 
     <SettingsModal
       :show="settingsOpen"
       :version="version"
+      :busy="anyRunning"
       @update:show="settingsOpen = $event"
       @changed="chat.refreshProviders"
     />
@@ -72,7 +72,7 @@ const chat = useChatStore();
 const { sessions: sessionList, activeId } = storeToRefs(sessions);
 const { providers, providerId, rootPaths, runningBySession, error } = storeToRefs(chat);
 
-const { version, settingsOpen, effectiveTheme, load: loadAppMeta, toggleTheme } = useAppMeta();
+const { version, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
 
 const projection = computed(() => {
   const id = activeId.value;
@@ -80,6 +80,7 @@ const projection = computed(() => {
 });
 
 const running = computed(() => Boolean(activeId.value && runningBySession.value[activeId.value]));
+const anyRunning = computed(() => Object.values(runningBySession.value).some(Boolean));
 const providerLabel = computed(
   () =>
     providers.value.find((provider: ProviderPublic) => provider.id === providerId.value)?.name ?? ''

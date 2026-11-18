@@ -1,5 +1,5 @@
 <template>
-  <form class="nh-composer" @submit.prevent="submit">
+  <form class="nh-composer" :class="{ 'nh-composer--hero': hero }" @submit.prevent="submit">
     <div class="nh-composer__toolbar">
       <NButton text size="small" @click="emit('choose-root')">
         <template #icon>
@@ -69,6 +69,7 @@ const props = defineProps<{
   running: boolean;
   rootLabel: string;
   providers: ProviderPublic[];
+  hero?: boolean;
   providerId?: string | undefined;
 }>();
 
@@ -129,6 +130,12 @@ const onEnter = (event: KeyboardEvent): void => {
   border-radius: 16px;
   background: var(--nh-color-bg-base);
   box-shadow: var(--nh-shadow-card);
+}
+
+.nh-composer--hero {
+  padding: 14px 16px 10px;
+  border-radius: 16px;
+  box-shadow: var(--nh-shadow-float);
 }
 
 .nh-composer__toolbar {

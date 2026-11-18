@@ -1072,6 +1072,7 @@ interface SlotContext {
 - 单实例锁，禁止两个进程同时写同一个 `userData`。
 - 迁移前自动备份数据库；迁移失败保留备份并拒绝启动写入。
 - 数据保留：events 随会话保留；AI 输出文件默认永久保留、不自动清理；artifacts/checkpoints/logs/usage 可设保留期与磁盘配额；清理不得删除仍被引用的文件。
+- 设置中的“清理缓存”只清 `files`、`artifacts`、`logs` 与浏览器 HTTP 缓存；会话、事件、检查点和工作区文件必须保留。
 - 每条 Usage 记录 provider、model、输入与输出 token、缓存读写、reasoning token、步数、状态与耗时。
 - 日志轮转，避免无限增长。
 - API Key 只存系统安全存储，数据库只存引用 id。
@@ -1123,13 +1124,16 @@ interface SlotContext {
 ### 4.8 设置与配置
 
 - 设置分三个层级，优先级为 **Session > Workspace > App**；读取时逐层合并，写入时记录 scope。
-- 设置分类：通用、模型与提供商、权限与审批、外观、快捷键、高级、关于。
+- 设置分类：通用、模型与提供商、外观、缓存、权限与审批、快捷键、高级。
 - 模型与提供商：按角色配置对话模型与图像模型；每条包含 Base URL、API Key 引用、模型名、能力声明、上下文窗口、token 价格、`extra_params` 与自定义 headers。
 - 支持连接测试与模型列表刷新；密钥只存系统安全存储，设置表只存引用 id；不写死默认模型。
 - 图像模型可选；未配置时不注册 `generate_image`，设置页提供引导。
 - 权限与审批：默认审批策略、命令白名单、敏感路径策略、工作区信任管理。
-- 外观：`light / dark / system`、字号与密度、减少动效跟随系统。
-- 高级：数据目录、日志、清理 `files` 与缓存、遥测开关（默认关闭）。
+- 外观：`light / dark / system` 三态，默认 `system`；同时支持字号、密度与减少动效跟随系统。
+- 通用：开机自启默认开启，可在设置中关闭；开发态不注册系统登录项，打包后通过系统登录项生效。启动时以系统登录项实际状态为准回写偏好，避免覆盖用户在系统中做的修改。
+- 缓存：统计并清理 AI 输出文件、工具产物、运行日志与 Electron HTTP 缓存；不得删除会话、事件、检查点或用户工作区文件。
+- 有 Run 运行时禁止清理缓存；部分目录清理失败必须返回失败类别并提示用户，不得误报全部成功。
+- 高级：数据目录、日志、遥测开关（默认关闭）。
 - Extensions 弹窗独立管理插件、Skill、MCP，不混入设置；插件自身配置放在插件详情中。
 - 设置项必须由 zod schema 定义，未知键忽略；变更写入 `settings.updated` 事件。
 - 入口使用 `Cmd/Ctrl+,` 打开设置弹窗；macOS 与 Windows 使用同一套布局。
@@ -1283,27 +1287,27 @@ interface AskUserAnswer {
 /**
  * 背景与表面
  */
---nh-color-bg-base: #fcfbf9;
---nh-color-bg-elevated: #f4f2ed;
---nh-color-bg-hover: #ece9e2;
+--nh-color-bg-base: #ffffff;
+--nh-color-bg-elevated: #f5f8fc;
+--nh-color-bg-hover: #edf3fa;
 
 /**
  * 文本
  */
---nh-color-text-primary: #1c1b19;
---nh-color-text-secondary: #6b675f;
---nh-color-text-disabled: #a8a39a;
+--nh-color-text-primary: #111827;
+--nh-color-text-secondary: #5b6472;
+--nh-color-text-disabled: #9ca3af;
 
 /**
  * 边框、强调、状态
  */
---nh-color-border: #e3dfd7;
---nh-color-accent: #2f5bff;
---nh-color-accent-hover: #244ce0;
---nh-color-accent-pressed: #1c3fbf;
---nh-color-success: #1e7a52;
---nh-color-warning: #b66a1c;
---nh-color-danger: #b23a3a;
+--nh-color-border: #e2e8f0;
+--nh-color-accent: #3b82f6;
+--nh-color-accent-hover: #2563eb;
+--nh-color-accent-pressed: #1d4ed8;
+--nh-color-success: #15803d;
+--nh-color-warning: #b45309;
+--nh-color-danger: #b91c1c;
 
 /**
  * 尺寸与动效

@@ -8,10 +8,14 @@
     :bordered="false"
     @update:show="emit('update:show', $event)"
   >
-    <NTabs default-value="provider" type="line" animated>
+    <NTabs v-if="show" default-value="provider" type="line" animated>
       <NTabPane name="provider" :tab="t('settings.provider')">
         <p class="nh-settings__hint">{{ t('settings.providerHint') }}</p>
         <ProviderSettingsPanel @changed="emit('changed')" />
+      </NTabPane>
+
+      <NTabPane name="general" :tab="t('settings.general')">
+        <GeneralSettings :version="version" />
       </NTabPane>
 
       <NTabPane name="appearance" :tab="t('settings.appearance')">
@@ -23,13 +27,10 @@
             <NRadioButton value="dark">{{ t('settings.themeDark') }}</NRadioButton>
           </NRadioGroup>
         </div>
+      </NTabPane>
 
-        <NDivider />
-
-        <div class="nh-settings__section">
-          <p class="nh-settings__label">{{ t('settings.about') }}</p>
-          <NText depth="2">{{ t('settings.version') }}: {{ version }}</NText>
-        </div>
+      <NTabPane name="cache" :tab="t('settings.cache')">
+        <CacheSettings :busy="busy" />
       </NTabPane>
     </NTabs>
   </NModal>
@@ -37,19 +38,22 @@
 
 <script setup lang="ts">
 /**
- * 设置弹窗：模型提供商、主题与版本信息。
+ * 设置弹窗：模型提供商、通用、外观与缓存。
  */
 
 import { ref, watch } from 'vue';
-import { NDivider, NModal, NRadioButton, NRadioGroup, NTabPane, NTabs, NText } from 'naive-ui';
+import { NModal, NRadioButton, NRadioGroup, NTabPane, NTabs } from 'naive-ui';
 import type { ThemeSource } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
+import CacheSettings from '../components/CacheSettings.vue';
+import GeneralSettings from '../components/GeneralSettings.vue';
 import ProviderSettingsPanel from '../components/ProviderSettingsPanel.vue';
 import { getThemeInfo, setThemeSource } from '../api/settings.api';
 
 const props = defineProps<{
   show: boolean;
   version: string;
+  busy: boolean;
 }>();
 
 const emit = defineEmits<{ 'update:show': [show: boolean]; changed: [] }>();
