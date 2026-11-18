@@ -96,6 +96,20 @@ describe('session storage', () => {
     expect(events.list(session.id).some((event) => event.type === 'scope.revoked')).toBe(true);
   });
 
+  it('replaces the session workspace instead of adding a second root', async () => {
+    const session = sessions.create();
+    const first = await mkdtemp(join(directory, 'first-'));
+    const second = await mkdtemp(join(directory, 'second-'));
+    await sessions.addRoots(session.id, [first]);
+    const replaced = await sessions.addRoots(session.id, [second]);
+
+    expect(replaced).toHaveLength(1);
+    expect(replaced[0]?.path).toBe(await realpath(second));
+    expect(events.list(session.id).filter((event) => event.type === 'scope.revoked')).toHaveLength(
+      1
+    );
+  });
+
   it('rejects sensitive roots and filesystem roots', async () => {
     const session = sessions.create();
     const sensitive = join(directory, '.ssh');

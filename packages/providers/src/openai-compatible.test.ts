@@ -79,6 +79,40 @@ describe('OpenAICompatibleProvider', () => {
     expect(sentBody.tools[0].function.name).toBe('read_file');
   });
 
+  it('sends image content as data-url parts', async () => {
+    let sentBody: Record<string, unknown> | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      sentBody = JSON.parse(String(init?.body));
+      return new Response(streamBody([{ choices: [{ delta: { content: 'ok' } }] }]), {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      });
+    };
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: 'https://example.com/v1',
+      apiKey: 'secret',
+      fetchImpl
+    });
+    for await (const _event of provider.stream({
+      model: 'vision-model',
+      messages: [
+        {
+          role: 'user',
+          content: '看看这张图',
+          images: [{ mimeType: 'image/png', data: 'aGVsbG8=' }]
+        }
+      ]
+    })) {
+      // consume stream
+    }
+
+    const messages = sentBody?.['messages'] as Array<{ content: unknown[] }>;
+    expect(messages[0]?.content).toContainEqual({
+      type: 'image_url',
+      image_url: { url: 'data:image/png;base64,aGVsbG8=' }
+    });
+  });
+
   it('maps HTTP failures to provider errors', async () => {
     const fetchImpl: typeof fetch = async () =>
       new Response('unauthorized', { status: 401, headers: { 'content-type': 'text/plain' } });

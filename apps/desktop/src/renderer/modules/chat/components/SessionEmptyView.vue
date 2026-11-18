@@ -17,7 +17,6 @@
         :disabled="Boolean(disabledReason)"
         :disabled-reason="disabledReason"
         :running="running"
-        :root-label="rootLabel"
         :roots="roots"
         :providers="providers"
         :models="models"
@@ -31,7 +30,7 @@
         @update-model="emit('update-model', $event)"
         @update-mode="emit('update-mode', $event)"
         @open-settings="emit('open-settings')"
-        @send="emit('send', $event)"
+        @send="(prompt, images) => emit('send', prompt, images)"
         @stop="emit('stop')"
       />
     </div>
@@ -51,7 +50,6 @@ import ComposerBox from './ComposerBox.vue';
 defineProps<{
   disabledReason?: string | undefined;
   running: boolean;
-  rootLabel: string;
   roots: SessionRoot[];
   providers: ProviderPublic[];
   models: ProviderModel[];
@@ -62,7 +60,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  send: [prompt: string];
+  send: [prompt: string, imagePaths?: string[]];
   stop: [];
   'choose-root': [];
   'remove-root': [rootId: string];

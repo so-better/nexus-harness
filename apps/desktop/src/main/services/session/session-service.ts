@@ -126,7 +126,7 @@ export class SessionService {
    */
   listRoots(sessionId: string): SessionRoot[] {
     const rows = this.db
-      .prepare('SELECT * FROM session_roots WHERE session_id = ? ORDER BY created_at ASC')
+      .prepare('SELECT * FROM session_roots WHERE session_id = ? ORDER BY created_at ASC LIMIT 1')
       .all(sessionId) as unknown as SessionRootRow[];
     return rows.map(toRoot);
   }
@@ -149,31 +149,45 @@ export class SessionService {
       })
     );
 
+    const root = resolved[0];
+    if (!root) return this.listRoots(sessionId);
+
     this.transaction(() => {
-      for (const root of resolved) {
-        const id = randomUUID();
-        const inserted = this.db
-          .prepare(
-            `INSERT OR IGNORE INTO session_roots
-              (id, session_id, path, kind, access, source, created_at)
-             VALUES (?, ?, ?, ?, ?, 'session', ?)`
-          )
-          .run(id, sessionId, root.path, root.kind, root.access, now);
-        if (Number(inserted.changes) === 0) continue;
+      const previous = this.db
+        .prepare('SELECT * FROM session_roots WHERE session_id = ?')
+        .all(sessionId) as unknown as SessionRootRow[];
+      this.db.prepare('DELETE FROM session_roots WHERE session_id = ?').run(sessionId);
+      for (const old of previous) {
         this.events.append(
           createNexusEvent({
             sessionId,
             seq: 1,
-            type: 'scope.granted',
-            payload: {
-              path: root.path,
-              kind: root.kind,
-              access: root.access,
-              source: 'session'
-            }
+            type: 'scope.revoked',
+            payload: { path: old.path }
           })
         );
       }
+
+      this.db
+        .prepare(
+          `INSERT INTO session_roots
+            (id, session_id, path, kind, access, source, created_at)
+           VALUES (?, ?, ?, ?, ?, 'session', ?)`
+        )
+        .run(randomUUID(), sessionId, root.path, root.kind, root.access, now);
+      this.events.append(
+        createNexusEvent({
+          sessionId,
+          seq: 1,
+          type: 'scope.granted',
+          payload: {
+            path: root.path,
+            kind: root.kind,
+            access: root.access,
+            source: 'session'
+          }
+        })
+      );
     });
 
     return this.listRoots(sessionId);

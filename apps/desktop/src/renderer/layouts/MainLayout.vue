@@ -17,7 +17,6 @@
       <ChatView
         :session="sessions.activeSession"
         :projection="projection"
-        :root-label="rootLabel"
         :roots="roots"
         :providers="providers"
         :models="models"
@@ -100,8 +99,7 @@ const sessions = useSessionStore();
 const chat = useChatStore();
 const message = useMessage();
 const { sessions: sessionList, activeId } = storeToRefs(sessions);
-const { providers, providerId, modelId, models, roots, rootPaths, runningBySession } =
-  storeToRefs(chat);
+const { providers, providerId, modelId, models, roots, runningBySession } = storeToRefs(chat);
 
 const { version, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
 const focusMessage = ref<{ id: string; token: number; sessionId: string }>();
@@ -121,9 +119,6 @@ const projection = computed(() => {
 const runningCount = computed(() => Object.values(runningBySession.value).filter(Boolean).length);
 const activeRunning = computed(() =>
   activeId.value ? Boolean(runningBySession.value[activeId.value]) : false
-);
-const rootLabel = computed(() =>
-  rootPaths.value.length ? `${t('app.workspace')} · ${rootPaths.value.length}` : t('app.noRoot')
 );
 const disabledReason = computed(() => {
   if (!providerId.value) return t('chat.needsProvider');
@@ -264,26 +259,25 @@ const authorizeRootAndRetry = async (): Promise<void> => {
 };
 
 /**
- * 添加工作区。
+ * 添加或替换工作区。
  */
 const chooseRoot = async (): Promise<void> => {
   await authorizeWorkspace();
 };
 
 /**
- * 撤销当前会话的工作区授权。
+ * 清除当前会话的工作区授权。
  */
 const removeRoot = async (rootId: string): Promise<void> => {
-  if (activeId.value) {
-    const removed = await chat.removeRoot(activeId.value, rootId);
-    if (!removed) message.error(chat.error ?? t('app.rootRemoveFailed'));
-  }
+  if (!activeId.value) return;
+  const removed = await chat.removeRoot(activeId.value, rootId);
+  if (!removed) message.error(chat.error ?? t('app.rootRemoveFailed'));
 };
 
 /**
  * 发送消息；没有会话时先创建。
  */
-const send = async (prompt: string): Promise<void> => {
+const send = async (prompt: string, imagePaths?: string[]): Promise<void> => {
   if (!activeId.value) {
     const created = await sessions.create(providerId.value, modelId.value);
     if (!created) {
@@ -292,7 +286,7 @@ const send = async (prompt: string): Promise<void> => {
     }
   }
   if (activeId.value) {
-    const started = await chat.send(activeId.value, prompt);
+    const started = await chat.send(activeId.value, prompt, imagePaths);
     if (!started) message.error(chat.error ?? t('chat.sendFailed'));
   }
 };

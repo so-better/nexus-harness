@@ -31,13 +31,14 @@ const DEFAULT_CAPABILITIES: ProviderCapabilities = {
 const ANTHROPIC_VERSION = '2023-06-01';
 
 interface AnthropicContentBlock {
-  type: 'text' | 'tool_use' | 'tool_result';
+  type: 'text' | 'tool_use' | 'tool_result' | 'image';
   text?: string;
   id?: string;
   name?: string;
   input?: unknown;
   tool_use_id?: string;
   content?: string;
+  source?: { type: 'base64'; media_type: string; data: string };
 }
 
 interface AnthropicMessage {
@@ -80,6 +81,19 @@ export const toAnthropicMessages = (messages: readonly ChatMessage[]): Anthropic
       } else {
         result.push({ role: 'user', content: [block] });
       }
+      continue;
+    }
+
+    if (message.images?.length) {
+      const content: AnthropicContentBlock[] = [];
+      if (message.content) content.push({ type: 'text', text: message.content });
+      for (const image of message.images) {
+        content.push({
+          type: 'image',
+          source: { type: 'base64', media_type: image.mimeType, data: image.data }
+        });
+      }
+      result.push({ role: message.role, content });
       continue;
     }
 

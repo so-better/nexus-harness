@@ -181,7 +181,7 @@ export interface NexusBridge {
     saveAs: (input: FileSaveAsInput) => Promise<Result<FileSaveAsResult>>;
   };
   workspace: {
-    chooseRoot: () => Promise<Result<WorkspaceRootSelection>>;
+    chooseRoot: (input?: WorkspaceChooseRootInput) => Promise<Result<WorkspaceRootSelection>>;
     searchFiles: (input: WorkspaceFileSearchInput) => Promise<Result<WorkspaceFileReference[]>>;
   };
   approval: {
@@ -207,7 +207,8 @@ export const agentRunInputSchema = z.object({
   mode: z.enum(['plan', 'build']).optional(),
   editMessageId: z.string().min(1).optional(),
   regenerateMessageId: z.string().min(1).optional(),
-  maxSteps: z.number().int().positive().max(50).optional()
+  maxSteps: z.number().int().positive().max(50).optional(),
+  imagePaths: z.array(z.string().min(1)).max(4).optional()
 });
 
 export const agentStartResultSchema = z.object({ runId: z.string().min(1) });
@@ -329,7 +330,7 @@ export const sessionRootSchema = z.object({
 
 export const sessionAddRootsInputSchema = z.object({
   sessionId: z.string().min(1),
-  paths: z.array(z.string().min(1)).min(1).max(32)
+  paths: z.array(z.string().min(1)).min(1).max(1)
 });
 
 export const sessionRemoveRootInputSchema = z.object({
@@ -359,13 +360,22 @@ export const workspaceRootSelectionSchema = z.object({
   paths: z.array(z.string().min(1))
 });
 
+export const workspaceChooseRootInputSchema = z
+  .object({
+    defaultPath: z.string().min(1).optional()
+  })
+  .optional();
+
+export type WorkspaceChooseRootInput = z.infer<typeof workspaceChooseRootInputSchema>;
+
 export type WorkspaceRootSelection = z.infer<typeof workspaceRootSelectionSchema>;
 
 export const workspaceFileReferenceSchema = z.object({
   path: z.string().min(1),
   root: z.string().min(1),
   relativePath: z.string().min(1),
-  name: z.string().min(1)
+  name: z.string().min(1),
+  isImage: z.boolean()
 });
 
 export const workspaceFileSearchInputSchema = z.object({

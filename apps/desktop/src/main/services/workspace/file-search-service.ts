@@ -4,14 +4,11 @@
 
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { basename, join, relative, sep } from 'node:path';
+import type { WorkspaceFileReference } from '@shared/ipc/contracts';
+import { isImageFile } from '@shared/files';
 import { isSensitivePath } from '@nexus/tools';
 
-export interface WorkspaceFileReference {
-  path: string;
-  root: string;
-  relativePath: string;
-  name: string;
-}
+export type { WorkspaceFileReference } from '@shared/ipc/contracts';
 
 interface IgnoreRule {
   base: string;
@@ -163,7 +160,8 @@ const scanRoot = async (root: string): Promise<WorkspaceFileReference[]> => {
         path: absolute,
         root,
         relativePath,
-        name: entry.name
+        name: entry.name,
+        isImage: isImageFile(entry.name)
       });
     }
   };
@@ -205,7 +203,13 @@ export const searchWorkspaceFiles = async (
     if (!info) continue;
     if (info.isFile()) {
       if (!isSensitivePath(root)) {
-        result.push({ path: root, root, relativePath: basename(root), name: basename(root) });
+        result.push({
+          path: root,
+          root,
+          relativePath: basename(root),
+          name: basename(root),
+          isImage: isImageFile(basename(root))
+        });
       }
       continue;
     }

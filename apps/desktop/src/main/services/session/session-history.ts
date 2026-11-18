@@ -2,9 +2,31 @@
  * 会话历史投影：从 append-only 事件重建供模型使用的消息序列。
  */
 
-import type { ChatMessage, ProviderToolCall } from '@nexus/providers';
+import { readFileSync, statSync } from 'node:fs';
+import type { ChatImage, ChatMessage, ProviderToolCall } from '@nexus/providers';
 import type { EventPayloadMap } from '@shared/events';
 import type { EventStore } from './event-store';
+
+const MAX_HISTORY_IMAGE_BYTES = 8 * 1024 * 1024;
+
+/**
+ * 从事件中的本地图片引用重新读取视觉内容；缺失或超限时跳过。
+ */
+const loadHistoryImages = (
+  refs: Array<{ path: string; mime: string }> | undefined
+): ChatImage[] => {
+  if (!refs?.length) return [];
+  const images: ChatImage[] = [];
+  for (const ref of refs.slice(0, 4)) {
+    try {
+      if (statSync(ref.path).size > MAX_HISTORY_IMAGE_BYTES) continue;
+      images.push({ mimeType: ref.mime, data: readFileSync(ref.path).toString('base64') });
+    } catch {
+      // 文件被移动或删除时省略该图片，不阻断历史恢复
+    }
+  }
+  return images;
+};
 
 /**
  * 把单会话事件转换为 ChatMessage；工具调用与结果按事件顺序配对。
@@ -68,7 +90,12 @@ export class SessionHistoryService {
         }
         skipFollowingTools = false;
         if (payload.role === 'user') {
-          messages.push({ role: 'user', content: payload.content });
+          const images = loadHistoryImages(payload.images);
+          messages.push({
+            role: 'user',
+            content: payload.content,
+            ...(images.length ? { images } : {})
+          });
           lastAssistant = undefined;
         } else {
           const assistant: ChatMessage = {

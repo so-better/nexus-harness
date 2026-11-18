@@ -85,8 +85,8 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 ### 1.4 核心体验流程
 
 1. **首次启动**：选择或配置模型提供商，API Key 随本地 Provider 配置保存；主题跟随系统。
-2. **打开工作区或直接开始**：可先选择工作区目录并确认信任级别，也可不打开工作区直接开始任务；建立文件索引；临时 roots 在会话头展示。
-3. **描述任务**：在输入区写目标；输入 `@` 引用工作区或临时 root 内的文件，也可添加文件/文件夹作为临时 root；输入 `/` 浏览并主动调用 Skill；选择审批策略。
+2. **打开工作区或直接开始**：可先选择工作区目录并确认信任级别，也可不打开工作区直接开始任务；建立文件索引；当前工作区在会话头展示。
+3. **描述任务**：在输入区写目标；输入 `@` 引用工作区内的文件；输入 `/` 浏览并主动调用 Skill；选择审批策略。
 4. **生成计划**：Plan 模式下 Agent 只读分析并给出步骤与验收标准，不执行任何本地操作；用户确认后切换到 Build 执行。
 5. **执行**：流式输出思考与工具调用；写文件前展示 diff，危险命令请求审批；需要澄清时以行内卡片提问，Run 暂停等待回答；工具生成或下载的文件保存到 `<userData>/files` 并在会话流中展示文件卡片；用户可随时停止回复、编辑用户消息重发，或对最后一条回复重新生成。
 6. **验证**：按任务类型运行验证命令（代码任务跑测试、类型检查与 lint，文档任务检查格式与引用，数据任务运行脚本校验输出）；失败则进入自修复循环。
@@ -103,7 +103,7 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 ├──────────┬──────────────────────┬────────────┤
 │ 侧栏      │ 主区                 │ 检查器      │
 │ 会话列表  │ 会话标签 / 会话流     │ 上下文/用量 │
-│ roots       │ 变更审阅 / diff / 终端 │ 审批详情   │
+│ 工作区      │ 变更审阅 / diff / 终端 │ 审批详情   │
 │ 扩展面板  │                      │            │
 ├──────────┴──────────────────────┴────────────┤
 │ 状态栏：Agent 状态 / tokens / 成本 / 插件条目  │
@@ -115,7 +115,7 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 | 界面 | 职责 |
 | --- | --- |
 | Session 视图 | 多会话标签、对话流、工具调用、审批、文件卡片、计划与结果 |
-| Workspace 视图 | 临时 roots、变更审阅、diff、终端 |
+| Workspace 视图 | 当前工作区、变更审阅、diff、终端 |
 | Command Palette | 全局命令、文件跳转、设置入口 |
 | Settings | 提供商、模型、权限、外观、快捷键、高级、关于（弹窗） |
 | Extensions | 插件、Skill、MCP 的扫描结果、启用/禁用与权限查看（弹窗） |
@@ -125,7 +125,7 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 交互约定：
 
 - 审批在会话流内联展示，不弹网页式模态框。
-- 会话头展示当前 scope（工作区或临时 roots），支持添加/移除 root。
+- 会话头展示当前工作区，支持选择、替换或移除工作区。
 - 支持同时打开多个会话标签；切换标签不中断后台 Run。
 - 会话支持重命名、置顶、导出与跨会话搜索；搜索入口在侧栏与命令面板。
 - 输入区展示当前 Agent 模式，Plan / Build 切换只能由用户操作。
@@ -163,10 +163,10 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 | Agent 模式 | `plan` 只读规划，`build` 执行变更 |
 | Ask User | Agent 的结构化提问，暂停 Run 等待用户选择或输入 |
 | Provider | 模型服务商适配器，如 OpenAI 兼容、Anthropic、Ollama |
-| Workspace | 命名的 root 集合与信任设置，作为项目级预设 |
+| Workspace | 单个工作区目录与信任设置，作为项目级预设 |
 | Session | 一次持续的工作上下文，可选绑定一个 Workspace |
 | Session 标题 | 会话名称，自动摘要或用户重命名 |
-| Scope | Session 的执行范围，由 workspaceId 与 roots 组成 |
+| Scope | Session 的执行范围，由 workspaceId 与唯一工作区目录组成 |
 | RootGrant | 用户授权给会话的文件或目录，以及读/写级别 |
 | Run | 一次执行尝试，包含计划、工具调用与验证 |
 | Task | 用户目标与验收标准，通常一个 Session 只有一个 Task |
@@ -187,9 +187,9 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 
 | 对象 | 关键字段 | 说明 |
 | --- | --- | --- |
-| Workspace | id、name、roots、trustLevel、createdAt | 工作区 root 集合与信任状态 |
+| Workspace | id、name、root、trustLevel、createdAt | 单个工作区目录与信任状态 |
 | Session | id、workspaceId?、title、titleSource、pinned、status、mode、providerId?、modelId?、scope、createdAt、lastActiveAt | 一次工作上下文，工作区可选 |
-| RootGrant | id、sessionId、path、kind、access、source、createdAt | 会话的文件或目录授权 |
+| RootGrant | id、sessionId、path、kind、access、source、createdAt | 会话的唯一工作区授权 |
 | Task | id、sessionId、goal、acceptanceCriteria、status | 用户目标与验收标准 |
 | Run | id、sessionId、taskId、status、budget、startedAt、endedAt | 一次执行尝试 |
 | Message | id、runId、role、content、toolCallIds、status、createdAt | 消息与工具调用引用；status 为 normal / superseded / partial |
@@ -206,7 +206,7 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 
 ```text
 Workspace 0..1 ── n Session
-Session   1 ── n RootGrant
+Session   1 ── 1 RootGrant
 Session   1 ── n Task
 Task      1 ── n Run
 Run       1 ── n Message
@@ -235,7 +235,7 @@ Session   1 ── n Event
 ### 2.4 不变量
 
 - 一个 Session 最多绑定一个 Workspace；绑定后不可切换到其他 Workspace，跨工作区必须新建 Session。
-- Session 的允许路径由 Workspace roots 与 Session RootGrant 共同组成。
+- Session 的允许路径由唯一 Workspace root 与 Session RootGrant 共同组成。
 - ad-hoc RootGrant 只对当前 Session 生效，不跨会话继承；授权与撤销必须写入 scope 事件。
 - 每个 Session 同时最多一个活跃 Run；多个 Session 可并行运行，受全局并发与 provider 限额约束。
 - 会话标题：用户重命名优先于自动标题，自动标题不得覆盖用户标题。
@@ -577,13 +577,13 @@ interface ImageProvider {
 - 压缩失败时降级为硬截断并提示用户，不能阻塞任务。
 - 用户可手动执行 `/compact` 触发一次压缩。
 - 工具输出超过阈值时截断，并把完整内容落为 Artifact，事件中保留引用。
-- 优先按需读取文件，不把整个工作区或全部 roots 塞入上下文。
-- `@` 在所有 roots 内检索，标注 root、路径与行号；普通文件引用只插入路径，图片引用读取内容并作为视觉内容发送。
+- 优先按需读取文件，不把整个工作区或全部目录塞入上下文。
+- `@` 在当前工作区内检索，标注路径与行号；普通文件引用只插入路径，图片引用读取内容并作为视觉内容发送。
 - AI 输出文件默认放入元数据与文件引用；图片作为视觉内容发送，其他二进制内容只保留文件引用，由用户另存后用专业软件打开。
 - 本地 PDF / Word / Excel / PPT / ZIP 在读取时抽取文本注入上下文，限制文件大小、条目数与解压后体积，防止解压炸弹。
 - 扫描版 PDF 无文本层时明确提示，不编造内容。
 - 图片输入受大小上限约束，超限时压缩或拒绝并提示。
-- 工作区与临时 root 的文件内容一律视为不可信数据，不得把其中的指令当作系统指令执行。
+- 工作区文件内容一律视为不可信数据，不得把其中的指令当作系统指令执行。
 - 记忆只包括工作区规则与用户偏好，不做跨工作区隐式记忆；临时会话默认没有项目规则。
 
 #### 工作区索引
@@ -640,6 +640,8 @@ interface ImageProvider {
 | `generate_image` | network | 是（计费操作） |
 
 `save_*` 工具写入 `<userData>/files`，不触发工作区写审批，但必须记录 `file.created` 并受大小与类型限制。
+
+本地二进制读取计划在 M3 接入：按 MIME 与扩展名选择专用读取器；图片作为视觉内容发送，可抽取文本的格式转文本，其他二进制只保存文件引用，原始内容不得直接进入上下文。
 
 #### MCP 工具接入
 
@@ -730,7 +732,7 @@ interface ImageProvider {
 
 路径与命令安全：
 
-- 允许路径 = Workspace roots + Session RootGrant；所有路径经 `realpath` 解析后必须落在其中。
+- 允许路径 = Workspace root（Session RootGrant）；所有路径经 `realpath` 解析后必须落在其中。
 - 访问未授权路径时弹窗：允许一次 / 允许本会话 / 拒绝；敏感目录不提供授权选项。
 - RootGrant 按会话隔离，写入 scope 事件；撤销或会话结束后立即失效。
 - 文件 root 只允许读写自身；只有目录 root 可以作为 `cwd` 或执行命令。
@@ -746,7 +748,7 @@ interface ImageProvider {
 
 #### 无工作区会话
 
-Session 可以不绑定 Workspace，也没有任何 Session RootGrant；这是合法状态，不得阻止发送消息或开始 Run。
+Session 可以不绑定 Workspace，也没有 Session RootGrant；这是合法状态，不得阻止发送消息或开始 Run。
 
 - 空 scope 下 Run 仍可对话；只提供与本地路径无关的能力，当前不注册文件、命令等本地工具，也不创建检查点。
 - 允许路径集合为空，所有本地路径访问一律拒绝；不因模型请求自动发起授权。
@@ -1036,9 +1038,9 @@ interface SlotContext {
 | 表 | 用途 |
 | --- | --- |
 | `workspaces` | 工作区与信任状态 |
-| `workspace_roots` | 工作区 root 集合 |
+| `workspace_roots` | 工作区目录 |
 | `sessions` | 会话元数据与投影状态，工作区可选 |
-| `session_roots` | 会话临时授权 root |
+| `session_roots` | 会话工作区授权 |
 | `session_message_search` | 跨会话消息全文索引（FTS5 trigram） |
 | `workspace_files` | 工作区文件索引（路径、mtime、size、hash） |
 | `events` | append-only 事件流 |
@@ -1057,7 +1059,7 @@ interface SlotContext {
 - 启动时创建缺失的 `plugins`、`skills`、`mcp`、`settings`、`files`、`artifacts`、`checkpoints`、`logs` 目录。
 - 插件、技能、MCP 目录由用户维护，应用只读取；启用/禁用等状态写数据库。
 - 文件系统是扩展的唯一事实来源，数据库只保存投影状态，启动时以扫描结果为准。
-- RootGrant 以 `session_roots` 持久化；会话删除时清理授权记录，不删除用户文件。
+- 唯一 RootGrant 以 `session_roots` 持久化；会话删除时清理授权记录，不删除用户文件。
 - 检查点把改动文件复制到 `<userData>/checkpoints/<sessionId>/<checkpointId>/`；恢复时按文件覆盖并先展示 diff。
 - AI 输出文件只写入 `<userData>/files`，元数据写 `files` 表；文件通过 fileId 访问，不暴露任意路径。
 - 搜索索引随 `message.completed` 增量更新，结果中的会话标题实时从 `sessions` 读取；删除会话时清理索引，短关键词或 FTS5 不可用时降级为 LIKE。
@@ -1084,7 +1086,7 @@ interface SlotContext {
 | --- | --- | --- |
 | 提示词注入 | 工作区文件、工具输出、网页内容 | 内容视为不可信数据，明确分隔；不执行其中指令；高风险动作审批 |
 | 命令注入 | 模型生成的命令 | 展示完整命令、白名单、路径限制、环境变量清理 |
-| 路径穿越 | 文件工具参数 | `realpath` 校验、Workspace roots + Session RootGrant 限制、敏感目录拒绝 |
+| 路径穿越 | 文件工具参数 | `realpath` 校验、Workspace root + Session RootGrant 限制、敏感目录拒绝 |
 | 临时授权提权 | 未授权路径访问 | 允许一次/本会话、敏感目录不可授权、授权事件审计 |
 | 符号链接逃逸 | 文件路径 | `realpath` 后重新校验，目标越界需重新授权或拒绝 |
 | 会话授权泄漏 | RootGrant | 按会话隔离，不跨会话继承，撤销后立即失效 |
@@ -1104,7 +1106,7 @@ interface SlotContext {
 
 - 工作区首次打开必须确认信任级别；未信任工作区默认拒绝写入与命令。
 - 临时会话的每个 root 首次使用时授权；拒绝后不重复请求同一路径。
-- RootGrant 按会话隔离，撤销或会话结束后立即失效。
+- RootGrant 按会话隔离且每个会话最多一个，撤销或会话结束后立即失效。
 - 安装插件等同于运行本地代码：扩展页必须显示来源目录、版本与权限，默认不自动启用高权限能力。
 - MCP 配置可以执行任意命令：首次启用必须展示完整命令与环境变量，敏感值保存在本地配置中。
 - 技能脚本只能通过 `run_command` 执行，并经过审批。
@@ -1658,8 +1660,8 @@ pnpm format         # Prettier
 | --- | --- |
 | M0 | 规范、monorepo 骨架、electron-vite + Vue、类型化 IPC、深浅主题与动效 token、布局占位、事件总线与扩展点骨架、CI 门禁 |
 | M1 | 单 Agent 闭环：多提供商、流式对话、工具调用、审批、多会话与重命名/置顶、自动标题、消息编辑/重生成/停止、可选工作区与路径授权、事件流持久化、文件输出与另存为、读改跑测验证 |
-| M2 | 变更审阅与回滚：改动文件列表、diff、按 hunk 审阅、逐文件检查点回滚；输入框 `@` 文件引用与轻量索引；终端与后台任务；跨会话搜索；会话导出；后台通知。明确不做文件树、Monaco、文件 IDE 与 Git 集成 |
-| M3 | 工具完善、图像生成、Office 生成、媒体搜索、Skill/MCP 目录扫描与注册 |
+| M2 | 变更审阅与回滚：改动文件列表、diff、按 hunk 审阅、逐文件检查点回滚；输入框 `@` 文件引用与轻量索引，普通文件插入路径、图片读取并作为视觉内容发送；终端与后台任务；跨会话搜索；会话导出；后台通知。明确不做文件树、Monaco、文件 IDE 与 Git 集成 |
+| M3 | 工具完善、图像生成、Office 生成、媒体搜索、本地二进制文件读取与按类型处理、Skill/MCP 目录扫描与注册 |
 | M4 | 插件宿主、目录扫描、Extensions 管理页、`token-usage` 示例 |
 | M5 | 产品化打包：发布流水线、签名、公证、自动更新、崩溃恢复 |
 
@@ -1668,9 +1670,9 @@ pnpm format         # Prettier
 | 阶段 | 完成标准 |
 | --- | --- |
 | M0 | 应用可启动；深浅主题可切换；IPC 往返成功；事件总线与插槽注册表骨架可用；`typecheck`、`lint` 全绿；渲染层无 Node 访问 |
-| M1 | 完成 3 个任务（代码修复、文档修改、脚本数据处理，可用临时会话）；未授权路径触发授权；多会话切换不中断后台 Run；标题可自动生成、重命名与置顶；消息可编辑重发、重新生成与停止；AI 输出文件可另存；重启后会话与 roots 可恢复 |
-| M2 | 改动文件可查看 diff 并按 hunk 审阅；逐文件检查点可恢复；`@` 可在 roots 内检索文件并尊重 `.gitignore`；终端 `cwd` 受 root 限制；跨会话搜索可跳转；会话可导出；后台完成/失败有系统通知 |
-| M3 | 工具覆盖既定清单；图像模型可配置并生成图片；Office 文件与媒体搜索可用；`<userData>/mcp` 可自动扫描接入；`<userData>/skills` 可自动注册并通过 `/skill` 调用 |
+| M1 | 完成 3 个任务（代码修复、文档修改、脚本数据处理，可用临时会话）；未授权路径触发授权；多会话切换不中断后台 Run；标题可自动生成、重命名与置顶；消息可编辑重发、重新生成与停止；AI 输出文件可另存；重启后会话与工作区可恢复 |
+| M2 | 改动文件可查看 diff 并按 hunk 审阅；逐文件检查点可恢复；`@` 可在工作区内检索文件并尊重 `.gitignore`，图片按视觉内容发送；终端 `cwd` 受工作区限制；跨会话搜索可跳转；会话可导出；后台完成/失败有系统通知 |
+| M3 | 工具覆盖既定清单；图像模型可配置并生成图片；Office 文件与媒体搜索可用；本地二进制文件可按类型读取、转文本或按文件引用处理，不把原始二进制塞入上下文；`<userData>/mcp` 可自动扫描接入；`<userData>/skills` 可自动注册并通过 `/skill` 调用 |
 | M4 | 将示例插件放入 `<userData>/plugins` 后自动注册；可启用/禁用；越权调用被拒绝；热重载不残留副作用 |
 | M5 | dmg 与 nsis 可安装；签名与公证通过；自动更新可用；崩溃恢复不丢事件；性能达标 |
 
@@ -1725,7 +1727,7 @@ CHANGELOG.md         # 版本变更记录
 | MCP 加载 | 目录扫描 | `<userData>/mcp`，逐服务启用与信任 |
 | MCP 工具 | 自动注册 | 仅启用、信任且连接的 Server 进入工具 schema |
 | MCP 连接治理 | 缓存 + 超时 + 并发上限 | 空闲 TTL、失败负缓存与工具名净化 |
-| 工作区模型 | 可选 | Session 可无工作区；Scope = workspace + session roots |
+| 工作区模型 | 可选 | Session 可无工作区；Scope = workspace + 唯一工作区目录 |
 | 设置优先级 | 已定 | Session > Workspace > App |
 | 路由 | 不引入 | 单主窗口 + 弹窗，视图由导航状态驱动 |
 | 路径授权 | 会话级 | 未授权路径弹窗，敏感目录始终拒绝 |
@@ -1743,6 +1745,7 @@ CHANGELOG.md         # 版本变更记录
 | 消息操作 | 编辑重发 / 重新生成 / 停止 | 旧消息标记 `superseded`，不物理删除 |
 | Diff 审阅 | 按 hunk 接受/拒绝 | 支持单文件与整个 Run 回滚 |
 | 工作区索引 | SQLite 增量索引 | 尊重 `.gitignore`，跳过二进制与大文件 |
+| 本地二进制读取 | M3 | 图片走视觉输入；其他类型按专用读取器、转文本或文件引用处理 |
 | Git 集成 | 不做 | 不提供 Git 工具、状态或提交能力 |
 | 通知 | 系统通知 + Dock/托盘 | 后台完成、失败或等待时提醒 |
 | 模型配置 | 支持 `extra_params` 与自定义 headers | 上下文窗口、token 价格、连接测试 |
@@ -1787,7 +1790,7 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 模型配置支持 `extra_params`、自定义 headers、上下文窗口与 token 价格，并可测试连接与刷新模型列表。
 - [ ] 上下文压缩保留不可压缩内容，写入 `context.compacted`，失败可降级为硬截断。
 - [ ] 系统提示包含反幻觉、工具诚实、链接真实性与文件生成自检约束。
-- [ ] 路径访问基于 Workspace roots + Session RootGrant，未授权路径必须走授权流程。
+- [ ] 路径访问基于 Workspace root + Session RootGrant，未授权路径必须走授权流程。
 - [ ] 无工作区会话可正常发送与对话；不注册本地工具、不创建检查点，越界调用返回 `TOOL_WORKSPACE_REQUIRED`。
 - [ ] RootGrant 按会话隔离并写入事件，不跨会话继承。
 - [ ] AI 输出文件只写入 `<userData>/files`，默认永久保留、手动清理，仅通过 fileId 另存为。
@@ -1808,6 +1811,7 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 消息编辑/重发/重新生成/停止写入事件，旧消息标记 `superseded`。
 - [ ] Diff 支持按 hunk 接受/拒绝，未审阅变更会提示。
 - [ ] 工作区索引尊重 `.gitignore`，跳过二进制与大文件，文件监听防抖。
+- [ ] 本地二进制文件按类型读取、转文本或按文件引用处理，不把原始二进制塞入上下文。
 - [ ] 后台完成/失败/等待时发送系统通知，后台任务可终止。
 - [ ] 网络访问默认拒绝，按域名与提供商显式放行；URL 经 SSRF 校验并限制重定向与响应大小。
 - [ ] 发布产物已签名/公证，升级失败可回退。
@@ -1833,7 +1837,7 @@ CHANGELOG.md         # 版本变更记录
 
 | 事件 | 关键 payload | 触发时机 |
 | --- | --- | --- |
-| `workspace.opened` | `workspaceId`、`roots` | 打开工作区 |
+| `workspace.opened` | `workspaceId`、`root` | 打开工作区 |
 | `workspace.trusted` | `workspaceId`、`trustLevel` | 用户确认信任 |
 | `session.created` | `sessionId`、`workspaceId` | 新建会话 |
 | `session.workspace.bound` | `sessionId`、`workspaceId` | 临时会话绑定工作区 |

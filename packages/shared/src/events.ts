@@ -58,7 +58,8 @@ export const eventPayloadSchemas = {
   'message.completed': z.object({
     messageId: z.string(),
     role: z.enum(['user', 'assistant']),
-    content: z.string()
+    content: z.string(),
+    images: z.array(z.object({ path: z.string(), mime: z.string() })).optional()
   }),
   'message.edited': z.object({
     messageId: z.string(),

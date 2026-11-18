@@ -47,6 +47,19 @@ const toOpenAIMessage = (message: ChatMessage): Record<string, unknown> => {
     };
   }
 
+  if (message.images?.length) {
+    return {
+      role: message.role,
+      content: [
+        ...(message.content ? [{ type: 'text', text: message.content }] : []),
+        ...message.images.map((image) => ({
+          type: 'image_url',
+          image_url: { url: `data:${image.mimeType};base64,${image.data}` }
+        }))
+      ]
+    };
+  }
+
   if (message.role === 'assistant' && message.toolCalls?.length) {
     return {
       role: 'assistant',

@@ -3,6 +3,8 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { readFile, realpath, stat } from 'node:fs/promises';
+import { sep } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import {
   AgentLoop,
@@ -15,11 +17,13 @@ import {
   AnthropicProvider,
   OllamaProvider,
   OpenAICompatibleProvider,
+  type ChatImage,
   type ChatMessage,
   type ChatProvider,
   type ProviderToolCall
 } from '@nexus/providers';
-import { createFileToolset } from '@nexus/tools';
+import { createFileToolset, isSensitivePath } from '@nexus/tools';
+import { imageMimeForName } from '@shared/files';
 import { ArtifactService } from '../artifacts/artifact-service';
 import { FileService } from '../files/file-service';
 import { CheckpointService } from '../checkpoint/checkpoint-service';
@@ -178,6 +182,37 @@ const modeSystemPrompt = (mode: AgentMode): string =>
   mode === 'plan'
     ? '当前处于 Plan 模式：只能读取、分析和制定计划，不得写文件、执行命令、发起网络请求或启动 MCP 工具。需要澄清时使用 ask_user；需要执行时提示用户切换到 Build。'
     : '当前处于 Build 模式：可以按权限和审批要求使用读写与执行工具；高风险操作仍需用户审批。需要澄清时使用 ask_user。';
+
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+interface LoadedImage {
+  image: ChatImage;
+  reference: { path: string; mime: string };
+}
+
+/**
+ * 读取 @ 图片引用；校验 roots、敏感路径、类型与大小，返回 base64 内容。
+ */
+const loadImages = async (
+  paths: readonly string[],
+  roots: readonly string[]
+): Promise<LoadedImage[]> => {
+  const resolvedRoots = await Promise.all(roots.map((root) => realpath(root)));
+  const images: LoadedImage[] = [];
+  for (const path of paths.slice(0, 4)) {
+    const real = await realpath(path);
+    const allowed = resolvedRoots.some((root) => real === root || real.startsWith(`${root}${sep}`));
+    if (!allowed) throw new Error(`IMAGE_PATH_OUTSIDE_ROOT: ${path}`);
+    if (isSensitivePath(real)) throw new Error(`IMAGE_PATH_SENSITIVE: ${path}`);
+    const mime = imageMimeForName(real);
+    if (!mime) throw new Error(`IMAGE_TYPE_UNSUPPORTED: ${path}`);
+    const info = await stat(real);
+    if (info.size > MAX_IMAGE_BYTES) throw new Error(`IMAGE_TOO_LARGE: ${path}`);
+    const data = (await readFile(real)).toString('base64');
+    images.push({ image: { mimeType: mime, data }, reference: { path: real, mime } });
+  }
+  return images;
+};
 
 export const createAgentProvider: ProviderFactory = (config) => {
   const shared = {
@@ -434,7 +469,14 @@ export class AgentService {
       };
       const modeMessage: ChatMessage = { role: 'system', content: modeSystemPrompt(mode) };
       const shouldAddUserMessage = !input.regenerateMessageId;
-      const userMessage: ChatMessage = { role: 'user', content: input.prompt };
+      const loadedImages = input.imagePaths?.length
+        ? await loadImages(input.imagePaths, input.rootPaths)
+        : [];
+      const userMessage: ChatMessage = {
+        role: 'user',
+        content: input.prompt,
+        ...(loadedImages.length ? { images: loadedImages.map((item) => item.image) } : {})
+      };
       if (shouldAddUserMessage) {
         eventBus.publish(
           createNexusEvent({
@@ -442,7 +484,12 @@ export class AgentService {
             runId,
             seq: 1,
             type: 'message.completed',
-            payload: { messageId: randomUUID(), role: 'user', content: input.prompt }
+            payload: {
+              messageId: randomUUID(),
+              role: 'user',
+              content: input.prompt,
+              ...(loadedImages.length ? { images: loadedImages.map((item) => item.reference) } : {})
+            }
           })
         );
       }

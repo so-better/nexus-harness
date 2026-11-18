@@ -7,3 +7,4 @@ export * from './ipc/channels';
 export * from './ipc/contracts';
 export * from './ipc/result';
 export * from './usage';
+export * from './files';

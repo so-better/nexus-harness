@@ -22,8 +22,8 @@ export const listProviders = async (): Promise<ProviderPublic[]> =>
 /**
  * 通过系统对话框选择工作目录。
  */
-export const chooseRoot = async (): Promise<string[]> =>
-  unwrap(await window.nexus.workspace.chooseRoot()).paths;
+export const chooseRoot = async (defaultPath?: string): Promise<string[]> =>
+  unwrap(await window.nexus.workspace.chooseRoot(defaultPath ? { defaultPath } : undefined)).paths;
 
 /**
  * 启动 Agent Run。
@@ -36,6 +36,7 @@ export const runAgent = async (input: {
   modelId: string;
   editMessageId?: string;
   regenerateMessageId?: string;
+  imagePaths?: string[];
 }): Promise<AgentStartResult> => unwrap(await window.nexus.agent.run(input));
 
 /**

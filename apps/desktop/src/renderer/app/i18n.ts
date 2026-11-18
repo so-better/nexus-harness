@@ -8,6 +8,10 @@ import type { AppLanguage } from '@shared/ipc/contracts';
 const zhCN = {
   'app.brand': 'Nexus',
   'app.chooseRoot': '选择工作区',
+  'app.addWorkspace': '添加工作区',
+  'app.leaveWorkspace': '退出工作区',
+  'app.confirmLeaveWorkspace': '退出当前工作区？',
+  'app.selectedWorkspace': '当前工作区: ',
   'app.removeRoot': '移除工作区',
   'app.rootAddFailed': '添加工作区失败',
   'app.rootRemoveFailed': '移除工作区失败',
@@ -244,6 +248,10 @@ export type MessageKey = keyof typeof zhCN;
 const enUS: Record<MessageKey, string> = {
   'app.brand': 'Nexus',
   'app.chooseRoot': 'Choose workspace',
+  'app.addWorkspace': 'Add workspace',
+  'app.leaveWorkspace': 'Leave workspace',
+  'app.confirmLeaveWorkspace': 'Leave the current workspace?',
+  'app.selectedWorkspace': 'Current workspace: ',
   'app.removeRoot': 'Remove workspace',
   'app.rootAddFailed': 'Failed to add workspace',
   'app.rootRemoveFailed': 'Failed to remove workspace',

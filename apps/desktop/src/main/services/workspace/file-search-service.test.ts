@@ -24,6 +24,7 @@ describe('searchWorkspaceFiles', () => {
     await writeFile(join(root, 'src', 'generated', '.gitignore'), '*.tmp\n', 'utf8');
     await writeFile(join(root, 'src', 'user-service.ts'), 'export {}', 'utf8');
     await writeFile(join(root, 'src', 'user-service.test.ts'), 'export {}', 'utf8');
+    await writeFile(join(root, 'photo.png'), 'image', 'utf8');
     await writeFile(join(root, 'debug.log'), 'debug', 'utf8');
     await writeFile(join(root, 'node_modules', 'package.js'), 'module', 'utf8');
     await writeFile(join(root, '.ssh', 'id_rsa'), 'secret', 'utf8');
@@ -42,6 +43,11 @@ describe('searchWorkspaceFiles', () => {
       'src/user-service.ts'
     ]);
     expect(results.every((item) => !item.path.includes('node_modules'))).toBe(true);
+  });
+
+  it('marks image references', async () => {
+    const results = await searchWorkspaceFiles([root], 'photo');
+    expect(results[0]).toMatchObject({ name: 'photo.png', isImage: true });
   });
 
   it('does not return ignored logs or ssh keys', async () => {

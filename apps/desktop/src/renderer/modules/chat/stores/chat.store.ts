@@ -88,7 +88,7 @@ export const useChatStore = defineStore('chat', () => {
   const dispatchRun = async (
     sessionId: string,
     prompt: string,
-    extra: { editMessageId?: string; regenerateMessageId?: string } = {}
+    extra: { editMessageId?: string; regenerateMessageId?: string; imagePaths?: string[] } = {}
   ): Promise<boolean> => {
     if (!providerId.value) {
       error.value = t('chat.needsProvider');
@@ -121,8 +121,8 @@ export const useChatStore = defineStore('chat', () => {
   /**
    * 发送新消息。
    */
-  const send = async (sessionId: string, prompt: string): Promise<boolean> =>
-    dispatchRun(sessionId, prompt);
+  const send = async (sessionId: string, prompt: string, imagePaths?: string[]): Promise<boolean> =>
+    dispatchRun(sessionId, prompt, imagePaths ? { imagePaths } : {});
 
   /**
    * 编辑用户消息并重新发送。
@@ -182,9 +182,9 @@ export const useChatStore = defineStore('chat', () => {
    */
   const addRoot = async (sessionId: string): Promise<'added' | 'cancelled' | 'failed'> => {
     try {
-      const paths = await chooseRoot();
+      const paths = await chooseRoot(roots.value[0]?.path);
       if (paths.length === 0) return 'cancelled';
-      roots.value = await addSessionRoots(sessionId, paths);
+      roots.value = await addSessionRoots(sessionId, [paths[0]!]);
       return 'added';
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);

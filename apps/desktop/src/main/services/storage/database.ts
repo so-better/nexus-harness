@@ -149,6 +149,26 @@ const migrate = (db: DatabaseSync): void => {
     `);
     db.exec('PRAGMA user_version = 7');
   }
+
+  if (version < 8) {
+    // 工作区改为单 root；不兼容旧的多 root 数据，直接重建授权表。
+    db.exec(`
+      DROP TABLE IF EXISTS session_roots;
+      CREATE TABLE session_roots (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        path TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        access TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'session',
+        created_at INTEGER NOT NULL,
+        UNIQUE(session_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_session_roots_session ON session_roots(session_id);
+    `);
+    db.exec('PRAGMA user_version = 8');
+  }
 };
 
 /**

@@ -2,7 +2,7 @@
  * Agent 服务测试：用 MockProvider 和真实文件工具跑通闭环。
  */
 
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MockProvider, type ChatProvider, type ProviderRequest } from '@nexus/providers';
@@ -426,6 +426,55 @@ describe('AgentService', () => {
     expect(await readFile(join(root, 'b.txt'), 'utf8')).toBe('hello');
     expect(result.toolCalls).toBe(2);
     expect(result.messages.at(-1)).toMatchObject({ role: 'assistant', content: '写入并运行完成' });
+  });
+
+  it('loads image references into the user message and persists their metadata', async () => {
+    const imagePath = join(root, 'photo.png');
+    await writeFile(imagePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    let userImages: unknown;
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: false, vision: true, reasoning: false },
+      async *stream(request) {
+        const user = request.messages.find((message) => message.role === 'user');
+        userImages = user?.images;
+        yield { type: 'text-delta', text: '看到了' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const service = new AgentService({ createProvider: () => provider });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+    const events: NexusEvent[] = [];
+
+    await service.run(
+      {
+        sessionId: 'session-1',
+        prompt: '看看 @photo.png',
+        rootPaths: [root],
+        providerId: providerConfig.id,
+        modelId: 'mock-model',
+        imagePaths: [imagePath]
+      },
+      providerConfig,
+      { onEvent: (event) => events.push(event) }
+    );
+
+    expect(userImages).toMatchObject([{ mimeType: 'image/png', data: 'iVBORw==' }]);
+    const userEvent = events.find(
+      (event): event is NexusEvent<'message.completed'> =>
+        event.type === 'message.completed' && (event.payload as { role?: string }).role === 'user'
+    );
+    expect(userEvent?.payload.images).toEqual([
+      { path: await realpath(imagePath), mime: 'image/png' }
+    ]);
   });
 
   it('saves generated files without a workspace and emits file.created', async () => {

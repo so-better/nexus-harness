@@ -2,7 +2,6 @@
   <form class="nh-composer" :class="{ 'nh-composer--hero': hero }" @submit.prevent="submit">
     <div class="nh-composer__toolbar">
       <ComposerRootPicker
-        :root-label="rootLabel"
         :roots="roots"
         @choose-root="emit('choose-root')"
         @remove-root="emit('remove-root', $event)"
@@ -66,7 +65,6 @@ const props = defineProps<{
   disabled: boolean;
   disabledReason?: string | undefined;
   running: boolean;
-  rootLabel: string;
   roots: SessionRoot[];
   providers: ProviderPublic[];
   models: ProviderModel[];
@@ -78,7 +76,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  send: [prompt: string];
+  send: [prompt: string, imagePaths?: string[]];
   stop: [];
   'choose-root': [];
   'remove-root': [rootId: string];
@@ -89,6 +87,7 @@ const emit = defineEmits<{
 }>();
 
 const draft = ref('');
+const imagePaths = ref<string[]>([]);
 const inputRef = ref<InputInst | null>(null);
 const placeholder = computed(() => t('chat.composerPlaceholder'));
 
@@ -99,8 +98,10 @@ const submit = (): void => {
   const prompt = draft.value.trim();
   if (!prompt || props.disabled || props.running) return;
   closeReferences();
+  const attachments = imagePaths.value.filter((path) => draft.value.includes(`@${path}`));
+  imagePaths.value = [];
   draft.value = '';
-  emit('send', prompt);
+  emit('send', prompt, attachments);
 };
 
 /**
@@ -136,6 +137,11 @@ const {
   running: computed(() => props.running),
   enabled: computed(() => props.roots.length > 0),
   inputRef,
+  onSelect: (reference) => {
+    if (reference.isImage && imagePaths.value.length < 4) {
+      imagePaths.value = [...new Set([...imagePaths.value, reference.path])];
+    }
+  },
   submit,
   toggleMode: onTab
 });

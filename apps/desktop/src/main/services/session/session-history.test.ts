@@ -2,6 +2,9 @@
  * 会话历史投影测试：用户、助手、工具调用与审批状态重建。
  */
 
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createNexusEvent } from '@nexus/core';
 import type { NexusEvent } from '@shared/events';
 import { describe, expect, it } from 'vitest';
@@ -118,6 +121,33 @@ describe('SessionHistoryService', () => {
     const service = new SessionHistoryService(store);
     expect(service.load('session-1')).toEqual([{ role: 'user', content: '新问题' }]);
     expect(service.load('session-1', 'user-2')).toEqual([]);
+  });
+
+  it('rehydrates image references from user messages', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nexus-history-image-'));
+    const imagePath = join(root, 'photo.png');
+    await writeFile(imagePath, Buffer.from([1, 2, 3]));
+    const events = [
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: {
+          messageId: 'user-1',
+          role: 'user',
+          content: '看图',
+          images: [{ path: imagePath, mime: 'image/png' }]
+        }
+      })
+    ] as NexusEvent[];
+
+    try {
+      const store = { list: () => events } as unknown as EventStore;
+      const history = new SessionHistoryService(store).load('session-1');
+      expect(history[0]?.images).toEqual([{ mimeType: 'image/png', data: 'AQID' }]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('adds a placeholder result for an interrupted tool call', () => {

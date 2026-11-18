@@ -15,9 +15,16 @@ export interface ProviderToolCall {
   arguments: unknown;
 }
 
+export interface ChatImage {
+  mimeType: string;
+  /** base64 编码内容，不包含 data: 前缀 */
+  data: string;
+}
+
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  images?: ChatImage[];
   toolCalls?: ProviderToolCall[];
   toolCallId?: string;
   /**

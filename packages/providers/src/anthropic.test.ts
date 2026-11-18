@@ -32,6 +32,26 @@ describe('AnthropicProvider', () => {
     });
   });
 
+  it('converts image messages into Anthropic image blocks', () => {
+    const converted = toAnthropicMessages([
+      {
+        role: 'user',
+        content: '看看这张图',
+        images: [{ mimeType: 'image/jpeg', data: 'aGVsbG8=' }]
+      }
+    ]);
+    expect(converted.messages[0]).toMatchObject({
+      role: 'user',
+      content: [
+        { type: 'text', text: '看看这张图' },
+        {
+          type: 'image',
+          source: { type: 'base64', media_type: 'image/jpeg', data: 'aGVsbG8=' }
+        }
+      ]
+    });
+  });
+
   it('normalizes Ollama base urls', () => {
     expect(normalizeOllamaBaseUrl('http://127.0.0.1:11434')).toBe('http://127.0.0.1:11434/v1');
     expect(normalizeOllamaBaseUrl('http://127.0.0.1:11434/v1/')).toBe('http://127.0.0.1:11434/v1');

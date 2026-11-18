@@ -5,7 +5,10 @@
 import { dialog, ipcMain } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import type { WorkspaceRootSelection, WorkspaceFileReference } from '@shared/ipc/contracts';
-import { workspaceFileSearchInputSchema } from '@shared/ipc/contracts';
+import {
+  workspaceChooseRootInputSchema,
+  workspaceFileSearchInputSchema
+} from '@shared/ipc/contracts';
 import { EventStore } from '../services/session/event-store';
 import { SessionService } from '../services/session/session-service';
 import { getDatabase } from '../services/storage/database';
@@ -42,11 +45,14 @@ export const registerWorkspaceIpc = (): void => {
 
   ipcMain.handle(
     IPC_CHANNELS.workspaceChooseRoot,
-    async (): Promise<Result<WorkspaceRootSelection>> => {
+    async (_event, rawInput: unknown): Promise<Result<WorkspaceRootSelection>> => {
+      const parsed = workspaceChooseRootInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('WORKSPACE_INVALID_INPUT', '工作区参数不合法');
       try {
         const result = await dialog.showOpenDialog({
           title: '选择工作区',
-          properties: ['openDirectory', 'multiSelections']
+          properties: ['openDirectory'],
+          ...(parsed.data?.defaultPath ? { defaultPath: parsed.data.defaultPath } : {})
         });
         if (result.canceled) return ok({ paths: [] });
         return ok({ paths: result.filePaths });
