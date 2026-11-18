@@ -16,10 +16,13 @@
         :projection="projection"
         :root-label="rootLabel"
         :providers="providers"
+        :models="models"
         :provider-id="providerId"
+        :model-id="modelId"
         :disabled-reason="disabledReason"
         @choose-root="chat.addRoot"
-        @update-provider="chat.setProvider"
+        @update-provider="updateProvider"
+        @update-model="updateModel"
         @open-settings="settingsOpen = true"
         @send="send"
         @stop="stop"
@@ -53,12 +56,13 @@
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import type { ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
-import { t } from '@/app/i18n';
+import { setLocale, t } from '@/app/i18n';
 import ChatView from '@/modules/chat/views/ChatView.vue';
 import { projectEvents } from '@/modules/chat/projection';
 import { useChatStore } from '@/modules/chat/stores/chat.store';
 import SessionSidebar from '@/modules/session/components/SessionSidebar.vue';
 import { useSessionStore } from '@/modules/session/stores/session.store';
+import { getLanguage } from '@/modules/settings/api/settings.api';
 import SettingsModal from '@/modules/settings/views/SettingsModal.vue';
 import AppStatusbar from './AppStatusbar.vue';
 import { useAppMeta } from './use-app-meta';
@@ -67,7 +71,7 @@ import { useSessionStatusSync } from './use-session-status';
 const sessions = useSessionStore();
 const chat = useChatStore();
 const { sessions: sessionList, activeId } = storeToRefs(sessions);
-const { providers, providerId, rootPaths, runningBySession } = storeToRefs(chat);
+const { providers, providerId, modelId, models, rootPaths, runningBySession } = storeToRefs(chat);
 
 const { version, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
 
@@ -82,6 +86,7 @@ const rootLabel = computed(() =>
 );
 const disabledReason = computed(() => {
   if (!providerId.value) return t('chat.needsProvider');
+  if (!modelId.value) return t('chat.needsModel');
   if (rootPaths.value.length === 0) return t('chat.needsRoot');
   return undefined;
 });
@@ -103,6 +108,10 @@ watch(
       providers.value.some((provider: ProviderPublic) => provider.id === sessionProvider)
     ) {
       chat.setProvider(sessionProvider);
+      const sessionModel = sessionList.value.find((session) => session.id === id)?.modelId;
+      if (sessionModel && models.value.some((model) => model.id === sessionModel)) {
+        chat.setModel(sessionModel);
+      }
     }
   },
   { immediate: true }
@@ -112,7 +121,7 @@ watch(
  * 新建会话并使用当前 Provider。
  */
 const createSession = async (): Promise<void> => {
-  await sessions.create(providerId.value);
+  await sessions.create(providerId.value, modelId.value);
 };
 
 /**
@@ -127,10 +136,37 @@ const selectSession = (id: string): void => {
  */
 const send = async (prompt: string): Promise<void> => {
   if (!activeId.value) {
-    const created = await sessions.create(providerId.value);
+    const created = await sessions.create(providerId.value, modelId.value);
     if (!created) return;
   }
   if (activeId.value) await chat.send(activeId.value, prompt);
+};
+
+/**
+ * 持久化当前会话的服务商与模型选择。
+ */
+const persistSelection = (): void => {
+  if (activeId.value && providerId.value && modelId.value) {
+    sessions
+      .updateModel(activeId.value, providerId.value, modelId.value)
+      .catch((error: unknown) => console.error('保存会话模型失败', error));
+  }
+};
+
+/**
+ * 切换服务商并持久化。
+ */
+const updateProvider = (id: string): void => {
+  chat.setProvider(id);
+  persistSelection();
+};
+
+/**
+ * 切换模型并持久化。
+ */
+const updateModel = (id: string): void => {
+  chat.setModel(id);
+  persistSelection();
 };
 
 /**
@@ -141,6 +177,11 @@ const stop = async (): Promise<void> => {
 };
 
 onMounted(async () => {
+  try {
+    setLocale(await getLanguage());
+  } catch {
+    // 语言读取失败时保持默认中文
+  }
   await chat.initialize();
   await sessions.load();
   await loadAppMeta();

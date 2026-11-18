@@ -25,7 +25,8 @@ vi.mock('../services/provider/provider-store', () => ({
       id: 'provider-1',
       name: 'Mock',
       baseUrl: 'https://example.com/v1',
-      model: 'mock-model',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
       apiKey: 'secret',
       enabled: true
     }))
@@ -125,7 +126,8 @@ const input = {
   sessionId: 'session-1',
   prompt: 'hello',
   rootPaths: ['/tmp'],
-  providerId: 'provider-1'
+  providerId: 'provider-1',
+  modelId: 'mock-model'
 };
 
 const createSender = (id = 1) => ({

@@ -32,6 +32,7 @@ export const runAgent = async (input: {
   prompt: string;
   rootPaths: string[];
   providerId: string;
+  modelId: string;
 }): Promise<AgentStartResult> => unwrap(await window.nexus.agent.run(input));
 
 /**

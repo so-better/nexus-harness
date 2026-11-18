@@ -13,9 +13,12 @@
       :running="projection.running"
       :root-label="rootLabel"
       :providers="providers"
+      :models="models"
       :provider-id="providerId"
+      :model-id="modelId"
       @choose-root="emit('choose-root')"
       @update-provider="emit('update-provider', $event)"
+      @update-model="emit('update-model', $event)"
       @open-settings="emit('open-settings')"
       @send="emit('send', $event)"
       @stop="emit('stop')"
@@ -40,9 +43,12 @@
         :running="projection.running"
         :root-label="rootLabel"
         :providers="providers"
+        :models="models"
         :provider-id="providerId"
+        :model-id="modelId"
         @choose-root="emit('choose-root')"
         @update-provider="emit('update-provider', $event)"
+        @update-model="emit('update-model', $event)"
         @send="emit('send', $event)"
         @stop="emit('stop')"
       />
@@ -57,7 +63,7 @@
 
 import { computed } from 'vue';
 import { NTag } from 'naive-ui';
-import type { ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
+import type { ProviderModel, ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import ApprovalCard from '../components/ApprovalCard.vue';
 import ComposerBox from '../components/ComposerBox.vue';
@@ -70,13 +76,16 @@ const props = defineProps<{
   projection: ChatProjection;
   rootLabel: string;
   providers: ProviderPublic[];
+  models: ProviderModel[];
   providerId?: string | undefined;
+  modelId?: string | undefined;
   disabledReason?: string | undefined;
 }>();
 
 const emit = defineEmits<{
   'choose-root': [];
   'update-provider': [id: string];
+  'update-model': [id: string];
   'open-settings': [];
   send: [prompt: string];
   stop: [];

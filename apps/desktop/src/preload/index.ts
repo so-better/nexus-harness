@@ -18,11 +18,14 @@ const bridge: NexusBridge = {
     get: (id) => ipcRenderer.invoke(IPC_CHANNELS.sessionGet, id),
     rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionRename, input),
     setPinned: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionSetPinned, input),
+    setModel: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionSetModel, input),
     remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.sessionRemove, id)
   },
   settings: {
     getAutoLaunch: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetAutoLaunch),
-    setAutoLaunch: (enabled) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetAutoLaunch, enabled)
+    setAutoLaunch: (enabled) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetAutoLaunch, enabled),
+    getLanguage: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetLanguage),
+    setLanguage: (language) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetLanguage, language)
   },
   cache: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.cacheGetInfo),
@@ -31,7 +34,8 @@ const bridge: NexusBridge = {
   provider: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.providerList),
     save: (input) => ipcRenderer.invoke(IPC_CHANNELS.providerSave, input),
-    remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.providerRemove, id)
+    remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.providerRemove, id),
+    test: (input) => ipcRenderer.invoke(IPC_CHANNELS.providerTest, input)
   },
   checkpoint: {
     restore: (input) => ipcRenderer.invoke(IPC_CHANNELS.checkpointRestore, input)

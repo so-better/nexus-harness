@@ -17,9 +17,12 @@
         :running="running"
         :root-label="rootLabel"
         :providers="providers"
+        :models="models"
         :provider-id="providerId"
+        :model-id="modelId"
         @choose-root="emit('choose-root')"
         @update-provider="emit('update-provider', $event)"
+        @update-model="emit('update-model', $event)"
         @open-settings="emit('open-settings')"
         @send="emit('send', $event)"
         @stop="emit('stop')"
@@ -33,7 +36,7 @@
  * 欢迎页：品牌化首屏、能力说明与主输入区。
  */
 
-import type { ProviderPublic } from '@shared/ipc/contracts';
+import type { ProviderModel, ProviderPublic } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import ComposerBox from './ComposerBox.vue';
 import WelcomeFlow from './WelcomeFlow.vue';
@@ -43,7 +46,9 @@ defineProps<{
   running: boolean;
   rootLabel: string;
   providers: ProviderPublic[];
+  models: ProviderModel[];
   providerId?: string | undefined;
+  modelId?: string | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -51,6 +56,7 @@ const emit = defineEmits<{
   stop: [];
   'choose-root': [];
   'update-provider': [id: string];
+  'update-model': [id: string];
   'open-settings': [];
 }>();
 </script>

@@ -1,15 +1,18 @@
 /**
- * Provider 配置 IPC：只回传公开字段，API Key 由 safeStorage 加密保存。
+ * Provider 配置 IPC：本地配置直接回传，API Key 随 Provider 明文保存。
  */
 
 import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import {
   providerSettingsSchema,
+  providerTestInputSchema,
   type ProviderPublic,
+  type ProviderProbeResult,
   type ProviderRemoveResult
 } from '@shared/ipc/contracts';
 import { fail, ok, type Result } from '@shared/ipc/result';
+import { ProviderProbeError, probeProvider } from '../services/provider/provider-probe';
 import { providerStore } from '../services/provider/provider-store';
 
 /**
@@ -38,6 +41,45 @@ export const registerProviderIpc = (): void => {
         return fail(
           'PROVIDER_SAVE_FAILED',
           error instanceof Error ? error.message : '保存配置失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.providerTest,
+    async (_event, rawInput: unknown): Promise<Result<ProviderProbeResult>> => {
+      const parsed = providerTestInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return fail('PROVIDER_INVALID_INPUT', '连接测试参数不合法', parsed.error.flatten());
+      }
+
+      const stored =
+        parsed.data.id === undefined ? undefined : await providerStore.get(parsed.data.id);
+      if (parsed.data.id !== undefined && !stored) {
+        return fail('PROVIDER_NOT_FOUND', `Provider 不存在：${parsed.data.id}`);
+      }
+
+      const apiKey = parsed.data.apiKey ?? stored?.apiKey;
+      if (!apiKey) return fail('PROVIDER_INVALID_INPUT', '连接测试需要 API Key');
+
+      const headers = parsed.data.headers ?? stored?.headers;
+
+      try {
+        return ok(
+          await probeProvider({
+            baseUrl: parsed.data.baseUrl,
+            apiKey,
+            ...(headers === undefined ? {} : { headers })
+          })
+        );
+      } catch (error) {
+        if (error instanceof ProviderProbeError) {
+          return fail(error.code, error.message);
+        }
+        return fail(
+          'PROVIDER_TEST_FAILED',
+          error instanceof Error ? error.message : '连接测试失败'
         );
       }
     }

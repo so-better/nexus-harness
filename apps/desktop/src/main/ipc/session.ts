@@ -8,6 +8,7 @@ import { IPC_CHANNELS } from '@shared/ipc/channels';
 import {
   sessionCreateInputSchema,
   sessionRenameInputSchema,
+  sessionSetModelInputSchema,
   sessionSetPinnedInputSchema,
   type SessionRemoveResult,
   type SessionSummary
@@ -120,6 +121,28 @@ export const registerSessionIpc = (): void => {
         return ok(sessions.setPinned(parsed.data.id, parsed.data.pinned));
       } catch (error) {
         return fail('SESSION_PIN_FAILED', error instanceof Error ? error.message : '更新置顶失败');
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.sessionSetModel,
+    async (_event, rawInput: unknown): Promise<Result<SessionSummary>> => {
+      const parsed = sessionSetModelInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return fail('SESSION_INVALID_INPUT', '会话模型参数不合法', parsed.error.flatten());
+      }
+      if (!sessions.get(parsed.data.id)) {
+        return fail('SESSION_NOT_FOUND', `会话不存在：${parsed.data.id}`);
+      }
+
+      try {
+        return ok(sessions.setModel(parsed.data));
+      } catch (error) {
+        return fail(
+          'SESSION_MODEL_FAILED',
+          error instanceof Error ? error.message : '更新会话模型失败'
+        );
       }
     }
   );

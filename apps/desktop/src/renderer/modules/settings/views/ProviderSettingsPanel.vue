@@ -1,198 +1,211 @@
 <template>
   <section class="nh-provider-settings">
-    <div class="nh-provider-settings__toolbar">
-      <NSelect
-        class="nh-provider-settings__select"
+    <ProviderEmptyState v-if="providers.length === 0 && !isFormVisible" @create="startNew" />
+
+    <ProviderListView
+      v-else-if="!isFormVisible"
+      :providers="providers"
+      @create="startNew"
+      @edit="editProvider"
+    />
+
+    <template v-else>
+      <NForm
+        ref="formRef"
+        class="nh-provider-settings__form"
+        :model="providerForm"
+        :rules="rules"
+        label-placement="top"
         size="small"
-        :value="selectedId"
-        :options="providerOptions"
-        :placeholder="t('settings.noProviders')"
-        :disabled="providers.length === 0"
-        @update:value="selectProvider"
+      >
+        <div class="nh-provider-settings__section">
+          <h3 class="nh-provider-settings__section-title">{{ t('settings.connection') }}</h3>
+          <div class="nh-provider-settings__panel">
+            <div class="nh-provider-settings__grid">
+              <NFormItem class="nh-provider-settings__item" :label="t('settings.name')" path="name">
+                <NInput
+                  ref="nameInputRef"
+                  :value="providerForm.name"
+                  :placeholder="t('settings.namePlaceholder')"
+                  @update:value="(value: string) => (providerForm.name = value)"
+                />
+              </NFormItem>
+              <NFormItem
+                class="nh-provider-settings__item"
+                :label="t('settings.baseUrl')"
+                path="baseUrl"
+              >
+                <NInput
+                  :value="providerForm.baseUrl"
+                  :placeholder="t('settings.baseUrlPlaceholder')"
+                  @update:value="(value: string) => (providerForm.baseUrl = value)"
+                />
+              </NFormItem>
+            </div>
+
+            <div class="nh-provider-settings__grid">
+              <NFormItem
+                class="nh-provider-settings__item"
+                :label="t('settings.apiKey')"
+                path="apiKey"
+              >
+                <NInput
+                  :value="providerForm.apiKey"
+                  type="password"
+                  show-password-on="click"
+                  :placeholder="t('settings.apiKeyPlaceholder')"
+                  @update:value="(value: string) => (providerForm.apiKey = value)"
+                />
+              </NFormItem>
+              <NFormItem class="nh-provider-settings__item" :label="t('settings.enabled')">
+                <div class="nh-provider-settings__enabled">
+                  <NSwitch
+                    :value="providerForm.enabled"
+                    @update:value="(value: boolean) => (providerForm.enabled = value)"
+                  />
+                </div>
+              </NFormItem>
+            </div>
+          </div>
+        </div>
+
+        <div class="nh-provider-settings__section">
+          <h3 class="nh-provider-settings__section-title">{{ t('settings.models') }}</h3>
+          <NFormItem class="nh-provider-settings__item" path="models" :show-label="false">
+            <ProviderModelsField
+              :models="providerForm.models"
+              :available-models="availableModels"
+              :default-model-id="providerForm.defaultModelId"
+              :testing="testing"
+              @update:models="(value) => (providerForm.models = value)"
+              @update:default-model-id="(value) => (providerForm.defaultModelId = value)"
+              @test="testConnection"
+            />
+          </NFormItem>
+        </div>
+      </NForm>
+
+      <ProviderSettingsActions
+        :selected="Boolean(selectedId)"
+        :saving="saving"
+        @back="backToList"
+        @save="handleSave"
+        @delete="deleteProvider"
       />
-      <NButton size="small" secondary @click="newProvider">
-        {{ t('settings.newProvider') }}
-      </NButton>
-    </div>
-
-    <NAlert v-if="error" type="error" :show-icon="false">{{ error }}</NAlert>
-    <NAlert v-if="saved" type="success" :show-icon="false">{{ t('settings.saved') }}</NAlert>
-
-    <div class="nh-provider-settings__form">
-      <div class="nh-provider-settings__grid">
-        <label class="nh-provider-settings__field">
-          <span class="nh-provider-settings__label">{{ t('settings.name') }}</span>
-          <NInput
-            :value="providerForm.name"
-            placeholder="OpenAI"
-            @update:value="(value: string) => (providerForm.name = value)"
-          />
-        </label>
-        <label class="nh-provider-settings__field">
-          <span class="nh-provider-settings__label">{{ t('settings.model') }}</span>
-          <NInput
-            :value="providerForm.model"
-            placeholder="gpt-4.1"
-            @update:value="(value: string) => (providerForm.model = value)"
-          />
-        </label>
-      </div>
-
-      <label class="nh-provider-settings__field">
-        <span class="nh-provider-settings__label">{{ t('settings.baseUrl') }}</span>
-        <NInput
-          :value="providerForm.baseUrl"
-          placeholder="https://api.openai.com/v1"
-          @update:value="(value: string) => (providerForm.baseUrl = value)"
-        />
-      </label>
-
-      <label class="nh-provider-settings__field">
-        <span class="nh-provider-settings__label">{{ t('settings.apiKey') }}</span>
-        <NInput
-          :value="providerForm.apiKey"
-          type="password"
-          show-password-on="click"
-          :placeholder="selectedId ? t('settings.apiKeyHint') : 'sk-...'"
-          @update:value="(value: string) => (providerForm.apiKey = value)"
-        />
-      </label>
-
-      <div class="nh-provider-settings__grid">
-        <label class="nh-provider-settings__field">
-          <span class="nh-provider-settings__label">{{ t('settings.contextWindow') }}</span>
-          <NInputNumber
-            :value="providerForm.contextWindow"
-            :min="4096"
-            :step="1024"
-            @update:value="(value: number | null) => (providerForm.contextWindow = value)"
-          />
-        </label>
-        <label class="nh-provider-settings__field">
-          <span class="nh-provider-settings__label">{{ t('settings.maxOutputTokens') }}</span>
-          <NInputNumber
-            :value="providerForm.maxOutputTokens"
-            :min="256"
-            :step="256"
-            @update:value="(value: number | null) => (providerForm.maxOutputTokens = value)"
-          />
-        </label>
-      </div>
-
-      <div class="nh-provider-settings__switch">
-        <NText depth="3">{{ t('settings.enabled') }}</NText>
-        <NSwitch
-          :value="providerForm.enabled"
-          @update:value="(value: boolean) => (providerForm.enabled = value)"
-        />
-      </div>
-    </div>
-
-    <div class="nh-provider-settings__actions">
-      <NPopconfirm v-if="selectedId" @positive-click="deleteProvider">
-        <template #trigger>
-          <NButton size="small" type="error" secondary>
-            {{ t('settings.deleteProvider') }}
-          </NButton>
-        </template>
-        {{ t('settings.deleteProvider') }}?
-      </NPopconfirm>
-      <span class="nh-provider-settings__spacer" />
-      <NButton size="small" type="primary" :loading="saving" @click="saveProviderForm">
-        {{ t('settings.save') }}
-      </NButton>
-    </div>
+    </template>
   </section>
 </template>
 
 <script setup lang="ts">
 /**
- * 模型提供商设置：列表、编辑、API Key 与上下文预算。
+ * 模型服务商设置：列表、连接、多模型、API Key 与模型预算。
  */
 
-import {
-  NAlert,
-  NButton,
-  NInput,
-  NInputNumber,
-  NPopconfirm,
-  NSelect,
-  NSwitch,
-  NText
-} from 'naive-ui';
+import { NForm, NFormItem, NInput, NSwitch, type FormInst, type InputInst } from 'naive-ui';
+import { ref } from 'vue';
 import { t } from '@/app/i18n';
+import ProviderEmptyState from '../components/ProviderEmptyState.vue';
+import ProviderListView from '../components/ProviderListView.vue';
+import ProviderModelsField from '../components/ProviderModelsField.vue';
+import ProviderSettingsActions from '../components/ProviderSettingsActions.vue';
 import { useProviderSettings } from '../composables/use-provider-settings';
+import { useProviderFormControls } from '../composables/use-provider-form-controls';
+import { createProviderRules } from '../validation/provider-validation';
 
 const emit = defineEmits<{ changed: [] }>();
+
+let resetToList: () => void = () => undefined;
 
 const {
   providers,
   selectedId,
-  providerOptions,
   providerForm,
-  error,
-  saved,
   saving,
+  availableModels,
+  testing,
+  testConnection,
   selectProvider,
   newProvider,
   saveProviderForm,
   deleteProvider
-} = useProviderSettings(() => emit('changed'));
+} = useProviderSettings(() => {
+  resetToList();
+  emit('changed');
+});
+
+const rules = createProviderRules(selectedId, providerForm);
+const formRef = ref<FormInst | null>(null);
+const nameInputRef = ref<InputInst | null>(null);
+
+const { isFormVisible, startNew, startEdit, backToList, handleSave } = useProviderFormControls({
+  selectedId,
+  newProvider,
+  saveProviderForm,
+  formRef,
+  nameInputRef
+});
+
+resetToList = backToList;
+
+/**
+ * 从列表进入 Provider 编辑。
+ */
+const editProvider = (id: string): void => {
+  selectProvider(id);
+  startEdit();
+};
 </script>
 
 <style scoped lang="less">
 .nh-provider-settings {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
-.nh-provider-settings__toolbar {
+.nh-provider-settings__section {
   display: flex;
-  gap: 8px;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.nh-provider-settings__select {
-  flex: 1;
+.nh-provider-settings__section-title {
+  margin: 0;
+  color: var(--nh-color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.nh-provider-settings__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--nh-color-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--nh-color-bg-elevated) 55%, transparent);
 }
 
 .nh-provider-settings__form {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
 }
 
-.nh-provider-settings__field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.nh-provider-settings__label {
-  color: var(--nh-color-text-secondary);
-  font-size: 12px;
+.nh-provider-settings__item {
+  margin-bottom: 0;
 }
 
 .nh-provider-settings__grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
   gap: 12px;
 }
 
-.nh-provider-settings__switch {
+.nh-provider-settings__enabled {
   display: flex;
+  min-height: 28px;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 0;
-}
-
-.nh-provider-settings__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.nh-provider-settings__spacer {
-  flex: 1;
 }
 </style>

@@ -64,6 +64,9 @@ export const registerAgentIpc = (): void => {
         if (!provider.enabled) {
           return fail('PROVIDER_DISABLED', `Provider 已停用：${parsed.data.providerId}`);
         }
+        if (!provider.models.some((model) => model.id === parsed.data.modelId)) {
+          return fail('PROVIDER_MODEL_NOT_FOUND', `模型不存在：${parsed.data.modelId}`);
+        }
 
         const runId = randomUUID();
         const controller = new AbortController();

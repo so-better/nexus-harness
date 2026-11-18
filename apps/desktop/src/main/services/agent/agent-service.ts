@@ -102,15 +102,20 @@ export class AgentService {
     const unsubscribe = hooks.onEvent ? eventBus.subscribeAll(hooks.onEvent) : undefined;
 
     try {
+      const modelConfig = providerConfig.models.find((model) => model.id === input.modelId);
+      if (!modelConfig) {
+        throw new Error(`PROVIDER_MODEL_NOT_FOUND: ${input.modelId}`);
+      }
+
       const toolset = await createFileToolset(input.rootPaths);
       const provider = this.createProvider(providerConfig);
       const artifacts = new ArtifactService(this.artifactBaseDir, this.database);
       const checkpoints = new CheckpointService();
       const context = new AgentContextService({
         provider,
-        model: providerConfig.model,
-        contextWindow: providerConfig.contextWindow,
-        maxOutputTokens: providerConfig.maxOutputTokens,
+        model: modelConfig.id,
+        contextWindow: modelConfig.contextWindow,
+        maxOutputTokens: modelConfig.maxOutputTokens,
         artifacts,
         sessionId: input.sessionId,
         runId,
@@ -200,7 +205,7 @@ export class AgentService {
       const loop = new AgentLoop({
         provider,
         providerName: providerConfig.name,
-        model: providerConfig.model,
+        model: modelConfig.id,
         sessionId: input.sessionId,
         runId,
         messages: [...(hooks.history ?? []), userMessage],
@@ -212,7 +217,7 @@ export class AgentService {
         eventBus,
         ...(providerConfig.extraParams ? { extraParams: providerConfig.extraParams } : {}),
         ...(hooks.signal ? { signal: hooks.signal } : {}),
-        maxTokens: providerConfig.maxOutputTokens,
+        maxTokens: modelConfig.maxOutputTokens,
         ...(input.maxSteps === undefined ? {} : { maxSteps: input.maxSteps })
       });
 

@@ -1,8 +1,8 @@
 /**
- * Provider 配置存储测试：加密落盘、保留旧密钥与删除。
+ * Provider 配置存储测试：本地明文落盘、多模型、兼容迁移与删除。
  */
 
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,6 +19,12 @@ vi.mock('electron', () => ({
 
 import { ProviderStore } from './provider-store';
 
+const model = (id: string, contextWindow = 128_000, maxOutputTokens = 4_096) => ({
+  id,
+  contextWindow,
+  maxOutputTokens
+});
+
 describe('ProviderStore', () => {
   let directory = '';
   let store: ProviderStore;
@@ -33,119 +39,124 @@ describe('ProviderStore', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  it('stores the api key encrypted and returns it only to main', async () => {
-    const saved = await store.save({
+  const save = (overrides: Record<string, unknown> = {}) =>
+    store.save({
       name: 'OpenAI',
       baseUrl: 'https://example.com/v1',
-      model: 'gpt-test',
-      apiKey: 'secret'
+      apiKey: 'secret',
+      models: [model('gpt-test')],
+      defaultModelId: 'gpt-test',
+      ...overrides
     });
 
-    expect(saved).not.toHaveProperty('apiKey');
+  it('stores the api key locally and returns it for editing', async () => {
+    const saved = await save();
+
+    expect(saved.apiKey).toBe('secret');
     const raw = await readFile(join(directory, 'providers.json'), 'utf8');
-    expect(raw).not.toContain('"secret"');
+    expect(raw).toContain('"apiKey": "secret"');
 
     const full = await store.get(saved.id);
     expect(full?.apiKey).toBe('secret');
+    expect(full?.models).toEqual([model('gpt-test')]);
   });
 
-  it('encrypts custom headers and omits them from public configs', async () => {
-    const saved = await store.save({
-      name: 'OpenAI',
-      baseUrl: 'https://example.com/v1',
-      model: 'gpt-test',
-      apiKey: 'secret',
-      headers: { Authorization: 'Bearer header-secret' }
-    });
+  it('stores custom headers locally and keeps them out of public configs', async () => {
+    const saved = await save({ headers: { Authorization: 'Bearer header-secret' } });
 
     expect(saved).not.toHaveProperty('headers');
     const raw = await readFile(join(directory, 'providers.json'), 'utf8');
-    expect(raw).not.toContain('header-secret');
+    expect(raw).toContain('header-secret');
 
     const full = await store.get(saved.id);
     expect(full?.headers).toEqual({ Authorization: 'Bearer header-secret' });
   });
 
   it('keeps the existing api key when updating without one', async () => {
-    const saved = await store.save({
-      name: 'OpenAI',
-      baseUrl: 'https://example.com/v1',
-      model: 'gpt-test',
-      apiKey: 'secret'
-    });
+    const saved = await save();
 
     const updated = await store.save({
       id: saved.id,
       name: 'OpenAI 2',
       baseUrl: 'https://example.com/v2',
-      model: 'gpt-test-2'
+      models: [model('gpt-test-2', 32_000, 8_000)],
+      defaultModelId: 'gpt-test-2'
     });
 
     expect(updated.name).toBe('OpenAI 2');
+    expect(updated.models[0]?.id).toBe('gpt-test-2');
     const full = await store.get(saved.id);
     expect(full?.apiKey).toBe('secret');
   });
 
-  it('persists context budget settings and applies defaults', async () => {
-    const saved = await store.save({
-      name: 'OpenAI',
-      baseUrl: 'https://example.com/v1',
-      model: 'gpt-test',
-      apiKey: 'secret'
-    });
+  it('migrates legacy single-model providers', async () => {
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      join(directory, 'providers.json'),
+      JSON.stringify({
+        version: 1,
+        providers: [
+          {
+            id: 'legacy',
+            name: 'Legacy',
+            baseUrl: 'https://example.com/v1',
+            enabled: true,
+            model: 'legacy-model',
+            contextWindow: 32_000,
+            maxOutputTokens: 4_000,
+            encryptedApiKey: Buffer.from('enc:legacy-secret').toString('base64')
+          }
+        ]
+      })
+    );
 
-    expect(saved.contextWindow).toBe(128_000);
-    expect(saved.maxOutputTokens).toBe(4_096);
+    const providers = await store.list();
 
-    const custom = await store.save({
-      id: saved.id,
-      name: 'OpenAI',
-      baseUrl: 'https://example.com/v1',
-      model: 'gpt-test',
-      contextWindow: 32_000,
-      maxOutputTokens: 8_000
-    });
-
-    expect(custom.contextWindow).toBe(32_000);
-    expect(custom.maxOutputTokens).toBe(8_000);
+    expect(providers[0]?.models).toEqual([model('legacy-model', 32_000, 4_000)]);
+    expect(providers[0]?.defaultModelId).toBe('legacy-model');
   });
 
-  it('rejects output reservations that leave no input budget', async () => {
-    await expect(
-      store.save({
-        name: 'OpenAI',
-        baseUrl: 'https://example.com/v1',
-        model: 'gpt-test',
-        apiKey: 'secret',
-        contextWindow: 8_000,
-        maxOutputTokens: 8_000
-      })
-    ).rejects.toThrow('maxOutputTokens');
+  it('preserves multiple models and default selection', async () => {
+    const saved = await save({
+      models: [model('gpt-a'), model('gpt-b', 64_000, 8_000)],
+      defaultModelId: 'gpt-b'
+    });
+
+    expect(saved.models.map((item) => item.id)).toEqual(['gpt-a', 'gpt-b']);
+    expect(saved.defaultModelId).toBe('gpt-b');
   });
 
   it('removes providers', async () => {
-    const saved = await store.save({
-      name: 'OpenAI',
-      baseUrl: 'https://example.com/v1',
-      model: 'gpt-test',
-      apiKey: 'secret'
-    });
+    const saved = await save();
 
     await store.remove(saved.id);
     await expect(store.get(saved.id)).resolves.toBeUndefined();
     await expect(store.list()).resolves.toEqual([]);
   });
 
-  it('fails when system encryption is unavailable', async () => {
-    encryption.available = false;
-
-    await expect(
-      store.save({
-        name: 'OpenAI',
-        baseUrl: 'https://example.com/v1',
-        model: 'gpt-test',
-        apiKey: 'secret'
+  it('migrates legacy encrypted values to plaintext', async () => {
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      join(directory, 'providers.json'),
+      JSON.stringify({
+        version: 1,
+        providers: [
+          {
+            id: 'legacy',
+            name: 'Legacy',
+            baseUrl: 'https://example.com/v1',
+            enabled: true,
+            models: [model('legacy-model')],
+            defaultModelId: 'legacy-model',
+            encryptedApiKey: Buffer.from('enc:legacy-secret').toString('base64')
+          }
+        ]
       })
-    ).rejects.toThrow('系统安全存储不可用');
+    );
+
+    await expect(store.list()).resolves.toMatchObject([{ apiKey: 'legacy-secret' }]);
+    const raw = await readFile(join(directory, 'providers.json'), 'utf8');
+    expect(raw).toContain('"apiKey": "legacy-secret"');
+    expect(raw).not.toContain('encryptedApiKey');
   });
 });

@@ -34,52 +34,80 @@ export type ThemeSource = z.infer<typeof themeSourceSchema>;
 export type ThemeInfo = z.infer<typeof themeInfoSchema>;
 
 /**
- * Provider 保存参数；apiKey 省略时保留旧密钥。
+ * Provider 下的单个模型配置。
+ */
+export const providerModelSchema = z
+  .object({
+    id: z.string().min(1),
+    contextWindow: z.number().int().min(4_096).max(2_000_000),
+    maxOutputTokens: z.number().int().min(256).max(131_072)
+  })
+  .refine((value) => value.maxOutputTokens < value.contextWindow, {
+    message: 'maxOutputTokens 必须小于 contextWindow',
+    path: ['maxOutputTokens']
+  });
+
+/**
+ * Provider 保存参数；一个 Provider 可以包含多个模型。
  */
 export const providerSettingsSchema = z
   .object({
     id: z.string().optional(),
     name: z.string().min(1),
     baseUrl: z.string().min(1),
-    model: z.string().min(1),
     apiKey: z.string().min(1).optional(),
     headers: z.record(z.string(), z.string()).optional(),
     extraParams: z.record(z.string(), z.unknown()).optional(),
     enabled: z.boolean().optional(),
-    contextWindow: z.number().int().min(4_096).max(2_000_000).optional(),
-    maxOutputTokens: z.number().int().min(256).max(131_072).optional()
+    models: z.array(providerModelSchema).min(1),
+    defaultModelId: z.string().min(1)
   })
-  .refine(
-    (value) =>
-      value.contextWindow === undefined ||
-      value.maxOutputTokens === undefined ||
-      value.maxOutputTokens < value.contextWindow,
-    { message: 'maxOutputTokens 必须小于 contextWindow', path: ['maxOutputTokens'] }
-  );
+  .refine((value) => value.models.some((model) => model.id === value.defaultModelId), {
+    message: '默认模型必须存在于模型列表中',
+    path: ['defaultModelId']
+  });
 
 /**
- * 对外展示的 Provider 配置，不包含 API Key。
+ * 对外展示的 Provider 配置；本地桌面应用直接回显 API Key。
  */
 export const providerPublicSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   baseUrl: z.string().min(1),
-  model: z.string().min(1),
+  apiKey: z.string().min(1),
   enabled: z.boolean(),
-  contextWindow: z.number().int().positive(),
-  maxOutputTokens: z.number().int().positive()
+  models: z.array(providerModelSchema).min(1),
+  defaultModelId: z.string().min(1)
 });
 
 /**
  * 主进程内部使用的完整 Provider 配置；headers/extraParams 视为敏感字段。
  */
 export const agentProviderConfigSchema = providerPublicSchema.extend({
-  apiKey: z.string().min(1),
   headers: z.record(z.string(), z.string()).optional(),
   extraParams: z.record(z.string(), z.unknown()).optional()
 });
 
 export const providerRemoveResultSchema = z.object({ id: z.string().min(1) });
+
+/**
+ * 测试连接：允许未保存的新配置；已有配置可省略 apiKey。
+ */
+export const providerTestInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  baseUrl: z.string().min(1),
+  apiKey: z.string().min(1).optional(),
+  headers: z.record(z.string(), z.string()).optional()
+});
+
+export const providerProbeResultSchema = z.object({
+  models: z.array(z.string()),
+  latencyMs: z.number().nonnegative()
+});
+
+export type ProviderModel = z.infer<typeof providerModelSchema>;
+export type ProviderProbeResult = z.infer<typeof providerProbeResultSchema>;
+export type ProviderTestInput = z.infer<typeof providerTestInputSchema>;
 
 /**
  * 取消订阅函数，preload 与插件 API 共用。
@@ -101,6 +129,8 @@ export interface NexusBridge {
   settings: {
     getAutoLaunch: () => Promise<Result<boolean>>;
     setAutoLaunch: (enabled: boolean) => Promise<Result<boolean>>;
+    getLanguage: () => Promise<Result<AppLanguage>>;
+    setLanguage: (language: AppLanguage) => Promise<Result<AppLanguage>>;
   };
   cache: {
     getInfo: () => Promise<Result<CacheInfo>>;
@@ -110,6 +140,7 @@ export interface NexusBridge {
     list: () => Promise<Result<ProviderPublic[]>>;
     save: (input: ProviderSettings) => Promise<Result<ProviderPublic>>;
     remove: (id: string) => Promise<Result<ProviderRemoveResult>>;
+    test: (input: ProviderTestInput) => Promise<Result<ProviderProbeResult>>;
   };
   session: {
     list: () => Promise<Result<SessionSummary[]>>;
@@ -118,6 +149,7 @@ export interface NexusBridge {
     get: (id: string) => Promise<Result<SessionSummary>>;
     rename: (input: SessionRenameInput) => Promise<Result<SessionSummary>>;
     setPinned: (input: SessionSetPinnedInput) => Promise<Result<SessionSummary>>;
+    setModel: (input: SessionSetModelInput) => Promise<Result<SessionSummary>>;
     remove: (id: string) => Promise<Result<SessionRemoveResult>>;
   };
   checkpoint: {
@@ -147,6 +179,7 @@ export const agentRunInputSchema = z.object({
   prompt: z.string().min(1),
   rootPaths: z.array(z.string().min(1)).min(1),
   providerId: z.string().min(1),
+  modelId: z.string().min(1),
   maxSteps: z.number().int().positive().max(50).optional()
 });
 
@@ -205,6 +238,7 @@ export const sessionSummarySchema = z.object({
   status: sessionStatusSchema,
   mode: agentModeSchema,
   providerId: z.string().optional(),
+  modelId: z.string().optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
   lastActiveAt: z.number()
@@ -214,6 +248,7 @@ export const sessionCreateInputSchema = z.object({
   title: z.string().optional(),
   workspaceId: z.string().optional(),
   providerId: z.string().optional(),
+  modelId: z.string().optional(),
   mode: agentModeSchema.optional()
 });
 
@@ -229,6 +264,12 @@ export const sessionSetPinnedInputSchema = z.object({
   pinned: z.boolean()
 });
 
+export const sessionSetModelInputSchema = z.object({
+  id: z.string().min(1),
+  providerId: z.string().min(1),
+  modelId: z.string().min(1)
+});
+
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 export type AgentMode = z.infer<typeof agentModeSchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
@@ -236,6 +277,7 @@ export type SessionCreateInput = z.infer<typeof sessionCreateInputSchema>;
 export type SessionRenameInput = z.infer<typeof sessionRenameInputSchema>;
 export type SessionRemoveResult = z.infer<typeof sessionRemoveResultSchema>;
 export type SessionSetPinnedInput = z.infer<typeof sessionSetPinnedInputSchema>;
+export type SessionSetModelInput = z.infer<typeof sessionSetModelInputSchema>;
 
 /**
  * 用户通过系统对话框选择的临时 root 集合。
@@ -249,6 +291,10 @@ export type WorkspaceRootSelection = z.infer<typeof workspaceRootSelectionSchema
 /**
  * 可清理的缓存类别。
  */
+export const languageSchema = z.enum(['zh-CN', 'en-US']);
+
+export type AppLanguage = z.infer<typeof languageSchema>;
+
 export const cacheTargetSchema = z.enum(['files', 'artifacts', 'logs', 'all']);
 
 /**

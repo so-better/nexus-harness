@@ -15,6 +15,10 @@ export const eventPayloadSchemas = {
   'session.mode.changed': z.object({
     mode: z.enum(['plan', 'build'])
   }),
+  'session.model.changed': z.object({
+    providerId: z.string(),
+    modelId: z.string()
+  }),
   'session.renamed': z.object({
     title: z.string(),
     source: z.enum(['auto', 'user'])

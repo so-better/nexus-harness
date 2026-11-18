@@ -7,25 +7,28 @@ import { defineStore } from 'pinia';
 import { t } from '@/app/i18n';
 import { appendAgentEvent } from '../event-cache';
 import type { NexusEvent } from '@shared/events';
-import type { ProviderPublic } from '@shared/ipc/contracts';
 import {
   cancelAgent,
   chooseRoot,
-  listProviders,
   loadEvents,
   resolveApproval,
   runAgent,
   subscribeAgentEvents
 } from '../api/chat.api';
+import { useProviderSelection } from '../provider-selection';
 
 /**
  * 每个会话独立缓存事件，切换会话时不丢后台事件。
  */
 export const useChatStore = defineStore('chat', () => {
-  const providers = ref<ProviderPublic[]>([]);
-  const providerId = ref<string | undefined>();
   const rootPaths = ref<string[]>([]);
   const error = ref<string | undefined>();
+
+  const providerSelection = useProviderSelection((message) => {
+    error.value = message;
+  });
+  const { providers, providerId, modelId, models, refreshProviders, setProvider, setModel } =
+    providerSelection;
 
   const eventsBySession = reactive<Record<string, NexusEvent[]>>({});
   const loadedSessions = reactive<Record<string, boolean>>({});
@@ -34,23 +37,6 @@ export const useChatStore = defineStore('chat', () => {
 
   let unsubscribe: (() => void) | undefined;
   let initialized = false;
-
-  /**
-   * 重新读取 Provider，并在当前选择失效时回退到第一个启用项。
-   */
-  const refreshProviders = async (): Promise<void> => {
-    try {
-      providers.value = await listProviders();
-      const current = providers.value.find(
-        (provider) => provider.id === providerId.value && provider.enabled
-      );
-      if (!current) {
-        providerId.value = providers.value.find((provider) => provider.enabled)?.id;
-      }
-    } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
-    }
-  };
 
   /**
    * 初始化 Provider 列表与事件订阅；重复调用安全。
@@ -95,6 +81,10 @@ export const useChatStore = defineStore('chat', () => {
       error.value = t('chat.needsProvider');
       return;
     }
+    if (!modelId.value) {
+      error.value = t('chat.needsModel');
+      return;
+    }
     if (rootPaths.value.length === 0) {
       error.value = t('chat.needsRoot');
       return;
@@ -107,7 +97,8 @@ export const useChatStore = defineStore('chat', () => {
         sessionId,
         prompt,
         rootPaths: rootPaths.value,
-        providerId: providerId.value
+        providerId: providerId.value,
+        modelId: modelId.value
       });
       runIds[sessionId] = result.runId;
     } catch (reason) {
@@ -153,13 +144,6 @@ export const useChatStore = defineStore('chat', () => {
   };
 
   /**
-   * 切换当前模型。
-   */
-  const setProvider = (id: string): void => {
-    providerId.value = id;
-  };
-
-  /**
    * 清空错误提示。
    */
   const clearError = (): void => {
@@ -169,6 +153,8 @@ export const useChatStore = defineStore('chat', () => {
   return {
     providers,
     providerId,
+    modelId,
+    models,
     rootPaths,
     error,
     eventsBySession,
@@ -182,6 +168,7 @@ export const useChatStore = defineStore('chat', () => {
     decideApproval,
     addRoot,
     setProvider,
+    setModel,
     clearError
   };
 });

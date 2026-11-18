@@ -135,7 +135,7 @@ export const getNaiveOverrides = (palette: ThemePalette): GlobalThemeOverrides =
   Button: {
     borderRadiusMedium: '8px',
     borderRadiusSmall: '4px',
-    fontWeight: '500'
+    fontWeight: '400'
   },
   Card: {
     borderRadius: '8px'

@@ -2,59 +2,13 @@
   <section class="nh-cache">
     <p class="nh-cache__hint">{{ t('settings.cacheHint') }}</p>
 
-    <div class="nh-cache__list">
-      <div class="nh-cache__row">
-        <div>
-          <p class="nh-cache__title">{{ t('settings.cacheFiles') }}</p>
-          <p class="nh-cache__size">{{ formatBytes(info.filesBytes) }}</p>
-        </div>
-        <NPopconfirm @positive-click="clear('files')">
-          <template #trigger>
-            <NButton size="small" :loading="clearing === 'files'" :disabled="isBusy">
-              {{ t('settings.clear') }}
-            </NButton>
-          </template>
-          {{ t('settings.clearConfirm') }}
-        </NPopconfirm>
-      </div>
-
-      <div class="nh-cache__row">
-        <div>
-          <p class="nh-cache__title">{{ t('settings.cacheArtifacts') }}</p>
-          <p class="nh-cache__size">{{ formatBytes(info.artifactsBytes) }}</p>
-        </div>
-        <NPopconfirm @positive-click="clear('artifacts')">
-          <template #trigger>
-            <NButton size="small" :loading="clearing === 'artifacts'" :disabled="isBusy">
-              {{ t('settings.clear') }}
-            </NButton>
-          </template>
-          {{ t('settings.clearConfirm') }}
-        </NPopconfirm>
-      </div>
-
-      <div class="nh-cache__row">
-        <div>
-          <p class="nh-cache__title">{{ t('settings.cacheLogs') }}</p>
-          <p class="nh-cache__size">{{ formatBytes(info.logsBytes) }}</p>
-        </div>
-        <NPopconfirm @positive-click="clear('logs')">
-          <template #trigger>
-            <NButton size="small" :loading="clearing === 'logs'" :disabled="isBusy">
-              {{ t('settings.clear') }}
-            </NButton>
-          </template>
-          {{ t('settings.clearConfirm') }}
-        </NPopconfirm>
-      </div>
-    </div>
-
-    <NDivider />
-
-    <div class="nh-cache__row">
-      <div>
-        <p class="nh-cache__title">{{ t('settings.cacheTotal') }}</p>
-        <p class="nh-cache__size">{{ formatBytes(info.totalBytes) }}</p>
+    <div class="nh-cache__summary">
+      <span class="nh-cache__summary-icon">
+        <AppIcon name="database" :size="20" />
+      </span>
+      <div class="nh-cache__summary-copy">
+        <p class="nh-cache__summary-title">{{ t('settings.cacheTotal') }}</p>
+        <p class="nh-cache__summary-size">{{ formatBytes(info.totalBytes) }}</p>
       </div>
       <NPopconfirm @positive-click="clear('all')">
         <template #trigger>
@@ -65,6 +19,9 @@
             :loading="clearing === 'all'"
             :disabled="isBusy"
           >
+            <template #icon>
+              <AppIcon name="trash" :size="14" />
+            </template>
             {{ t('settings.clearAll') }}
           </NButton>
         </template>
@@ -72,12 +29,34 @@
       </NPopconfirm>
     </div>
 
+    <div class="nh-cache__group">
+      <p class="nh-cache__group-title">{{ t('settings.cacheContents') }}</p>
+
+      <div class="nh-cache__panel">
+        <div v-for="item in items" :key="item.target" class="nh-cache__row">
+          <span class="nh-cache__icon">
+            <AppIcon :name="item.icon" :size="16" />
+          </span>
+          <div class="nh-cache__copy">
+            <p class="nh-cache__title">{{ item.label }}</p>
+            <p class="nh-cache__size">{{ formatBytes(item.bytes) }}</p>
+          </div>
+          <NPopconfirm @positive-click="clear(item.target)">
+            <template #trigger>
+              <NButton size="small" tertiary :loading="clearing === item.target" :disabled="isBusy">
+                <template #icon>
+                  <AppIcon name="trash" :size="14" />
+                </template>
+                {{ t('settings.clear') }}
+              </NButton>
+            </template>
+            {{ t('settings.clearConfirm') }}
+          </NPopconfirm>
+        </div>
+      </div>
+    </div>
+
     <NAlert v-if="busy" type="info" :show-icon="false">{{ t('settings.cacheBusy') }}</NAlert>
-    <NAlert v-if="info.failed.length" type="warning" :show-icon="false">
-      {{ t('settings.cachePartial') }}
-    </NAlert>
-    <NAlert v-if="message" type="success" :show-icon="false">{{ message }}</NAlert>
-    <NAlert v-if="error" type="error" :show-icon="false">{{ error }}</NAlert>
   </section>
 </template>
 
@@ -87,9 +66,10 @@
  */
 
 import { computed, onMounted, reactive, ref } from 'vue';
-import { NAlert, NButton, NDivider, NPopconfirm } from 'naive-ui';
+import { NAlert, NButton, NPopconfirm, useMessage } from 'naive-ui';
 import type { CacheInfo, CacheTarget } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
+import AppIcon from '@/components/AppIcon.vue';
 import { clearCache, getCacheInfo } from '../api/settings.api';
 
 const props = defineProps<{ busy: boolean }>();
@@ -101,10 +81,37 @@ const info = reactive<CacheInfo>({
   totalBytes: 0,
   failed: []
 });
+const message = useMessage();
 const clearing = ref<CacheTarget | undefined>();
-const message = ref<string>();
-const error = ref<string>();
 const isBusy = computed(() => props.busy || Boolean(clearing.value));
+
+const items = computed<
+  Array<{
+    target: CacheTarget;
+    label: string;
+    bytes: number;
+    icon: 'file' | 'spark' | 'terminal';
+  }>
+>(() => [
+  {
+    target: 'files',
+    label: t('settings.cacheFiles'),
+    bytes: info.filesBytes,
+    icon: 'file'
+  },
+  {
+    target: 'artifacts',
+    label: t('settings.cacheArtifacts'),
+    bytes: info.artifactsBytes,
+    icon: 'spark'
+  },
+  {
+    target: 'logs',
+    label: t('settings.cacheLogs'),
+    bytes: info.logsBytes,
+    icon: 'terminal'
+  }
+]);
 
 /**
  * 把字节数格式化为便于阅读的大小。
@@ -123,7 +130,7 @@ const load = async (): Promise<void> => {
   try {
     Object.assign(info, await getCacheInfo());
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : t('settings.loadFailed');
+    message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
   }
 };
 
@@ -133,13 +140,12 @@ const load = async (): Promise<void> => {
 const clear = async (target: CacheTarget): Promise<void> => {
   if (isBusy.value) return;
   clearing.value = target;
-  message.value = undefined;
-  error.value = undefined;
   try {
     Object.assign(info, await clearCache(target));
-    message.value = t('settings.cleared');
+    if (info.failed.length > 0) message.warning(t('settings.cachePartial'));
+    else message.success(t('settings.cleared'));
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : t('settings.loadFailed');
+    message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
   } finally {
     clearing.value = undefined;
   }
@@ -152,7 +158,7 @@ onMounted(load);
 .nh-cache {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .nh-cache__hint {
@@ -161,24 +167,96 @@ onMounted(load);
   font-size: 12px;
 }
 
-.nh-cache__list {
+.nh-cache__summary {
   display: flex;
-  overflow: hidden;
-  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid var(--nh-color-border);
-  border-radius: 8px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--nh-color-bg-elevated) 55%, transparent);
+}
+
+.nh-cache__summary-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--nh-color-accent) 10%, transparent);
+  color: var(--nh-color-accent);
+}
+
+.nh-cache__summary-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.nh-cache__summary-title,
+.nh-cache__summary-size {
+  margin: 0;
+}
+
+.nh-cache__summary-title {
+  color: var(--nh-color-text-secondary);
+  font-size: 12px;
+}
+
+.nh-cache__summary-size {
+  margin-top: 2px;
+  color: var(--nh-color-text-primary);
+  font-family: var(--nh-font-mono);
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.nh-cache__group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nh-cache__group-title {
+  margin: 0;
+  color: var(--nh-color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.nh-cache__panel {
+  overflow: hidden;
+  border: 1px solid var(--nh-color-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--nh-color-bg-elevated) 55%, transparent);
 }
 
 .nh-cache__row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px;
+  gap: 12px;
+  padding: 12px 16px;
 }
 
-.nh-cache__list .nh-cache__row + .nh-cache__row {
+.nh-cache__row + .nh-cache__row {
   border-top: 1px solid var(--nh-color-border);
+}
+
+.nh-cache__icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--nh-color-bg-hover);
+  color: var(--nh-color-text-secondary);
+}
+
+.nh-cache__copy {
+  min-width: 0;
+  flex: 1;
 }
 
 .nh-cache__title,

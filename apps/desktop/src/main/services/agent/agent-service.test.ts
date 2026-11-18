@@ -37,11 +37,10 @@ describe('AgentService', () => {
       id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
-      model: 'mock-model',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
       apiKey: 'secret',
-      enabled: true,
-      contextWindow: 128_000,
-      maxOutputTokens: 4_096
+      enabled: true
     };
     const events: NexusEvent[] = [];
 
@@ -50,7 +49,8 @@ describe('AgentService', () => {
         sessionId: 'session-1',
         prompt: '继续',
         rootPaths: [root],
-        providerId: providerConfig.id
+        providerId: providerConfig.id,
+        modelId: 'mock-model'
       },
       providerConfig,
       {
@@ -90,11 +90,10 @@ describe('AgentService', () => {
       id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
-      model: 'mock-model',
+      models: [{ id: 'mock-model', contextWindow: 4_096, maxOutputTokens: 1_024 }],
+      defaultModelId: 'mock-model',
       apiKey: 'secret',
-      enabled: true,
-      contextWindow: 4_096,
-      maxOutputTokens: 1_024
+      enabled: true
     };
     const events: NexusEvent[] = [];
     const result = await service.run(
@@ -102,7 +101,8 @@ describe('AgentService', () => {
         sessionId: 'session-1',
         prompt: '读取大文件',
         rootPaths: [root],
-        providerId: providerConfig.id
+        providerId: providerConfig.id,
+        modelId: 'mock-model'
       },
       providerConfig,
       { onEvent: (event) => events.push(event) }
@@ -132,11 +132,10 @@ describe('AgentService', () => {
       id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
-      model: 'mock-model',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
       apiKey: 'secret',
-      enabled: true,
-      contextWindow: 128_000,
-      maxOutputTokens: 4_096
+      enabled: true
     };
     const events: NexusEvent[] = [];
     const result = await service.run(
@@ -144,7 +143,8 @@ describe('AgentService', () => {
         sessionId: 'session-1',
         prompt: '读取 a.txt',
         rootPaths: [root],
-        providerId: providerConfig.id
+        providerId: providerConfig.id,
+        modelId: 'mock-model'
       },
       providerConfig,
       { onEvent: (event) => events.push(event) }

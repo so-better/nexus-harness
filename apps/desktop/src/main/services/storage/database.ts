@@ -77,6 +77,11 @@ const migrate = (db: DatabaseSync): void => {
     `);
     db.exec('PRAGMA user_version = 3');
   }
+
+  if (version < 4) {
+    db.exec('ALTER TABLE sessions ADD COLUMN model_id TEXT');
+    db.exec('PRAGMA user_version = 4');
+  }
 };
 
 /**

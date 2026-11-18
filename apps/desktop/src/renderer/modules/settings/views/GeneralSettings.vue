@@ -1,39 +1,77 @@
 <template>
   <section class="nh-general">
-    <div class="nh-general__row">
-      <div>
-        <p class="nh-general__title">{{ t('settings.autoLaunch') }}</p>
-        <p class="nh-general__hint">{{ t('settings.autoLaunchHint') }}</p>
+    <div class="nh-general__group">
+      <p class="nh-general__group-title">{{ t('settings.preferences') }}</p>
+
+      <div class="nh-general__panel">
+        <div class="nh-general__row">
+          <span class="nh-general__icon">
+            <AppIcon name="globe" :size="16" />
+          </span>
+          <div class="nh-general__copy">
+            <p class="nh-general__title">{{ t('settings.language') }}</p>
+            <p class="nh-general__hint">{{ t('settings.languageHint') }}</p>
+          </div>
+          <NSelect
+            class="nh-general__language"
+            :value="locale"
+            :options="languageOptions"
+            @update:value="changeLanguage"
+          />
+        </div>
+
+        <div class="nh-general__row nh-general__row--divided">
+          <span class="nh-general__icon">
+            <AppIcon name="power" :size="16" />
+          </span>
+          <div class="nh-general__copy">
+            <p class="nh-general__title">{{ t('settings.autoLaunch') }}</p>
+            <p class="nh-general__hint">{{ t('settings.autoLaunchHint') }}</p>
+          </div>
+          <NSwitch :value="autoLaunch" :loading="loading" @update:value="changeAutoLaunch" />
+        </div>
       </div>
-      <NSwitch :value="autoLaunch" :loading="loading" @update:value="changeAutoLaunch" />
     </div>
 
-    <NDivider />
+    <div class="nh-general__group">
+      <p class="nh-general__group-title">{{ t('settings.about') }}</p>
 
-    <div class="nh-general__row">
-      <NText depth="3">{{ t('settings.version') }}</NText>
-      <NText depth="2">{{ version }}</NText>
+      <div class="nh-general__panel">
+        <div class="nh-general__row">
+          <span class="nh-general__icon">
+            <AppIcon name="info" :size="16" />
+          </span>
+          <div class="nh-general__copy">
+            <p class="nh-general__title">{{ t('settings.version') }}</p>
+          </div>
+          <span class="nh-general__version">{{ version }}</span>
+        </div>
+      </div>
     </div>
-
-    <NAlert v-if="error" type="error" :show-icon="false">{{ error }}</NAlert>
   </section>
 </template>
 
 <script setup lang="ts">
 /**
- * 通用设置：开机自启与版本信息。
+ * 通用设置：语言、开机自启与版本信息。
  */
 
-import { onMounted, ref } from 'vue';
-import { NAlert, NDivider, NSwitch, NText } from 'naive-ui';
-import { t } from '@/app/i18n';
-import { getAutoLaunch, setAutoLaunch } from '../api/settings.api';
+import { computed, onMounted, ref } from 'vue';
+import { NSelect, NSwitch, useMessage, type SelectOption } from 'naive-ui';
+import type { AppLanguage } from '@shared/ipc/contracts';
+import { locale, setLocale, t } from '@/app/i18n';
+import AppIcon from '@/components/AppIcon.vue';
+import { getAutoLaunch, setAutoLaunch, setLanguage } from '../api/settings.api';
 
 defineProps<{ version: string }>();
 
+const message = useMessage();
 const autoLaunch = ref(true);
 const loading = ref(false);
-const error = ref<string>();
+const languageOptions = computed<SelectOption[]>(() => [
+  { label: t('settings.languageZh'), value: 'zh-CN' },
+  { label: t('settings.languageEn'), value: 'en-US' }
+]);
 
 /**
  * 读取当前开机自启状态。
@@ -42,7 +80,7 @@ const load = async (): Promise<void> => {
   try {
     autoLaunch.value = await getAutoLaunch();
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : t('settings.loadFailed');
+    message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
   }
 };
 
@@ -51,13 +89,28 @@ const load = async (): Promise<void> => {
  */
 const changeAutoLaunch = async (value: boolean): Promise<void> => {
   loading.value = true;
-  error.value = undefined;
   try {
     autoLaunch.value = await setAutoLaunch(value);
+    message.success(t('settings.saved'));
   } catch (reason) {
-    error.value = reason instanceof Error ? reason.message : t('settings.loadFailed');
+    message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
   } finally {
     loading.value = false;
+  }
+};
+
+/**
+ * 切换界面语言并持久化。
+ */
+const changeLanguage = async (value: AppLanguage): Promise<void> => {
+  const previous = locale.value;
+  setLocale(value);
+  try {
+    await setLanguage(value);
+    message.success(t('settings.saved'));
+  } catch (reason) {
+    setLocale(previous);
+    message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
   }
 };
 
@@ -68,14 +121,55 @@ onMounted(load);
 .nh-general {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
+}
+
+.nh-general__group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nh-general__group-title {
+  margin: 0;
+  color: var(--nh-color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.nh-general__panel {
+  overflow: hidden;
+  border: 1px solid var(--nh-color-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--nh-color-bg-elevated) 55%, transparent);
 }
 
 .nh-general__row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 24px;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.nh-general__row--divided {
+  border-top: 1px solid var(--nh-color-border);
+}
+
+.nh-general__icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--nh-color-bg-hover);
+  color: var(--nh-color-text-secondary);
+}
+
+.nh-general__copy {
+  min-width: 0;
+  flex: 1;
 }
 
 .nh-general__title,
@@ -84,12 +178,25 @@ onMounted(load);
 }
 
 .nh-general__title {
+  color: var(--nh-color-text-primary);
   font-size: 14px;
 }
 
 .nh-general__hint {
   margin-top: 4px;
   color: var(--nh-color-text-secondary);
+  font-size: 12px;
+}
+
+.nh-general__language {
+  width: 140px;
+  flex: none;
+}
+
+.nh-general__version {
+  flex: none;
+  color: var(--nh-color-text-secondary);
+  font-family: var(--nh-font-mono);
   font-size: 12px;
 }
 </style>

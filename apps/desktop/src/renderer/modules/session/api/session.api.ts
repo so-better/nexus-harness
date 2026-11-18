@@ -37,6 +37,16 @@ export const setSessionPinned = async (id: string, pinned: boolean): Promise<Ses
   unwrap(await window.nexus.session.setPinned({ id, pinned }));
 
 /**
+ * 更新会话当前服务商与模型。
+ */
+export const setSessionModel = async (
+  id: string,
+  providerId: string,
+  modelId: string
+): Promise<SessionSummary> =>
+  unwrap(await window.nexus.session.setModel({ id, providerId, modelId }));
+
+/**
  * 删除会话。
  */
 export const removeSession = async (id: string): Promise<void> => {

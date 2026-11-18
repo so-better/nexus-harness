@@ -1,12 +1,17 @@
 /**
- * Provider 配置存储：API Key 使用 safeStorage 加密，明文不落盘。
+ * Provider 配置存储：一个服务商可配置多个模型，API Key 随本地配置明文保存。
  */
 
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { safeStorage } from 'electron';
-import type { AgentProviderConfig, ProviderPublic, ProviderSettings } from '@shared/ipc/contracts';
+import type {
+  AgentProviderConfig,
+  ProviderModel,
+  ProviderPublic,
+  ProviderSettings
+} from '@shared/ipc/contracts';
 import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_OUTPUT_TOKENS } from '@nexus/core';
 import { getAppDataPaths } from '../storage/paths';
 
@@ -14,11 +19,16 @@ interface StoredProvider {
   id: string;
   name: string;
   baseUrl: string;
-  model: string;
   enabled: boolean;
+  models?: ProviderModel[];
+  defaultModelId?: string;
+  model?: string;
   contextWindow?: number;
   maxOutputTokens?: number;
-  encryptedApiKey: string;
+  apiKey?: string;
+  headers?: Record<string, string>;
+  extraParams?: Record<string, unknown>;
+  encryptedApiKey?: string;
   encryptedHeaders?: string;
   encryptedExtraParams?: string;
 }
@@ -34,32 +44,98 @@ const defaultMaxOutput = (contextWindow: number): number =>
   Math.min(DEFAULT_MAX_OUTPUT_TOKENS, Math.max(256, Math.floor(contextWindow / 4)));
 
 /**
- * 加密/解密 API Key；系统安全存储不可用时明确失败。
+ * 把旧版单模型配置迁移为模型数组。
  */
-const encryptKey = (apiKey: string): string => {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储不可用');
-  return safeStorage.encryptString(apiKey).toString('base64');
+const normalizeModels = (
+  provider: StoredProvider
+): {
+  models: ProviderModel[];
+  defaultModelId: string;
+} => {
+  const models = Array.isArray(provider.models)
+    ? provider.models.filter(
+        (model) =>
+          model &&
+          typeof model.id === 'string' &&
+          Number.isFinite(model.contextWindow) &&
+          Number.isFinite(model.maxOutputTokens) &&
+          model.contextWindow > 0 &&
+          model.maxOutputTokens > 0 &&
+          model.maxOutputTokens < model.contextWindow
+      )
+    : [];
+
+  if (models.length > 0) {
+    const defaultModelId = models.some((model) => model.id === provider.defaultModelId)
+      ? (provider.defaultModelId as string)
+      : models[0]!.id;
+    return { models, defaultModelId };
+  }
+
+  if (provider.model) {
+    const contextWindow = provider.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
+    const maxOutputTokens = provider.maxOutputTokens ?? defaultMaxOutput(contextWindow);
+    return {
+      models: [{ id: provider.model, contextWindow, maxOutputTokens }],
+      defaultModelId: provider.model
+    };
+  }
+
+  return { models: [], defaultModelId: '' };
 };
 
-const decryptKey = (encrypted: string): string => {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储不可用');
-  return safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
+/**
+ * 读取旧版 safeStorage 加密值；仅用于把历史配置迁移为本地明文。
+ */
+const decryptLegacy = (value: string): string => {
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('无法读取旧版加密配置');
+  return safeStorage.decryptString(Buffer.from(value, 'base64'));
 };
 
-const encryptJson = (value: unknown): string => encryptKey(JSON.stringify(value));
+/**
+ * 读取旧版 JSON 加密字段；仅用于历史配置迁移。
+ */
+const decryptLegacyJson = <T>(value: string): T => JSON.parse(decryptLegacy(value)) as T;
 
-const decryptJson = <T>(encrypted: string): T => JSON.parse(decryptKey(encrypted)) as T;
+/**
+ * 把旧版加密字段就地迁移为明文；返回是否发生变更。
+ */
+const migrateLegacySecrets = (provider: StoredProvider): boolean => {
+  let changed = false;
 
-const toPublic = (provider: StoredProvider): ProviderPublic => ({
-  id: provider.id,
-  name: provider.name,
-  baseUrl: provider.baseUrl,
-  model: provider.model,
-  enabled: provider.enabled,
-  contextWindow: provider.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
-  maxOutputTokens:
-    provider.maxOutputTokens ?? defaultMaxOutput(provider.contextWindow ?? DEFAULT_CONTEXT_WINDOW)
-});
+  if (!provider.apiKey && provider.encryptedApiKey) {
+    provider.apiKey = decryptLegacy(provider.encryptedApiKey);
+    delete provider.encryptedApiKey;
+    changed = true;
+  }
+  if (!provider.headers && provider.encryptedHeaders) {
+    provider.headers = decryptLegacyJson<Record<string, string>>(provider.encryptedHeaders);
+    delete provider.encryptedHeaders;
+    changed = true;
+  }
+  if (!provider.extraParams && provider.encryptedExtraParams) {
+    provider.extraParams = decryptLegacyJson<Record<string, unknown>>(
+      provider.encryptedExtraParams
+    );
+    delete provider.encryptedExtraParams;
+    changed = true;
+  }
+
+  return changed;
+};
+
+const toPublic = (provider: StoredProvider): ProviderPublic => {
+  const normalized = normalizeModels(provider);
+  return {
+    id: provider.id,
+    name: provider.name,
+    baseUrl: provider.baseUrl,
+    apiKey: provider.apiKey ?? '',
+    enabled: provider.enabled,
+    models: normalized.models,
+    defaultModelId: normalized.defaultModelId
+  };
+};
 
 /**
  * Provider 配置文件读写；baseDir 可注入用于测试。
@@ -84,7 +160,7 @@ export class ProviderStore {
       const providers = 'providers' in parsed ? parsed.providers : undefined;
       if (!Array.isArray(providers)) return emptyFile();
 
-      return {
+      const file: ProviderFile = {
         version: 1,
         providers: providers.filter((item): item is StoredProvider => {
           if (!item || typeof item !== 'object') return false;
@@ -93,12 +169,29 @@ export class ProviderStore {
             typeof record['id'] === 'string' &&
             typeof record['name'] === 'string' &&
             typeof record['baseUrl'] === 'string' &&
-            typeof record['model'] === 'string' &&
             typeof record['enabled'] === 'boolean' &&
-            typeof record['encryptedApiKey'] === 'string'
+            (typeof record['apiKey'] === 'string' || typeof record['encryptedApiKey'] === 'string')
           );
         })
       };
+
+      let changed = false;
+      for (const provider of file.providers) {
+        try {
+          changed = migrateLegacySecrets(provider) || changed;
+        } catch {
+          // 单个旧配置无法迁移时保留原数据，不阻断其他 Provider
+        }
+      }
+      if (changed) {
+        try {
+          await this.writeFile(file);
+        } catch {
+          // 迁移写回失败时仍返回内存中的明文配置，下次启动再试
+        }
+      }
+
+      return file;
     } catch {
       return emptyFile();
     }
@@ -112,15 +205,15 @@ export class ProviderStore {
   }
 
   /**
-   * 列出公开配置，不解密 API Key。
+   * 列出配置，API Key 供本地设置页回显。
    */
   async list(): Promise<ProviderPublic[]> {
     const file = await this.readFile();
-    return file.providers.map(toPublic);
+    return file.providers.map(toPublic).filter((provider) => provider.models.length > 0);
   }
 
   /**
-   * 新增或更新配置；未提供 apiKey 时保留旧密钥。
+   * 新增或更新配置；未提供 apiKey 时保留旧值。
    */
   async save(input: ProviderSettings): Promise<ProviderPublic> {
     const file = await this.readFile();
@@ -128,34 +221,26 @@ export class ProviderStore {
     if (input.id && !existing) throw new Error(`Provider 不存在：${input.id}`);
 
     const id = input.id ?? randomUUID();
-    const contextWindow = input.contextWindow ?? existing?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
-    const maxOutputTokens =
-      input.maxOutputTokens ?? existing?.maxOutputTokens ?? defaultMaxOutput(contextWindow);
-    if (maxOutputTokens >= contextWindow) {
-      throw new Error('maxOutputTokens 必须小于 contextWindow');
-    }
+    const defaultModelId = input.models.some((model) => model.id === input.defaultModelId)
+      ? input.defaultModelId
+      : input.models[0]!.id;
 
-    const encryptedApiKey = input.apiKey ? encryptKey(input.apiKey) : existing?.encryptedApiKey;
-    if (!encryptedApiKey) throw new Error('保存 Provider 需要 API Key');
+    const apiKey = input.apiKey || existing?.apiKey;
+    if (!apiKey) throw new Error('保存 Provider 需要 API Key');
 
-    const encryptedHeaders =
-      input.headers !== undefined ? encryptJson(input.headers) : existing?.encryptedHeaders;
-    const encryptedExtraParams =
-      input.extraParams !== undefined
-        ? encryptJson(input.extraParams)
-        : existing?.encryptedExtraParams;
+    const headers = input.headers !== undefined ? input.headers : existing?.headers;
+    const extraParams = input.extraParams !== undefined ? input.extraParams : existing?.extraParams;
 
     const provider: StoredProvider = {
       id,
       name: input.name,
       baseUrl: input.baseUrl,
-      model: input.model,
       enabled: input.enabled ?? existing?.enabled ?? true,
-      contextWindow,
-      maxOutputTokens,
-      encryptedApiKey,
-      ...(encryptedHeaders === undefined ? {} : { encryptedHeaders }),
-      ...(encryptedExtraParams === undefined ? {} : { encryptedExtraParams })
+      models: input.models,
+      defaultModelId,
+      apiKey,
+      ...(headers === undefined ? {} : { headers }),
+      ...(extraParams === undefined ? {} : { extraParams })
     };
 
     if (existing) {
@@ -169,22 +254,20 @@ export class ProviderStore {
   }
 
   /**
-   * 读取完整配置并解密 API Key，仅供主进程使用。
+   * 读取完整配置，包含本地保存的 API Key。
    */
   async get(id: string): Promise<AgentProviderConfig | undefined> {
     const file = await this.readFile();
     const provider = file.providers.find((item) => item.id === id);
     if (!provider) return undefined;
 
+    const publicConfig = toPublic(provider);
+    if (!publicConfig.apiKey) return undefined;
+
     return {
-      ...toPublic(provider),
-      apiKey: decryptKey(provider.encryptedApiKey),
-      ...(provider.encryptedHeaders
-        ? { headers: decryptJson<Record<string, string>>(provider.encryptedHeaders) }
-        : {}),
-      ...(provider.encryptedExtraParams
-        ? { extraParams: decryptJson<Record<string, unknown>>(provider.encryptedExtraParams) }
-        : {})
+      ...publicConfig,
+      ...(provider.headers ? { headers: provider.headers } : {}),
+      ...(provider.extraParams ? { extraParams: provider.extraParams } : {})
     };
   }
 
@@ -194,7 +277,7 @@ export class ProviderStore {
   async remove(id: string): Promise<void> {
     const file = await this.readFile();
     await this.writeFile({
-      ...file,
+      version: 1,
       providers: file.providers.filter((item) => item.id !== id)
     });
   }

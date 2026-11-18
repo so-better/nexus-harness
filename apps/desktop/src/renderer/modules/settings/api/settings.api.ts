@@ -6,7 +6,10 @@ import type {
   AppInfo,
   CacheInfo,
   CacheTarget,
+  AppLanguage,
+  ProviderProbeResult,
   ProviderPublic,
+  ProviderTestInput,
   ProviderSettings,
   ThemeInfo,
   ThemeSource
@@ -72,3 +75,21 @@ export const getCacheInfo = async (): Promise<CacheInfo> =>
  */
 export const clearCache = async (target: CacheTarget): Promise<CacheInfo> =>
   unwrap(await window.nexus.cache.clear(target));
+
+/**
+ * 测试 Provider 连接并获取模型列表。
+ */
+export const testProvider = async (input: ProviderTestInput): Promise<ProviderProbeResult> =>
+  unwrap(await window.nexus.provider.test(input));
+
+/**
+ * 读取界面语言。
+ */
+export const getLanguage = async (): Promise<AppLanguage> =>
+  unwrap(await window.nexus.settings.getLanguage());
+
+/**
+ * 保存界面语言。
+ */
+export const setLanguage = async (language: AppLanguage): Promise<AppLanguage> =>
+  unwrap(await window.nexus.settings.setLanguage(language));

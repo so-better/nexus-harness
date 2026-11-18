@@ -29,7 +29,24 @@
     />
     <path v-else-if="name === 'moon'" d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z" />
     <path v-else-if="name === 'monitor'" d="M4 5h16v11H4zM9 20h6M12 16v4" />
+    <path v-else-if="name === 'chevron-left'" d="m15 6-6 6 6 6" />
+    <path
+      v-else-if="name === 'database'"
+      d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3ZM4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"
+    />
+    <path
+      v-else-if="name === 'globe'"
+      d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM3 12h18M12 3c2.4 2.5 3.8 5.5 3.8 9S14.4 18.5 12 21c-2.4-2.5-3.8-5.5-3.8-9S9.6 5.5 12 3Z"
+    />
+    <path v-else-if="name === 'power'" d="M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0" />
+    <path v-else-if="name === 'info'" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM12 11v5M12 8h.01" />
+    <path v-else-if="name === 'trash'" d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
+    <path v-else-if="name === 'check'" d="m5 12 4 4L19 6" />
     <path v-else-if="name === 'chevron-down'" d="m6 9 6 6 6-6" />
+    <path
+      v-else-if="name === 'refresh'"
+      d="M20 7v5h-5M4 17v-5h5M6.1 9a7 7 0 0 1 11.2-2.6L20 9M4 15l2.7 2.6A7 7 0 0 0 17.9 15"
+    />
     <path v-else d="m12 3 2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2Z" />
   </svg>
 </template>
@@ -55,7 +72,15 @@ withDefaults(
       | 'sun'
       | 'moon'
       | 'monitor'
-      | 'chevron-down';
+      | 'chevron-down'
+      | 'chevron-left'
+      | 'globe'
+      | 'database'
+      | 'power'
+      | 'info'
+      | 'trash'
+      | 'check'
+      | 'refresh';
     size?: number;
   }>(),
   { size: 16 }

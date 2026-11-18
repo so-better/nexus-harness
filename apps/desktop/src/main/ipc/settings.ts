@@ -4,13 +4,20 @@
 
 import { ipcMain, session } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
-import { cacheInfoSchema, cacheTargetSchema, type CacheInfo } from '@shared/ipc/contracts';
+import {
+  cacheInfoSchema,
+  cacheTargetSchema,
+  languageSchema,
+  type AppLanguage,
+  type CacheInfo
+} from '@shared/ipc/contracts';
 import { fail, ok, type Result } from '@shared/ipc/result';
 import {
   applyAutoLaunch,
   loadAutoLaunch,
   saveAutoLaunch
 } from '../services/settings/startup-settings';
+import { loadLanguage, saveLanguage } from '../services/settings/language-settings';
 import { clearCache, getCacheInfo } from '../services/cache/cache-service';
 import { getAppDataPaths } from '../services/storage/paths';
 import { hasActiveRuns } from '../services/agent/run-registry';
@@ -46,6 +53,32 @@ export const registerSettingsIpc = (): void => {
         return fail(
           'SETTINGS_WRITE_FAILED',
           error instanceof Error ? error.message : '保存设置失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.settingsGetLanguage, async (): Promise<Result<AppLanguage>> => {
+    try {
+      return ok(await loadLanguage());
+    } catch (error) {
+      return fail('SETTINGS_READ_FAILED', error instanceof Error ? error.message : '读取语言失败');
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.settingsSetLanguage,
+    async (_event, rawLanguage: unknown): Promise<Result<AppLanguage>> => {
+      const parsed = languageSchema.safeParse(rawLanguage);
+      if (!parsed.success) return fail('SETTINGS_INVALID_INPUT', '语言参数不合法');
+
+      try {
+        await saveLanguage(parsed.data);
+        return ok(parsed.data);
+      } catch (error) {
+        return fail(
+          'SETTINGS_WRITE_FAILED',
+          error instanceof Error ? error.message : '保存语言失败'
         );
       }
     }

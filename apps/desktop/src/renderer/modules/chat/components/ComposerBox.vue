@@ -13,15 +13,24 @@
         </template>
         {{ t('chat.configureModel') }}
       </NButton>
-      <NSelect
-        v-else
-        class="nh-composer__provider"
-        size="tiny"
-        :value="providerId ?? null"
-        :options="providerOptions"
-        :placeholder="t('app.noProvider')"
-        @update:value="onProviderChange"
-      />
+      <div v-else class="nh-composer__selectors">
+        <NSelect
+          class="nh-composer__provider"
+          size="tiny"
+          :value="providerId ?? null"
+          :options="providerOptions"
+          :placeholder="t('app.noProvider')"
+          @update:value="onProviderChange"
+        />
+        <NSelect
+          class="nh-composer__model"
+          size="tiny"
+          :value="modelId ?? null"
+          :options="modelOptions"
+          :placeholder="t('chat.needsModel')"
+          @update:value="onModelChange"
+        />
+      </div>
     </div>
     <NInput
       v-model:value="draft"
@@ -65,7 +74,7 @@
 
 import { computed, ref } from 'vue';
 import { NButton, NInput, NSelect, NText, type SelectOption } from 'naive-ui';
-import type { ProviderPublic } from '@shared/ipc/contracts';
+import type { ProviderModel, ProviderPublic } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 
@@ -75,8 +84,10 @@ const props = defineProps<{
   running: boolean;
   rootLabel: string;
   providers: ProviderPublic[];
-  hero?: boolean;
+  models: ProviderModel[];
   providerId?: string | undefined;
+  modelId?: string | undefined;
+  hero?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -85,16 +96,20 @@ const emit = defineEmits<{
   'choose-root': [];
   'update-provider': [id: string];
   'open-settings': [];
+  'update-model': [id: string];
 }>();
 
 const draft = ref('');
 const placeholder = computed(() => t('chat.composerPlaceholder'));
 const providerOptions = computed<SelectOption[]>(() =>
   props.providers.map((provider) => ({
-    label: `${provider.name} · ${provider.model}`,
+    label: provider.name,
     value: provider.id,
     disabled: !provider.enabled
   }))
+);
+const modelOptions = computed<SelectOption[]>(() =>
+  props.models.map((model) => ({ label: model.id, value: model.id }))
 );
 
 /**
@@ -102,6 +117,13 @@ const providerOptions = computed<SelectOption[]>(() =>
  */
 const onProviderChange = (value: string): void => {
   if (value) emit('update-provider', value);
+};
+
+/**
+ * 切换当前模型。
+ */
+const onModelChange = (value: string): void => {
+  if (value) emit('update-model', value);
 };
 
 /**
@@ -154,8 +176,17 @@ const onEnter = (event: KeyboardEvent): void => {
   border-bottom: 1px solid var(--nh-color-border);
 }
 
+.nh-composer__selectors {
+  display: flex;
+  gap: 8px;
+}
+
 .nh-composer__provider {
-  width: 220px;
+  width: 180px;
+}
+
+.nh-composer__model {
+  width: 180px;
 }
 
 .nh-composer__actions {

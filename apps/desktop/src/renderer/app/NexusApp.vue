@@ -1,5 +1,10 @@
 <template>
-  <NConfigProvider :theme="theme" :theme-overrides="themeOverrides">
+  <NConfigProvider
+    :theme="theme"
+    :theme-overrides="themeOverrides"
+    :locale="naiveLocale"
+    :date-locale="naiveDateLocale"
+  >
     <NMessageProvider>
       <MainLayout />
     </NMessageProvider>
@@ -12,11 +17,22 @@
  */
 
 import { computed } from 'vue';
-import { darkTheme, NConfigProvider, NMessageProvider } from 'naive-ui';
+import {
+  darkTheme,
+  dateEnUS,
+  dateZhCN,
+  enUS,
+  NConfigProvider,
+  NMessageProvider,
+  zhCN
+} from 'naive-ui';
 import { effectiveTheme } from './theme';
+import { locale } from './i18n';
 import { getNaiveOverrides, getPalette } from './theme-palette';
 import MainLayout from '@/layouts/MainLayout.vue';
 
 const theme = computed(() => (effectiveTheme.value === 'dark' ? darkTheme : null));
+const naiveLocale = computed(() => (locale.value === 'zh-CN' ? zhCN : enUS));
+const naiveDateLocale = computed(() => (locale.value === 'zh-CN' ? dateZhCN : dateEnUS));
 const themeOverrides = computed(() => getNaiveOverrides(getPalette(effectiveTheme.value)));
 </script>

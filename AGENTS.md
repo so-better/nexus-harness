@@ -84,7 +84,7 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 
 ### 1.4 核心体验流程
 
-1. **首次启动**：选择或配置模型提供商，API Key 写入系统安全存储；主题跟随系统。
+1. **首次启动**：选择或配置模型提供商，API Key 随本地 Provider 配置保存；主题跟随系统。
 2. **打开工作区或直接开始**：可先选择工作区目录并确认信任级别，也可不打开工作区直接开始任务；建立文件索引，展示工作区文件树或临时 roots。
 3. **描述任务**：在输入区写目标；输入 `@` 引用工作区或临时 root 内的文件，也可添加文件/文件夹作为临时 root；输入 `/` 浏览并主动调用 Skill；选择审批策略。
 4. **生成计划**：Plan 模式下 Agent 只读分析并给出步骤与验收标准，不执行任何本地操作；用户确认后切换到 Build 执行。
@@ -188,7 +188,7 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 | 对象 | 关键字段 | 说明 |
 | --- | --- | --- |
 | Workspace | id、name、roots、trustLevel、createdAt | 工作区 root 集合与信任状态 |
-| Session | id、workspaceId?、title、titleSource、pinned、status、mode、modelConfig、scope、createdAt、lastActiveAt | 一次工作上下文，工作区可选 |
+| Session | id、workspaceId?、title、titleSource、pinned、status、mode、providerId?、modelId?、scope、createdAt、lastActiveAt | 一次工作上下文，工作区可选 |
 | RootGrant | id、sessionId、path、kind、access、source、createdAt | 会话的文件或目录授权 |
 | Task | id、sessionId、goal、acceptanceCriteria、status | 用户目标与验收标准 |
 | Run | id、sessionId、taskId、status、budget、startedAt、endedAt | 一次执行尝试 |
@@ -311,7 +311,6 @@ nexus-harness/
 │        │  │  ├─ files/         # AI 输出文件存储、预览地址与另存为
 │        │  │  ├─ search/        # 跨会话全文索引与查询
 │        │  │  ├─ export/        # 会话导出（Markdown/HTML/PDF/PNG）
-│        │  │  └─ secret/        # safeStorage 密钥读写
 │        │  └─ security/         # 沙箱、路径白名单、命令拦截
 │        ├─ preload/             # contextBridge 唯一入口
 │        └─ renderer/
@@ -353,7 +352,7 @@ packages ──> shared（packages 之间允许，但禁止反向依赖 apps）
 - 跨进程数据必须定义在 `packages/shared`，并用 zod 校验。
 - `packages/*` 只服务本仓库，**不发布 npm**；应用引用统一使用 `workspace:*`，不对外承诺 API 兼容性。
 - 插件无需导入宿主包；宿主在激活时注入 `ctx`。第三方依赖必须自行打包进插件目录，禁止 import `@nexus/core`、`@nexus/shared`、`apps/desktop` 等内部包。
-- `packages/*` 只放纯逻辑与实现；`main/services/*` 负责 Electron 绑定、审批编排、沙箱、密钥与持久化。
+- `packages/*` 只放纯逻辑与实现；`main/services/*` 负责 Electron 绑定、审批编排、沙箱、配置与持久化。
 
 ### 3.4 功能模块内部结构
 
@@ -483,7 +482,7 @@ interface ProviderCapabilities {
 - 模型不支持工具调用时，显式降级为“只读建议”模式，并提示用户。
 - 对话模型默认按支持视觉处理：图片作为视觉内容直接发送，不因能力声明缺失或为 false 而丢弃；能力声明只用于设置页提示与错误说明。
 - 不允许在未配置的情况下静默切换模型或提供商。
-- API Key 只存系统安全存储，日志与事件中不得出现明文。
+- API Key 随本地 Provider 配置明文保存；日志与事件中不记录密钥。
 - 支持自定义 Base URL 与请求头，用于代理和自建服务。
 - 超时、退避重试、速率限制与取消必须由 Provider 层统一处理。
 - 仅对瞬时错误重试：指数退避 + 抖动，遵守 `Retry-After`；认证失败、参数错误与内容策略拒绝不重试。
@@ -498,7 +497,8 @@ interface ProviderCapabilities {
 #### 模型角色与图像模型
 
 - 模型配置按角色划分：`chat`（对话与工具调用）、`image`（图像生成/编辑）、`embedding`（可选）。对话模型必须有，图像模型可选。
-- 同一提供商可配置多个模型条目；每条包含角色、模型名、Base URL、Key 引用与能力声明。
+- 同一提供商可配置多个模型条目；每条包含模型名、上下文窗口与输出预留，Provider 保存 `models` 数组与 `defaultModelId`。
+- 会话与 Run 记录实际使用的 `providerId + modelId`；不得在未指定模型时静默使用默认模型。
 - 图像模型未配置时，`generate_image` 工具不注册，Agent 不能生成图片，UI 引导用户去设置。
 - 图像模型接口：
 
@@ -659,7 +659,7 @@ git 工具仅在检测到 Git 仓库时注册；非 Git 工作区不显示。
 - 工具名净化到 `[a-zA-Z0-9_-]{1,64}`，超长或重名时截断并附加短哈希，避免被模型接口拒绝。
 - 调用取消通过 `AbortSignal` 合并传播；连接中断时丢弃缓存，下次调用重连。
 - 单个 Server 最多列举固定数量的工具，异常分页不会无限拉取；单个 Server 失败不影响其他工具。
-- 环境变量只注入配置声明的白名单；敏感值通过安全存储引用，不写入明文。
+- 环境变量只注入配置声明的白名单；敏感值保存在本地 MCP 配置中。
 
 配置示例：
 
@@ -1075,7 +1075,7 @@ interface SlotContext {
 - 设置中的“清理缓存”只清 `files`、`artifacts`、`logs` 与浏览器 HTTP 缓存；会话、事件、检查点和工作区文件必须保留。
 - 每条 Usage 记录 provider、model、输入与输出 token、缓存读写、reasoning token、步数、状态与耗时。
 - 日志轮转，避免无限增长。
-- API Key 只存系统安全存储，数据库只存引用 id。
+- API Key 随本地 Provider 配置保存，不写入事件流。
 - 支持导出/导入会话事件、Artifact 与输出文件引用，用于问题复现与迁移；导出默认脱敏。
 
 ### 4.7 安全威胁模型
@@ -1088,7 +1088,7 @@ interface SlotContext {
 | 临时授权提权 | 未授权路径访问 | 允许一次/本会话、敏感目录不可授权、授权事件审计 |
 | 符号链接逃逸 | 文件路径 | `realpath` 后重新校验，目标越界需重新授权或拒绝 |
 | 会话授权泄漏 | RootGrant | 按会话隔离，不跨会话继承，撤销后立即失效 |
-| 密钥泄露 | 日志、事件、导出 | 日志脱敏、密钥只进安全存储、事件不记录明文 |
+| 密钥泄露 | 日志、事件、导出 | 日志脱敏、配置仅保存在本机、事件不记录密钥 |
 | 用户安装插件 | 插件代码 | 加载前校验 manifest 与入口路径、权限清单、能力网关、异常隔离 |
 | 恶意皮肤资源 | 插件 `skins` | 限制图片类型与大小，宿主渲染背景层，不接受任意 CSS |
 | 插件目录篡改 | `<userData>/plugins` | 入口 `realpath` 限制、权限网关、事件审计 |
@@ -1106,7 +1106,7 @@ interface SlotContext {
 - 临时会话的每个 root 首次使用时授权；拒绝后不重复请求同一路径。
 - RootGrant 按会话隔离，撤销或会话结束后立即失效。
 - 安装插件等同于运行本地代码：扩展页必须显示来源目录、版本与权限，默认不自动启用高权限能力。
-- MCP 配置可以执行任意命令：首次启用必须展示完整命令与环境变量，敏感值通过安全存储引用。
+- MCP 配置可以执行任意命令：首次启用必须展示完整命令与环境变量，敏感值保存在本地配置中。
 - 技能脚本只能通过 `run_command` 执行，并经过审批。
 - 审批策略是安全边界的一部分，不能只靠 UI 隐藏按钮。
 - 模型输出永远不可直接执行，必须经过工具层与审批层。
@@ -1125,8 +1125,8 @@ interface SlotContext {
 
 - 设置分三个层级，优先级为 **Session > Workspace > App**；读取时逐层合并，写入时记录 scope。
 - 设置分类：通用、模型与提供商、外观、缓存、权限与审批、快捷键、高级。
-- 模型与提供商：按角色配置对话模型与图像模型；每条包含 Base URL、API Key 引用、模型名、能力声明、上下文窗口、token 价格、`extra_params` 与自定义 headers。
-- 支持连接测试与模型列表刷新；密钥只存系统安全存储，设置表只存引用 id；不写死默认模型。
+- 模型与提供商：按角色配置对话模型与图像模型；每条包含 Base URL、API Key、模型名、能力声明、上下文窗口、token 价格、`extra_params` 与自定义 headers。
+- 支持连接测试与模型列表刷新；API Key 随本地 Provider 配置保存；不写死默认模型。
 - 图像模型可选；未配置时不注册 `generate_image`，设置页提供引导。
 - 权限与审批：默认审批策略、命令白名单、敏感路径策略、工作区信任管理。
 - 外观：`light / dark / system` 三态，默认 `system`；同时支持字号、密度与减少动效跟随系统。
@@ -1388,7 +1388,7 @@ interface AskUserAnswer {
 - 键盘可完成主要流程，不允许只能通过鼠标触发的关键操作。
 - 文本与背景对比度至少满足 WCAG AA；支持系统字号放大。
 - 动效遵循 `prefers-reduced-motion`。
-- 所有用户可见文案走 i18n key，禁止硬编码在组件模板中；当前至少提供 `zh-CN`，并预留 `en-US`。
+- 所有用户可见文案走 i18n key，禁止硬编码在组件模板中；当前提供 `zh-CN` 与 `en-US`，语言选择持久化，并同时驱动 Naive UI 内置文案。
 
 ### 5.7 命令与快捷键
 
@@ -1781,7 +1781,7 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 跨进程数据经过 zod 校验，公开方法有显式返回类型。
 - [ ] 已评估 token 成本：没有注入无关全文或重复提示，工具输出、历史与文件内容可按需读取或压缩。
 - [ ] 新功能提供低 token 路径，并对同类任务的输入 token 做了前后对比或回归验证。
-- [ ] 设置项经 zod 校验，API Key 只存安全存储，设置表只存引用。
+- [ ] 设置项经 zod 校验，API Key 随本地 Provider 配置保存。
 - [ ] 模型配置支持 `extra_params`、自定义 headers、上下文窗口与 token 价格，并可测试连接与刷新模型列表。
 - [ ] 上下文压缩保留不可压缩内容，写入 `context.compacted`，失败可降级为硬截断。
 - [ ] 系统提示包含反幻觉、工具诚实、链接真实性与文件生成自检约束。
@@ -1836,6 +1836,7 @@ CHANGELOG.md         # 版本变更记录
 | `session.created` | `sessionId`、`workspaceId` | 新建会话 |
 | `session.workspace.bound` | `sessionId`、`workspaceId` | 临时会话绑定工作区 |
 | `session.mode.changed` | `sessionId`、`mode` | Plan / Build 模式切换 |
+| `session.model.changed` | `sessionId`、`providerId`、`modelId` | 会话切换服务商或模型 |
 | `session.renamed` | `sessionId`、`title`、`source` | 自动标题或用户重命名 |
 | `session.pinned` | `sessionId` | 置顶会话 |
 | `session.unpinned` | `sessionId` | 取消置顶 |

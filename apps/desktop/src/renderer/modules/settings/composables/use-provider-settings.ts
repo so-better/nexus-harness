@@ -1,20 +1,20 @@
 /**
- * Provider 设置状态：列表、表单编辑、保存与删除。
+ * Provider 设置状态：服务商、多模型、连接测试与保存。
  */
 
 import { computed, onMounted, ref, type ComputedRef, type Ref } from 'vue';
-import type { SelectOption } from 'naive-ui';
-import type { ProviderPublic, ProviderSettings } from '@shared/ipc/contracts';
-import { listProviders, removeProvider, saveProvider } from '../api/settings.api';
+import { useMessage, type SelectOption } from 'naive-ui';
+import type { ProviderModel, ProviderPublic, ProviderSettings } from '@shared/ipc/contracts';
+import { t } from '@/app/i18n';
+import { listProviders, removeProvider, saveProvider, testProvider } from '../api/settings.api';
 
-interface ProviderFormState {
+export interface ProviderFormState {
   name: string;
   baseUrl: string;
-  model: string;
   apiKey: string;
-  contextWindow: number | null;
-  maxOutputTokens: number | null;
   enabled: boolean;
+  models: ProviderModel[];
+  defaultModelId: string;
 }
 
 interface ProviderSettingsState {
@@ -22,9 +22,10 @@ interface ProviderSettingsState {
   selectedId: Ref<string | null>;
   providerOptions: ComputedRef<SelectOption[]>;
   providerForm: Ref<ProviderFormState>;
-  error: Ref<string | undefined>;
-  saved: Ref<boolean>;
   saving: Ref<boolean>;
+  availableModels: Ref<string[]>;
+  testing: Ref<boolean>;
+  testConnection: () => Promise<void>;
   selectProvider: (id: string) => void;
   newProvider: () => void;
   saveProviderForm: () => Promise<void>;
@@ -34,26 +35,28 @@ interface ProviderSettingsState {
 /**
  * 创建 Provider 设置状态；onChanged 在保存或删除后触发。
  */
-export const useProviderSettings = (onChanged: () => void): ProviderSettingsState => {
+export const useProviderSettings = (
+  onChanged: (action: 'saved' | 'deleted') => void
+): ProviderSettingsState => {
+  const message = useMessage();
   const providers = ref<ProviderPublic[]>([]);
   const selectedId = ref<string | null>(null);
-  const error = ref<string>();
-  const saved = ref(false);
   const saving = ref(false);
+  const availableModels = ref<string[]>([]);
+  const testing = ref(false);
 
   const providerForm = ref<ProviderFormState>({
     name: '',
-    baseUrl: 'https://api.openai.com/v1',
-    model: '',
+    baseUrl: '',
     apiKey: '',
-    contextWindow: 128_000,
-    maxOutputTokens: 4_096,
-    enabled: true
+    enabled: true,
+    models: [],
+    defaultModelId: ''
   });
 
   const providerOptions = computed<SelectOption[]>(() =>
     providers.value.map((provider) => ({
-      label: `${provider.name} · ${provider.model}`,
+      label: `${provider.name} · ${provider.models.length} 个模型`,
       value: provider.id
     }))
   );
@@ -67,7 +70,7 @@ export const useProviderSettings = (onChanged: () => void): ProviderSettingsStat
       if (!selectedId.value && providers.value[0]) selectProvider(providers.value[0].id);
       if (providers.value.length === 0) newProvider();
     } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
+      message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
     }
   };
 
@@ -78,15 +81,15 @@ export const useProviderSettings = (onChanged: () => void): ProviderSettingsStat
     const provider = providers.value.find((item) => item.id === id);
     if (!provider) return;
     selectedId.value = provider.id;
-    providerForm.value.name = provider.name;
-    providerForm.value.baseUrl = provider.baseUrl;
-    providerForm.value.model = provider.model;
-    providerForm.value.apiKey = '';
-    providerForm.value.contextWindow = provider.contextWindow;
-    providerForm.value.maxOutputTokens = provider.maxOutputTokens;
-    providerForm.value.enabled = provider.enabled;
-    error.value = undefined;
-    saved.value = false;
+    providerForm.value = {
+      name: provider.name,
+      baseUrl: provider.baseUrl,
+      apiKey: provider.apiKey,
+      enabled: provider.enabled,
+      models: provider.models.map((model) => ({ ...model })),
+      defaultModelId: provider.defaultModelId
+    };
+    availableModels.value = provider.models.map((model) => model.id);
   };
 
   /**
@@ -96,48 +99,79 @@ export const useProviderSettings = (onChanged: () => void): ProviderSettingsStat
     selectedId.value = null;
     providerForm.value = {
       name: '',
-      baseUrl: 'https://api.openai.com/v1',
-      model: '',
+      baseUrl: '',
       apiKey: '',
-      contextWindow: 128_000,
-      maxOutputTokens: 4_096,
-      enabled: true
+      enabled: true,
+      models: [],
+      defaultModelId: ''
     };
-    error.value = undefined;
-    saved.value = false;
+    availableModels.value = [];
   };
 
   /**
-   * 保存当前配置；编辑时 API Key 留空表示保留。
+   * 保存当前配置；API Key 留空时保留原值。
    */
   const saveProviderForm = async (): Promise<void> => {
     saving.value = true;
-    error.value = undefined;
-    saved.value = false;
     try {
+      const models = providerForm.value.models.map((model) => ({
+        id: model.id.trim(),
+        contextWindow: model.contextWindow,
+        maxOutputTokens: model.maxOutputTokens
+      }));
+      const defaultModelId = models.some((model) => model.id === providerForm.value.defaultModelId)
+        ? providerForm.value.defaultModelId
+        : (models[0]?.id ?? '');
+
       const input: ProviderSettings = {
         name: providerForm.value.name.trim(),
         baseUrl: providerForm.value.baseUrl.trim(),
-        model: providerForm.value.model.trim(),
         enabled: providerForm.value.enabled,
+        models,
+        defaultModelId,
         ...(selectedId.value ? { id: selectedId.value } : {}),
-        ...(providerForm.value.apiKey.trim() ? { apiKey: providerForm.value.apiKey.trim() } : {}),
-        ...(providerForm.value.contextWindow === null
-          ? {}
-          : { contextWindow: providerForm.value.contextWindow }),
-        ...(providerForm.value.maxOutputTokens === null
-          ? {}
-          : { maxOutputTokens: providerForm.value.maxOutputTokens })
+        ...(providerForm.value.apiKey.trim() ? { apiKey: providerForm.value.apiKey.trim() } : {})
       };
       const result = await saveProvider(input);
       selectedId.value = result.id;
-      saved.value = true;
       await load();
-      onChanged();
+      message.success(t('settings.saved'));
+      onChanged('saved');
     } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
+      message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
     } finally {
       saving.value = false;
+    }
+  };
+
+  /**
+   * 测试当前表单连接；新配置无需先保存。
+   */
+  const testConnection = async (): Promise<void> => {
+    if (!providerForm.value.apiKey.trim() && !selectedId.value) {
+      message.warning(t('settings.testRequiresApiKey'));
+      return;
+    }
+
+    testing.value = true;
+    try {
+      const result = await testProvider({
+        baseUrl: providerForm.value.baseUrl.trim(),
+        ...(providerForm.value.apiKey.trim() ? { apiKey: providerForm.value.apiKey.trim() } : {}),
+        ...(selectedId.value ? { id: selectedId.value } : {})
+      });
+      availableModels.value = result.models;
+      if (result.models.length > 0) {
+        message.success(
+          `${t('settings.testSuccess')} ${result.models.length} ${t('settings.modelUnit')} (${result.latencyMs}ms)`
+        );
+      } else {
+        message.warning(t('settings.testNoModels'));
+      }
+    } catch (reason) {
+      message.error(reason instanceof Error ? reason.message : t('settings.testFailed'));
+    } finally {
+      testing.value = false;
     }
   };
 
@@ -150,9 +184,10 @@ export const useProviderSettings = (onChanged: () => void): ProviderSettingsStat
       await removeProvider(selectedId.value);
       selectedId.value = null;
       await load();
-      onChanged();
+      message.success(t('settings.deleted'));
+      onChanged('deleted');
     } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
+      message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
     }
   };
 
@@ -163,9 +198,10 @@ export const useProviderSettings = (onChanged: () => void): ProviderSettingsStat
     selectedId,
     providerOptions,
     providerForm,
-    error,
-    saved,
     saving,
+    availableModels,
+    testing,
+    testConnection,
     selectProvider,
     newProvider,
     saveProviderForm,

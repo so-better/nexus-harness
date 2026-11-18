@@ -9,6 +9,7 @@ import type {
   AgentMode,
   SessionCreateInput,
   SessionRenameInput,
+  SessionSetModelInput,
   SessionStatus,
   SessionSummary
 } from '@shared/ipc/contracts';
@@ -23,6 +24,7 @@ interface SessionRow {
   status: string;
   mode: string;
   provider_id: string | null;
+  model_id: string | null;
   created_at: number;
   updated_at: number;
   last_active_at: number;
@@ -39,7 +41,8 @@ const toSummary = (row: SessionRow): SessionSummary => ({
   updatedAt: Number(row.updated_at),
   lastActiveAt: Number(row.last_active_at),
   ...(row.workspace_id ? { workspaceId: row.workspace_id } : {}),
-  ...(row.provider_id ? { providerId: row.provider_id } : {})
+  ...(row.provider_id ? { providerId: row.provider_id } : {}),
+  ...(row.model_id ? { modelId: row.model_id } : {})
 });
 
 export class SessionService {
@@ -61,10 +64,20 @@ export class SessionService {
       this.db
         .prepare(
           `INSERT INTO sessions
-            (id, workspace_id, title, title_source, pinned, status, mode, provider_id, created_at, updated_at, last_active_at)
-           VALUES (?, ?, ?, 'auto', 0, 'idle', ?, ?, ?, ?, ?)`
+            (id, workspace_id, title, title_source, pinned, status, mode, provider_id, model_id, created_at, updated_at, last_active_at)
+           VALUES (?, ?, ?, 'auto', 0, 'idle', ?, ?, ?, ?, ?, ?)`
         )
-        .run(id, input.workspaceId ?? null, title, mode, input.providerId ?? null, now, now, now);
+        .run(
+          id,
+          input.workspaceId ?? null,
+          title,
+          mode,
+          input.providerId ?? null,
+          input.modelId ?? null,
+          now,
+          now,
+          now
+        );
 
       this.events.append(
         createNexusEvent({
@@ -167,6 +180,29 @@ export class SessionService {
         })
       );
       return this.getRequired(id);
+    });
+  }
+
+  /**
+   * 更新会话当前服务商与模型。
+   */
+  setModel(input: SessionSetModelInput): SessionSummary {
+    const now = Date.now();
+    return this.transaction(() => {
+      this.db
+        .prepare(
+          'UPDATE sessions SET provider_id = ?, model_id = ?, updated_at = ?, last_active_at = ? WHERE id = ? AND deleted_at IS NULL'
+        )
+        .run(input.providerId, input.modelId, now, now, input.id);
+      this.events.append(
+        createNexusEvent({
+          sessionId: input.id,
+          seq: 1,
+          type: 'session.model.changed',
+          payload: { providerId: input.providerId, modelId: input.modelId }
+        })
+      );
+      return this.getRequired(input.id);
     });
   }
 

@@ -5,7 +5,13 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import type { SessionStatus, SessionSummary } from '@shared/ipc/contracts';
-import { createSession, listSessions, removeSession, setSessionPinned } from '../api/session.api';
+import {
+  createSession,
+  listSessions,
+  removeSession,
+  setSessionModel,
+  setSessionPinned
+} from '../api/session.api';
 
 /**
  * 会话列表面板与当前上下文。
@@ -41,10 +47,16 @@ export const useSessionStore = defineStore('sessions', () => {
   /**
    * 新建会话并选中。
    */
-  const create = async (providerId?: string): Promise<SessionSummary | undefined> => {
+  const create = async (
+    providerId?: string,
+    modelId?: string
+  ): Promise<SessionSummary | undefined> => {
     error.value = undefined;
     try {
-      const session = await createSession(providerId ? { providerId } : {});
+      const session = await createSession({
+        ...(providerId ? { providerId } : {}),
+        ...(modelId ? { modelId } : {})
+      });
       sessions.value = [session, ...sessions.value];
       activeId.value = session.id;
       return session;
@@ -93,6 +105,18 @@ export const useSessionStore = defineStore('sessions', () => {
   };
 
   /**
+   * 更新会话当前服务商与模型。
+   */
+  const updateModel = async (id: string, providerId: string, modelId: string): Promise<void> => {
+    try {
+      const updated = await setSessionModel(id, providerId, modelId);
+      sessions.value = sessions.value.map((session) => (session.id === id ? updated : session));
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+    }
+  };
+
+  /**
    * 用实时事件状态更新侧栏，避免等待下一次列表刷新。
    */
   const setLocalStatus = (id: string, status: SessionStatus): void => {
@@ -109,6 +133,7 @@ export const useSessionStore = defineStore('sessions', () => {
     activeSession,
     load,
     create,
+    updateModel,
     select,
     remove,
     togglePinned,
