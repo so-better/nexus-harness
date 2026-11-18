@@ -1,5 +1,5 @@
 /**
- * 输出文件服务测试：落盘、元数据、预览与另存为。
+ * 输出文件服务测试：落盘、元数据与另存为。
  */
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -26,7 +26,7 @@ describe('FileService', () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it('saves, lists and previews a generated file', async () => {
+  it('saves a generated file', async () => {
     const file = await files.save({
       sessionId: 'session-1',
       runId: 'run-1',
@@ -35,9 +35,6 @@ describe('FileService', () => {
     });
 
     expect(file).toMatchObject({ name: 'report.md', mime: 'text/markdown', source: 'generated' });
-    expect(files.list('session-1')).toHaveLength(1);
-    const preview = await files.readDataUrl(file.id, 'session-1');
-    expect(preview.dataUrl).toContain('data:text/markdown;base64,');
   });
 
   it('copies a file to a user-selected path', async () => {

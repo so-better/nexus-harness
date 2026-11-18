@@ -1,9 +1,9 @@
 /**
- * AI 输出文件服务：写入 userData/files，记录元数据并支持预览与另存为。
+ * AI 输出文件服务：写入 userData/files，记录元数据并支持另存为。
  */
 
 import { randomUUID } from 'node:crypto';
-import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, extname, join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { OutputFile } from '@shared/ipc/contracts';
@@ -29,8 +29,6 @@ export interface SaveFileInput {
   content: string | Uint8Array;
   source?: 'generated' | 'downloaded';
 }
-
-const MAX_PREVIEW_BYTES = 10 * 1024 * 1024;
 
 const toOutputFile = (row: FileRow): OutputFile => ({
   id: row.id,
@@ -137,35 +135,6 @@ export class FileService {
       bytes: data.byteLength,
       source,
       createdAt
-    };
-  }
-
-  /**
-   * 列出会话内保存的文件。
-   */
-  list(sessionId: string): OutputFile[] {
-    const rows = this.db
-      .prepare('SELECT * FROM files WHERE session_id = ? ORDER BY created_at ASC')
-      .all(sessionId) as unknown as FileRow[];
-    return rows.map(toOutputFile);
-  }
-
-  /**
-   * 读取文件并转成 data URL，供渲染层预览。
-   */
-  async readDataUrl(
-    fileId: string,
-    sessionId: string
-  ): Promise<{ file: OutputFile; dataUrl: string }> {
-    const row = this.get(fileId, sessionId);
-    if (!row) throw new Error('文件不存在');
-    const info = await stat(row.stored_path);
-    if (info.size > MAX_PREVIEW_BYTES) throw new Error('文件过大，无法预览');
-
-    const data = await readFile(row.stored_path);
-    return {
-      file: toOutputFile(row),
-      dataUrl: `data:${row.mime};base64,${data.toString('base64')}`
     };
   }
 

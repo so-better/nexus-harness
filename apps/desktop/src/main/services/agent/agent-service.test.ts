@@ -8,7 +8,6 @@ import { join } from 'node:path';
 import { MockProvider, type ChatProvider, type ProviderRequest } from '@nexus/providers';
 import type { NexusEvent } from '@shared/events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { FileService } from '../files/file-service';
 import { createDatabase } from '../storage/database';
 import { AgentService } from './agent-service';
 
@@ -485,9 +484,10 @@ describe('AgentService', () => {
         { onEvent: (event) => events.push(event) }
       );
 
-      const files = new FileService(db, fileBaseDir).list('session-1');
-      expect(files).toHaveLength(1);
-      expect(files[0]).toMatchObject({ name: 'report.md', mime: 'text/markdown' });
+      const files = db
+        .prepare('SELECT name, mime FROM files WHERE session_id = ?')
+        .all('session-1') as Array<{ name: string; mime: string }>;
+      expect(files).toEqual([{ name: 'report.md', mime: 'text/markdown' }]);
       expect(events.some((event) => event.type === 'file.created')).toBe(true);
     } finally {
       db.close();

@@ -55,8 +55,6 @@ const bridge: NexusBridge = {
     read: (input) => ipcRenderer.invoke(IPC_CHANNELS.artifactRead, input)
   },
   files: {
-    list: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.filesList, sessionId),
-    read: (input) => ipcRenderer.invoke(IPC_CHANNELS.filesRead, input),
     saveAs: (input) => ipcRenderer.invoke(IPC_CHANNELS.filesSaveAs, input)
   },
   workspace: {

@@ -37,8 +37,6 @@ export const IPC_CHANNELS = {
   agentCancel: 'agent:cancel',
   agentEvent: 'agent:event',
   agentAnswerUser: 'agent:answerUser',
-  filesList: 'files:list',
-  filesRead: 'files:read',
   filesSaveAs: 'files:saveAs',
   approvalResolve: 'approval:resolve',
   checkpointRestore: 'checkpoint:restore',

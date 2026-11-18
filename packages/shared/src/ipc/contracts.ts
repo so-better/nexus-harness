@@ -176,8 +176,6 @@ export interface NexusBridge {
     read: (input: ArtifactReadInput) => Promise<Result<ArtifactReadResult>>;
   };
   files: {
-    list: (sessionId: string) => Promise<Result<OutputFile[]>>;
-    read: (input: FileReadInput) => Promise<Result<FileReadResult>>;
     saveAs: (input: FileSaveAsInput) => Promise<Result<FileSaveAsResult>>;
   };
   workspace: {
@@ -371,17 +369,10 @@ export const outputFileSchema = z.object({
   createdAt: z.number().nonnegative()
 });
 
-export const fileReadInputSchema = z.object({
+export const fileSaveAsInputSchema = z.object({
   sessionId: z.string().min(1),
   fileId: z.string().min(1)
 });
-
-export const fileReadResultSchema = z.object({
-  file: outputFileSchema,
-  dataUrl: z.string()
-});
-
-export const fileSaveAsInputSchema = fileReadInputSchema;
 
 export const fileSaveAsResultSchema = z.object({
   fileId: z.string().min(1),
@@ -390,8 +381,6 @@ export const fileSaveAsResultSchema = z.object({
 });
 
 export type OutputFile = z.infer<typeof outputFileSchema>;
-export type FileReadInput = z.infer<typeof fileReadInputSchema>;
-export type FileReadResult = z.infer<typeof fileReadResultSchema>;
 export type FileSaveAsInput = z.infer<typeof fileSaveAsInputSchema>;
 export type FileSaveAsResult = z.infer<typeof fileSaveAsResultSchema>;
 

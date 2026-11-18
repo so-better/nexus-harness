@@ -105,7 +105,7 @@ const parseSaveFileInput = (input: unknown): SaveFileInput | undefined => {
 
 const saveFileToolDefinition: AgentToolDefinition = {
   name: 'save_file',
-  description: '把生成的文本文件保存到 Nexus 输出文件目录，返回可预览/另存为的 fileId。',
+  description: '把生成的文本文件保存到 Nexus 输出文件目录，返回可另存为的 fileId。',
   permission: 'write',
   requiresApproval: false,
   inputSchema: {
