@@ -11,6 +11,7 @@ const statusMap: Record<string, SessionStatus> = {
   idle: 'idle',
   running: 'running',
   waiting_approval: 'waiting_approval',
+  waiting_user: 'waiting_user',
   completed: 'completed',
   failed: 'failed',
   cancelled: 'interrupted',

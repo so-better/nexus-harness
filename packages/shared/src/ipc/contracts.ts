@@ -4,6 +4,7 @@
 
 import { z } from 'zod';
 import type { NexusEvent } from '../events';
+import type { AskUserResolveInput, AskUserResolveResult } from '../ask-user';
 import type { Result } from './result';
 
 /**
@@ -145,11 +146,13 @@ export interface NexusBridge {
   session: {
     list: () => Promise<Result<SessionSummary[]>>;
     events: (id: string) => Promise<Result<NexusEvent[]>>;
+    onChanged: (handler: (session: SessionSummary) => void) => Unsubscribe;
     create: (input: SessionCreateInput) => Promise<Result<SessionSummary>>;
     get: (id: string) => Promise<Result<SessionSummary>>;
     rename: (input: SessionRenameInput) => Promise<Result<SessionSummary>>;
     setPinned: (input: SessionSetPinnedInput) => Promise<Result<SessionSummary>>;
     setModel: (input: SessionSetModelInput) => Promise<Result<SessionSummary>>;
+    setMode: (input: SessionSetModeInput) => Promise<Result<SessionSummary>>;
     remove: (id: string) => Promise<Result<SessionRemoveResult>>;
     clearAll: () => Promise<Result<SessionClearAllResult>>;
     search: (query: string) => Promise<Result<SessionSearchResult[]>>;
@@ -170,6 +173,7 @@ export interface NexusBridge {
     run: (input: AgentRunInput) => Promise<Result<AgentStartResult>>;
     cancel: (runId: string) => Promise<Result<AgentCancelResult>>;
     onEvent: (handler: (event: NexusEvent) => void) => Unsubscribe;
+    answerUser: (input: AskUserResolveInput) => Promise<Result<AskUserResolveResult>>;
   };
 }
 
@@ -182,6 +186,9 @@ export const agentRunInputSchema = z.object({
   rootPaths: z.array(z.string().min(1)).default([]),
   providerId: z.string().min(1),
   modelId: z.string().min(1),
+  mode: z.enum(['plan', 'build']).optional(),
+  editMessageId: z.string().min(1).optional(),
+  regenerateMessageId: z.string().min(1).optional(),
   maxSteps: z.number().int().positive().max(50).optional()
 });
 
@@ -287,6 +294,11 @@ export const sessionSetModelInputSchema = z.object({
   modelId: z.string().min(1)
 });
 
+export const sessionSetModeInputSchema = z.object({
+  id: z.string().min(1),
+  mode: agentModeSchema
+});
+
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 export type AgentMode = z.infer<typeof agentModeSchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
@@ -297,6 +309,7 @@ export type SessionClearAllResult = z.infer<typeof sessionClearAllResultSchema>;
 export type SessionSearchResult = z.infer<typeof sessionSearchResultSchema>;
 export type SessionSetPinnedInput = z.infer<typeof sessionSetPinnedInputSchema>;
 export type SessionSetModelInput = z.infer<typeof sessionSetModelInputSchema>;
+export type SessionSetModeInput = z.infer<typeof sessionSetModeInputSchema>;
 
 /**
  * 用户通过系统对话框选择的临时 root 集合。

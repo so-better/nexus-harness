@@ -92,7 +92,8 @@ withDefaults(
       | 'info'
       | 'trash'
       | 'check'
-      | 'refresh';
+      | 'refresh'
+      | 'copy';
     size?: number;
   }>(),
   { size: 16 }

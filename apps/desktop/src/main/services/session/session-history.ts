@@ -15,12 +15,13 @@ export class SessionHistoryService {
   /**
    * 重建历史消息；跳过运行控制事件与审批事件本身。
    */
-  load(sessionId: string): ChatMessage[] {
+  load(sessionId: string, beforeMessageId?: string): ChatMessage[] {
     const messages: ChatMessage[] = [];
     const approvalToCall = new Map<string, string>();
     const approvalByCall = new Map<string, 'approved' | 'rejected'>();
     const pendingCalls = new Set<string>();
     let lastAssistant: ChatMessage | undefined;
+    let skipFollowingTools = false;
 
     // 中断的 Run 可能留下没有结果的工具调用，必须补占位结果，避免历史非法
     const flushPending = (): void => {
@@ -40,10 +41,32 @@ export class SessionHistoryService {
       pendingCalls.clear();
     };
 
-    for (const event of this.events.list(sessionId)) {
+    const allEvents = this.events.list(sessionId);
+    const supersededIds = new Set(
+      allEvents
+        .filter((event) => event.type === 'message.superseded')
+        .map((event) => (event.payload as EventPayloadMap['message.superseded']).messageId)
+    );
+    let sourceEvents = allEvents;
+    if (beforeMessageId) {
+      const boundary = allEvents.findIndex(
+        (event) =>
+          event.type === 'message.completed' &&
+          (event.payload as EventPayloadMap['message.completed']).messageId === beforeMessageId
+      );
+      if (boundary >= 0) sourceEvents = allEvents.slice(0, boundary);
+    }
+
+    for (const event of sourceEvents) {
       if (event.type === 'message.completed') {
         const payload = event.payload as EventPayloadMap['message.completed'];
         flushPending();
+        if (supersededIds.has(payload.messageId)) {
+          lastAssistant = undefined;
+          skipFollowingTools = payload.role === 'assistant';
+          continue;
+        }
+        skipFollowingTools = false;
         if (payload.role === 'user') {
           messages.push({ role: 'user', content: payload.content });
           lastAssistant = undefined;
@@ -74,6 +97,7 @@ export class SessionHistoryService {
       }
 
       if (event.type === 'tool.requested') {
+        if (skipFollowingTools) continue;
         const payload = event.payload as EventPayloadMap['tool.requested'];
         const call: ProviderToolCall = {
           id: payload.toolCallId,
@@ -91,6 +115,7 @@ export class SessionHistoryService {
       }
 
       if (event.type === 'tool.completed' || event.type === 'tool.failed') {
+        if (skipFollowingTools) continue;
         const toolCallId =
           event.type === 'tool.completed'
             ? (event.payload as EventPayloadMap['tool.completed']).toolCallId

@@ -26,7 +26,13 @@ import {
   TOOL_OUTPUT_PREVIEW_CHAR_LIMIT
 } from './context-service';
 import type { NexusEvent } from '@shared/events';
-import type { AgentProviderConfig, AgentRunInput, AgentRunResult } from '@shared/ipc/contracts';
+import type {
+  AgentMode,
+  AgentProviderConfig,
+  AgentRunInput,
+  AgentRunResult
+} from '@shared/ipc/contracts';
+import { askUserInputSchema, type AskQuestion, type AskUserAnswer } from '@shared/ask-user';
 
 /**
  * 测试可注入 Provider 工厂；生产默认使用 OpenAI 兼容实现。
@@ -52,6 +58,7 @@ export interface AgentRunHooks {
     tool: AgentToolDefinition,
     approvalId: string
   ) => Promise<boolean>;
+  askUser?: (requestId: string, questions: AskQuestion[]) => Promise<AskUserAnswer[] | undefined>;
 }
 
 /**
@@ -69,7 +76,67 @@ const getCreateDirsArgument = (input: unknown): boolean =>
   'createDirs' in input &&
   (input as { createDirs?: unknown }).createDirs === true;
 
-const createOpenAIProvider: ProviderFactory = (config) =>
+const askUserToolDefinition: AgentToolDefinition = {
+  name: 'ask_user',
+  description: '向用户提出 1-4 个阻塞性澄清问题，可包含选项或自由文本；用户回答后继续执行。',
+  permission: 'read',
+  requiresApproval: false,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      questions: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 4,
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            header: { type: 'string' },
+            question: { type: 'string' },
+            options: {
+              type: 'array',
+              minItems: 2,
+              maxItems: 9,
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  label: { type: 'string' },
+                  description: { type: 'string' }
+                },
+                required: ['id', 'label']
+              }
+            },
+            multiple: { type: 'boolean' },
+            allowOther: { type: 'boolean' },
+            required: { type: 'boolean' }
+          },
+          required: ['id', 'question']
+        }
+      }
+    },
+    required: ['questions']
+  }
+};
+
+const PLAN_ALLOWED_TOOLS = new Set([
+  'read_file',
+  'list_dir',
+  'grep',
+  'git_status',
+  'git_diff',
+  'ask_user',
+  'search_skills',
+  'read_skill'
+]);
+
+const modeSystemPrompt = (mode: AgentMode): string =>
+  mode === 'plan'
+    ? '当前处于 Plan 模式：只能读取、分析和制定计划，不得写文件、执行命令、发起网络请求或启动 MCP 工具。需要澄清时使用 ask_user；需要执行时提示用户切换到 Build。'
+    : '当前处于 Build 模式：可以按权限和审批要求使用读写与执行工具；高风险操作仍需用户审批。需要澄清时使用 ask_user。';
+
+export const createAgentProvider: ProviderFactory = (config) =>
   new OpenAICompatibleProvider({
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
@@ -82,7 +149,7 @@ export class AgentService {
   private readonly database: DatabaseSync | undefined;
 
   constructor(options: AgentServiceOptions = {}) {
-    this.createProvider = options.createProvider ?? createOpenAIProvider;
+    this.createProvider = options.createProvider ?? createAgentProvider;
     this.artifactBaseDir = options.artifactBaseDir;
     this.database = options.database;
   }
@@ -107,6 +174,7 @@ export class AgentService {
         throw new Error(`PROVIDER_MODEL_NOT_FOUND: ${input.modelId}`);
       }
 
+      const mode = input.mode ?? 'build';
       const toolset =
         input.rootPaths.length > 0 ? await createFileToolset(input.rootPaths) : undefined;
       const provider = this.createProvider(providerConfig);
@@ -126,6 +194,60 @@ export class AgentService {
       const checkpointRoot = toolset ? await toolset.resolvePath('.') : undefined;
 
       const executeTool = async (call: { name: string; arguments: unknown }) => {
+        if (call.name === 'ask_user') {
+          const parsed = askUserInputSchema.safeParse(call.arguments);
+          if (!parsed.success) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'ASK_USER_INVALID_INPUT', message: '提问参数不合法' }
+            };
+          }
+          if (!hooks.askUser) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'ASK_USER_UNAVAILABLE', message: '当前无法等待用户回答' }
+            };
+          }
+
+          const requestId = randomUUID();
+          eventBus.publish(
+            createNexusEvent({
+              sessionId: input.sessionId,
+              runId,
+              seq: 1,
+              type: 'ask_user.requested',
+              payload: { requestId, questions: parsed.data.questions }
+            })
+          );
+          const answers = await hooks.askUser(requestId, parsed.data.questions);
+          eventBus.publish(
+            createNexusEvent({
+              sessionId: input.sessionId,
+              runId,
+              seq: 1,
+              type: 'ask_user.resolved',
+              payload: { requestId, answers: answers ?? [], cancelled: !answers }
+            })
+          );
+          if (!answers) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'ASK_USER_CANCELLED', message: '用户未回答提问' }
+            };
+          }
+          return { ok: true, output: JSON.stringify({ answers }) };
+        }
+
+        if (mode === 'plan' && !PLAN_ALLOWED_TOOLS.has(call.name)) {
+          return {
+            ok: false,
+            output: '',
+            error: { code: 'TOOL_MODE_DENIED', message: `Plan 模式不可用工具：${call.name}` }
+          };
+        }
         if (!toolset || !checkpointRoot) {
           return {
             ok: false,
@@ -195,18 +317,30 @@ export class AgentService {
           };
         }
       };
+      const modeMessage: ChatMessage = { role: 'system', content: modeSystemPrompt(mode) };
+      const shouldAddUserMessage = !input.regenerateMessageId;
       const userMessage: ChatMessage = { role: 'user', content: input.prompt };
-      eventBus.publish(
-        createNexusEvent({
-          sessionId: input.sessionId,
-          runId,
-          seq: 1,
-          type: 'message.completed',
-          payload: { messageId: randomUUID(), role: 'user', content: input.prompt }
-        })
-      );
+      if (shouldAddUserMessage) {
+        eventBus.publish(
+          createNexusEvent({
+            sessionId: input.sessionId,
+            runId,
+            seq: 1,
+            type: 'message.completed',
+            payload: { messageId: randomUUID(), role: 'user', content: input.prompt }
+          })
+        );
+      }
 
-      const tools: AgentToolDefinition[] = (toolset?.definitions ?? []).map((definition) => ({
+      const allToolDefinitions = [...(toolset?.definitions ?? []), askUserToolDefinition];
+      const visibleDefinitions =
+        mode === 'plan'
+          ? allToolDefinitions.filter((definition) => PLAN_ALLOWED_TOOLS.has(definition.name))
+          : allToolDefinitions;
+      const blockedTools = allToolDefinitions
+        .filter((definition) => !PLAN_ALLOWED_TOOLS.has(definition.name))
+        .map((definition) => definition.name);
+      const tools: AgentToolDefinition[] = visibleDefinitions.map((definition) => ({
         name: definition.name,
         description: definition.description,
         inputSchema: definition.inputSchema,
@@ -220,9 +354,16 @@ export class AgentService {
         model: modelConfig.id,
         sessionId: input.sessionId,
         runId,
-        messages: [...(hooks.history ?? []), userMessage],
+        messages: [
+          modeMessage,
+          ...(hooks.history ?? []),
+          ...(shouldAddUserMessage ? [userMessage] : [])
+        ],
         tools,
-        permissionGateway: new PermissionGateway(['read', 'write', 'execute']),
+        ...(mode === 'plan' ? { blockedTools } : {}),
+        permissionGateway: new PermissionGateway(
+          mode === 'plan' ? ['read'] : ['read', 'write', 'execute']
+        ),
         executeTool,
         prepareContext: (messages) => context.prepare(messages, tools),
         ...(hooks.approveTool ? { approveTool: hooks.approveTool } : {}),

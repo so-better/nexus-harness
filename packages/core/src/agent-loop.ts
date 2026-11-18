@@ -49,6 +49,7 @@ export interface AgentLoopOptions {
   model: string;
   messages: ChatMessage[];
   tools?: AgentToolDefinition[];
+  blockedTools?: string[];
   executeTool?: ToolExecutor;
   eventBus?: EventBus;
   sessionId: string;
@@ -372,7 +373,12 @@ export class AgentLoop {
     call: ProviderToolCall
   ): Promise<{ code: string; message: string } | undefined> {
     const tool = this.options.tools?.find((item) => item.name === call.name);
-    if (!tool) return { code: 'TOOL_NOT_FOUND', message: `未注册工具：${call.name}` };
+    if (!tool) {
+      if (this.options.blockedTools?.includes(call.name)) {
+        return { code: 'TOOL_MODE_DENIED', message: `当前模式不可用工具：${call.name}` };
+      }
+      return { code: 'TOOL_NOT_FOUND', message: `未注册工具：${call.name}` };
+    }
 
     const gateway = this.options.permissionGateway;
     if (!gateway || !gateway.has(tool.permission)) {

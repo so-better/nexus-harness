@@ -79,6 +79,47 @@ describe('SessionHistoryService', () => {
     expect(history[3]).toMatchObject({ role: 'assistant', content: '读取完成' });
   });
 
+  it('stops before a branch message and ignores superseded branches', () => {
+    const events = [
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: { messageId: 'user-1', role: 'user', content: '旧问题' }
+      }),
+      createNexusEvent({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'message.completed',
+        payload: { messageId: 'assistant-1', role: 'assistant', content: '旧回答' }
+      }),
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 3,
+        type: 'message.superseded',
+        payload: { messageId: 'user-1', reason: 'edited' }
+      }),
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 4,
+        type: 'message.superseded',
+        payload: { messageId: 'assistant-1', reason: 'edited' }
+      }),
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 5,
+        type: 'message.completed',
+        payload: { messageId: 'user-2', role: 'user', content: '新问题' }
+      })
+    ] as NexusEvent[];
+
+    const store = { list: () => events } as unknown as EventStore;
+    const service = new SessionHistoryService(store);
+    expect(service.load('session-1')).toEqual([{ role: 'user', content: '新问题' }]);
+    expect(service.load('session-1', 'user-2')).toEqual([]);
+  });
+
   it('adds a placeholder result for an interrupted tool call', () => {
     const events = [
       createNexusEvent({

@@ -3,7 +3,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { ipcMain } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 import { createNexusEvent } from '@nexus/core';
 import type { NexusEvent } from '@shared/events';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
@@ -12,16 +12,20 @@ import {
   approvalResolveInputSchema,
   type AgentCancelResult,
   type AgentStartResult,
-  type ApprovalResolveResult
+  type ApprovalResolveResult,
+  type SessionSummary
 } from '@shared/ipc/contracts';
+import { askUserResolveInputSchema, type AskUserResolveResult } from '@shared/ask-user';
 import { fail, ok, type Result } from '@shared/ipc/result';
-import { AgentService } from '../services/agent/agent-service';
+import { AgentService, createAgentProvider } from '../services/agent/agent-service';
 import { approvalService } from '../services/agent/approval-service';
+import { askUserService } from '../services/agent/ask-user-service';
 import { providerStore } from '../services/provider/provider-store';
 import { getDatabase } from '../services/storage/database';
 import { EventStore } from '../services/session/event-store';
 import { RunStore } from '../services/session/run-store';
 import { SessionService } from '../services/session/session-service';
+import { generateSessionTitle } from '../services/session/session-title';
 import { SessionHistoryService } from '../services/session/session-history';
 import {
   getRun,
@@ -41,6 +45,12 @@ export const registerAgentIpc = (): void => {
   const history = new SessionHistoryService(events);
   const agentService = new AgentService({ database: db });
 
+  const broadcastSession = (session: SessionSummary): void => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send(IPC_CHANNELS.sessionChanged, session);
+    }
+  };
+
   ipcMain.handle(
     IPC_CHANNELS.agentRun,
     async (event, rawInput: unknown): Promise<Result<AgentStartResult>> => {
@@ -50,7 +60,8 @@ export const registerAgentIpc = (): void => {
       }
 
       try {
-        if (!sessions.get(parsed.data.sessionId)) {
+        const session = sessions.get(parsed.data.sessionId);
+        if (!session) {
           return fail('SESSION_NOT_FOUND', `会话不存在：${parsed.data.sessionId}`);
         }
         if (hasRunForSession(parsed.data.sessionId)) {
@@ -68,12 +79,124 @@ export const registerAgentIpc = (): void => {
           return fail('PROVIDER_MODEL_NOT_FOUND', `模型不存在：${parsed.data.modelId}`);
         }
 
+        if (parsed.data.editMessageId && parsed.data.regenerateMessageId) {
+          return fail('AGENT_INVALID_INPUT', '不能同时编辑和重新生成');
+        }
+
+        let runHistory = history.load(session.id);
+        const branchMessageId = parsed.data.editMessageId ?? parsed.data.regenerateMessageId;
+        if (branchMessageId) {
+          const allEvents = events.list(session.id);
+          const boundary = allEvents.findIndex(
+            (item) =>
+              item.type === 'message.completed' &&
+              (item.payload as { messageId?: string }).messageId === branchMessageId
+          );
+          if (boundary < 0) {
+            return fail('SESSION_MESSAGE_NOT_FOUND', '要修改的消息不存在');
+          }
+          const target = allEvents[boundary];
+          const role =
+            target?.type === 'message.completed'
+              ? (target.payload as { role?: string }).role
+              : undefined;
+          if (parsed.data.editMessageId && role !== 'user') {
+            return fail('SESSION_MESSAGE_INVALID', '只能编辑用户消息');
+          }
+          if (parsed.data.regenerateMessageId && role !== 'assistant') {
+            return fail('SESSION_MESSAGE_INVALID', '只能重新生成助手消息');
+          }
+
+          if (parsed.data.editMessageId) {
+            events.append(
+              createNexusEvent({
+                sessionId: session.id,
+                seq: 1,
+                type: 'message.edited',
+                payload: { messageId: branchMessageId, content: parsed.data.prompt }
+              })
+            );
+          } else {
+            const sourceMessageId = [...allEvents.slice(0, boundary)].reverse().find((item) => {
+              if (item.type !== 'message.completed') return false;
+              return (item.payload as { role?: string }).role === 'user';
+            });
+            events.append(
+              createNexusEvent({
+                sessionId: session.id,
+                seq: 1,
+                type: 'message.regenerated',
+                payload: {
+                  messageId: branchMessageId,
+                  sourceMessageId:
+                    sourceMessageId?.type === 'message.completed'
+                      ? (sourceMessageId.payload as { messageId: string }).messageId
+                      : branchMessageId
+                }
+              })
+            );
+          }
+
+          const supersededIds = allEvents
+            .slice(boundary)
+            .filter((item) => item.type === 'message.completed')
+            .map((item) => (item.payload as { messageId: string }).messageId);
+          for (const messageId of supersededIds) {
+            const stored = events.append(
+              createNexusEvent({
+                sessionId: session.id,
+                seq: 1,
+                type: 'message.superseded',
+                payload: {
+                  messageId,
+                  reason: parsed.data.editMessageId ? 'edited' : 'regenerated'
+                }
+              })
+            );
+            if (!event.sender.isDestroyed()) {
+              event.sender.send(IPC_CHANNELS.agentEvent, stored);
+            }
+          }
+          runHistory = history.load(session.id, branchMessageId);
+        }
+
+        if (session.titleSource === 'auto' && session.title === '新会话') {
+          generateSessionTitle(
+            createAgentProvider(provider),
+            parsed.data.modelId,
+            parsed.data.prompt,
+            provider.extraParams
+          )
+            .then(({ title, usage }) => {
+              const updated = sessions.setAutoTitle(session.id, title);
+              if (updated) broadcastSession(updated);
+              if (usage) {
+                events.append(
+                  createNexusEvent({
+                    sessionId: session.id,
+                    seq: 1,
+                    type: 'usage.recorded',
+                    payload: {
+                      provider: provider.name,
+                      model: parsed.data.modelId,
+                      inputTokens: usage.inputTokens,
+                      outputTokens: usage.outputTokens,
+                      ...(usage.cost === undefined ? {} : { cost: usage.cost })
+                    }
+                  })
+                );
+              }
+            })
+            .catch((error: unknown) => console.error('自动标题生成失败', error));
+        }
+
         const runId = randomUUID();
         const controller = new AbortController();
         const sender = event.sender;
         const senderId = sender.id;
         const onSenderDestroyed = (): void => {
           approvalService.cancelRun(runId);
+          askUserService.cancelRun(runId);
           controller.abort();
         };
         sender.once('destroyed', onSenderDestroyed);
@@ -134,17 +257,24 @@ export const registerAgentIpc = (): void => {
           } else if (agentEvent.type === 'approval.resolved') {
             runs.updateStatus(runId, 'running');
             sessions.setStatus(parsed.data.sessionId, 'running');
+          } else if (agentEvent.type === 'ask_user.requested') {
+            runs.updateStatus(runId, 'waiting_user');
+            sessions.setStatus(parsed.data.sessionId, 'waiting_user');
+          } else if (agentEvent.type === 'ask_user.resolved') {
+            runs.updateStatus(runId, 'running');
+            sessions.setStatus(parsed.data.sessionId, 'running');
           }
         };
 
         agentService
-          .run(parsed.data, provider, {
+          .run({ ...parsed.data, mode: session.mode }, provider, {
             runId,
-            history: history.load(parsed.data.sessionId),
+            history: runHistory,
             signal: controller.signal,
             approveTool: (_call, _tool, approvalId) => {
               return approvalService.request(approvalId, runId, senderId);
             },
+            askUser: (requestId, _questions) => askUserService.request(requestId, runId, senderId),
             onEvent: (agentEvent) => {
               if (
                 agentEvent.type === 'run.completed' ||
@@ -181,6 +311,7 @@ export const registerAgentIpc = (): void => {
             await eventChain;
             sender.removeListener('destroyed', onSenderDestroyed);
             approvalService.cancelRun(runId);
+            askUserService.cancelRun(runId);
             unregisterRun(runId);
           });
 
@@ -209,8 +340,26 @@ export const registerAgentIpc = (): void => {
       }
 
       approvalService.cancelRun(rawRunId);
+      askUserService.cancelRun(rawRunId);
       active.controller.abort();
       return ok({ runId: rawRunId, cancelled: true });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.agentAnswerUser,
+    async (event, rawInput: unknown): Promise<Result<AskUserResolveResult>> => {
+      const parsed = askUserResolveInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return fail('ASK_USER_INVALID_INPUT', '回答参数不合法', parsed.error.flatten());
+      }
+
+      const resolved = askUserService.resolve(
+        parsed.data.requestId,
+        parsed.data.cancelled ? undefined : parsed.data.answers,
+        event.sender.id
+      );
+      return ok({ requestId: parsed.data.requestId, resolved });
     }
   );
 

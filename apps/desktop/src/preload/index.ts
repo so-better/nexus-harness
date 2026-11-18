@@ -4,7 +4,7 @@
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
-import type { NexusBridge, ThemeInfo } from '@shared/ipc/contracts';
+import type { NexusBridge, SessionSummary, ThemeInfo } from '@shared/ipc/contracts';
 import type { NexusEvent } from '@shared/events';
 
 const bridge: NexusBridge = {
@@ -14,11 +14,17 @@ const bridge: NexusBridge = {
   session: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.sessionList),
     events: (id) => ipcRenderer.invoke(IPC_CHANNELS.sessionEvents, id),
+    onChanged: (handler) => {
+      const listener = (_event: IpcRendererEvent, session: SessionSummary) => handler(session);
+      ipcRenderer.on(IPC_CHANNELS.sessionChanged, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.sessionChanged, listener);
+    },
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionCreate, input),
     get: (id) => ipcRenderer.invoke(IPC_CHANNELS.sessionGet, id),
     rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionRename, input),
     setPinned: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionSetPinned, input),
     setModel: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionSetModel, input),
+    setMode: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionSetMode, input),
     remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.sessionRemove, id),
     clearAll: () => ipcRenderer.invoke(IPC_CHANNELS.sessionClearAll),
     search: (query) => ipcRenderer.invoke(IPC_CHANNELS.sessionSearch, query)
@@ -54,6 +60,7 @@ const bridge: NexusBridge = {
   agent: {
     run: (input) => ipcRenderer.invoke(IPC_CHANNELS.agentRun, input),
     cancel: (runId) => ipcRenderer.invoke(IPC_CHANNELS.agentCancel, runId),
+    answerUser: (input) => ipcRenderer.invoke(IPC_CHANNELS.agentAnswerUser, input),
     onEvent: (handler) => {
       const listener = (_event: IpcRendererEvent, event: NexusEvent): void => handler(event);
       ipcRenderer.on(IPC_CHANNELS.agentEvent, listener);

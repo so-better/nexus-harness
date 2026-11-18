@@ -53,6 +53,7 @@
       :placeholder="placeholder"
       :disabled="disabled || running"
       @keydown.enter.exact.prevent="onEnter"
+      @keydown.tab="onTab"
     />
     <div class="nh-composer__actions">
       <div class="nh-composer__hint-row">
@@ -61,18 +62,31 @@
         </NText>
         <span v-else class="nh-composer__keys">{{ t('chat.composerHint') }}</span>
       </div>
-      <NButton v-if="running" type="error" secondary @click="emit('stop')">
-        <template #icon>
-          <AppIcon name="stop" />
-        </template>
-        {{ t('app.stop') }}
-      </NButton>
-      <NButton v-else type="primary" :disabled="disabled || !draft.trim()" attr-type="submit">
-        <template #icon>
-          <AppIcon name="send" />
-        </template>
-        {{ t('app.send') }}
-      </NButton>
+      <div class="nh-composer__send-group">
+        <AgentModeSelect
+          :mode="mode"
+          :disabled="running"
+          @update-mode="emit('update-mode', $event)"
+        />
+        <NButton v-if="running" type="error" secondary @click="emit('stop')">
+          <template #icon>
+            <AppIcon name="stop" />
+          </template>
+          {{ t('app.stop') }}
+        </NButton>
+        <NButton
+          v-else
+          type="primary"
+          quaternary
+          :disabled="disabled || !draft.trim()"
+          attr-type="submit"
+        >
+          <template #icon>
+            <AppIcon name="send" />
+          </template>
+          {{ t('app.send') }}
+        </NButton>
+      </div>
     </div>
   </form>
 </template>
@@ -84,9 +98,10 @@
 
 import { computed, ref } from 'vue';
 import { NButton, NDropdown, NInput, NText, type DropdownOption } from 'naive-ui';
-import type { ProviderModel, ProviderPublic } from '@shared/ipc/contracts';
+import type { AgentMode, ProviderModel, ProviderPublic } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
+import AgentModeSelect from './AgentModeSelect.vue';
 
 const props = defineProps<{
   disabled: boolean;
@@ -95,6 +110,7 @@ const props = defineProps<{
   rootLabel: string;
   providers: ProviderPublic[];
   models: ProviderModel[];
+  mode: AgentMode;
   providerId?: string | undefined;
   modelId?: string | undefined;
   hero?: boolean;
@@ -107,6 +123,7 @@ const emit = defineEmits<{
   'update-provider': [id: string];
   'open-settings': [];
   'update-model': [id: string];
+  'update-mode': [mode: AgentMode];
 }>();
 
 const draft = ref('');
@@ -161,6 +178,24 @@ const onEnter = (event: KeyboardEvent): void => {
   if (event.isComposing) return;
   submit();
 };
+
+/**
+ * 输入框内 Tab 切换 Plan/Build；带修饰键或运行中保留原生焦点导航。
+ */
+const onTab = (event: KeyboardEvent): void => {
+  if (
+    event.isComposing ||
+    event.shiftKey ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.altKey ||
+    props.running
+  ) {
+    return;
+  }
+  event.preventDefault();
+  emit('update-mode', props.mode === 'plan' ? 'build' : 'plan');
+};
 </script>
 
 <style scoped lang="less">
@@ -170,7 +205,7 @@ const onEnter = (event: KeyboardEvent): void => {
   flex-direction: column;
   gap: 6px;
   width: calc(100% - 64px);
-  max-width: 820px;
+  max-width: 1040px;
   margin: 0 auto 24px;
   padding: 10px 12px 8px;
   border: 1px solid var(--nh-color-border);
@@ -257,6 +292,13 @@ const onEnter = (event: KeyboardEvent): void => {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+.nh-composer__send-group {
+  display: flex;
+  flex: none;
+  align-items: center;
   gap: 8px;
 }
 

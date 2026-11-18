@@ -7,7 +7,9 @@ import { defineStore } from 'pinia';
 import { t } from '@/app/i18n';
 import { appendAgentEvent } from '../event-cache';
 import type { NexusEvent } from '@shared/events';
+import type { AskUserAnswer } from '@shared/ask-user';
 import {
+  answerAskUser as answerAskUserApi,
   cancelAgent,
   chooseRoot,
   loadEvents,
@@ -76,14 +78,18 @@ export const useChatStore = defineStore('chat', () => {
   /**
    * 发送消息；会话、模型与目录必须已确定。
    */
-  const send = async (sessionId: string, prompt: string): Promise<void> => {
+  const dispatchRun = async (
+    sessionId: string,
+    prompt: string,
+    extra: { editMessageId?: string; regenerateMessageId?: string } = {}
+  ): Promise<boolean> => {
     if (!providerId.value) {
       error.value = t('chat.needsProvider');
-      return;
+      return false;
     }
     if (!modelId.value) {
       error.value = t('chat.needsModel');
-      return;
+      return false;
     }
     error.value = undefined;
     runningBySession[sessionId] = true;
@@ -91,16 +97,43 @@ export const useChatStore = defineStore('chat', () => {
       const result = await runAgent({
         sessionId,
         prompt,
-        rootPaths: rootPaths.value,
+        rootPaths: [...rootPaths.value],
         providerId: providerId.value,
-        modelId: modelId.value
+        modelId: modelId.value,
+        ...extra
       });
       runIds[sessionId] = result.runId;
+      return true;
     } catch (reason) {
       runningBySession[sessionId] = false;
       error.value = reason instanceof Error ? reason.message : String(reason);
+      return false;
     }
   };
+
+  /**
+   * 发送新消息。
+   */
+  const send = async (sessionId: string, prompt: string): Promise<boolean> =>
+    dispatchRun(sessionId, prompt);
+
+  /**
+   * 编辑用户消息并重新发送。
+   */
+  const editMessage = async (
+    sessionId: string,
+    messageId: string,
+    prompt: string
+  ): Promise<boolean> => dispatchRun(sessionId, prompt, { editMessageId: messageId });
+
+  /**
+   * 基于当前上下文重新生成指定助手回复。
+   */
+  const regenerateMessage = async (
+    sessionId: string,
+    messageId: string,
+    prompt: string
+  ): Promise<boolean> => dispatchRun(sessionId, prompt, { regenerateMessageId: messageId });
 
   /**
    * 停止当前会话的 Run。
@@ -139,6 +172,31 @@ export const useChatStore = defineStore('chat', () => {
   };
 
   /**
+   * 回答 Agent 提问；取消时传 undefined。
+   */
+  const answerAskUser = async (
+    requestId: string,
+    answers: AskUserAnswer[] | undefined
+  ): Promise<boolean> => {
+    error.value = undefined;
+    try {
+      const result = await answerAskUserApi({
+        requestId,
+        answers: answers ?? [],
+        cancelled: answers === undefined
+      });
+      if (!result.resolved) {
+        error.value = t('chat.askUserNotPending');
+        return false;
+      }
+      return true;
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+      return false;
+    }
+  };
+
+  /**
    * 清空错误提示。
    */
   const clearError = (): void => {
@@ -159,8 +217,11 @@ export const useChatStore = defineStore('chat', () => {
     dispose,
     loadHistory,
     send,
+    editMessage,
+    regenerateMessage,
     stop,
     decideApproval,
+    answerAskUser,
     addRoot,
     setProvider,
     setModel,

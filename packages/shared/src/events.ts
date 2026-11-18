@@ -3,6 +3,7 @@
  */
 
 import { z } from 'zod';
+import { askQuestionSchema, askUserAnswerSchema } from './ask-user';
 
 /**
  * 事件 payload 映射；新增事件时先在此登记，再实现发布与订阅。
@@ -84,6 +85,15 @@ export const eventPayloadSchemas = {
   }),
   'checkpoint.restored': z.object({
     checkpointId: z.string()
+  }),
+  'ask_user.requested': z.object({
+    requestId: z.string(),
+    questions: z.array(askQuestionSchema)
+  }),
+  'ask_user.resolved': z.object({
+    requestId: z.string(),
+    answers: z.array(askUserAnswerSchema),
+    cancelled: z.boolean()
   }),
   'approval.requested': z.object({
     approvalId: z.string(),

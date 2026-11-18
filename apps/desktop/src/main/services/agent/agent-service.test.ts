@@ -62,7 +62,11 @@ describe('AgentService', () => {
       }
     );
 
-    expect(requests[0]?.messages.map((message) => message.content)).toEqual([
+    expect(requests[0]?.messages[0]).toMatchObject({
+      role: 'system',
+      content: expect.stringContaining('Build')
+    });
+    expect(requests[0]?.messages.slice(1).map((message) => message.content)).toEqual([
       '之前的问题',
       '之前的回答',
       '继续'
@@ -106,7 +110,142 @@ describe('AgentService', () => {
     );
 
     expect(result.finishReason).toBe('stop');
-    expect(requests[0]?.tools ?? []).toEqual([]);
+    expect(requests[0]?.tools?.map((tool) => tool.name)).toEqual(['ask_user']);
+  });
+
+  it('makes Plan mode read-only and blocks write tools', async () => {
+    const requests: ProviderRequest[] = [];
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
+      async *stream(request) {
+        requests.push(request);
+        if (requests.length === 1) {
+          const toolCall = {
+            id: 'call-1',
+            name: 'write_file',
+            arguments: { path: 'b.txt', content: 'x' }
+          };
+          yield { type: 'tool-call-start', id: toolCall.id, name: toolCall.name };
+          yield {
+            type: 'tool-call-delta',
+            id: toolCall.id,
+            argumentsDelta: JSON.stringify(toolCall.arguments)
+          };
+          yield { type: 'tool-call-end', toolCall };
+          yield { type: 'finish', reason: 'tool_calls' };
+          return;
+        }
+        yield { type: 'text-delta', text: '规划完成' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const service = new AgentService({ createProvider: () => provider });
+    const providerConfig = {
+      id: 'provider-1',
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+    const events: NexusEvent[] = [];
+
+    const result = await service.run(
+      {
+        sessionId: 'session-1',
+        prompt: '规划修改',
+        rootPaths: [root],
+        providerId: providerConfig.id,
+        modelId: 'mock-model',
+        mode: 'plan'
+      },
+      providerConfig,
+      { onEvent: (event) => events.push(event) }
+    );
+
+    expect(result.finishReason).toBe('stop');
+    expect(requests[0]?.messages[0]).toMatchObject({
+      role: 'system',
+      content: expect.stringContaining('Plan')
+    });
+    expect(requests[0]?.tools?.map((tool) => tool.name)).not.toContain('write_file');
+    const failed = events.find(
+      (event): event is NexusEvent<'tool.failed'> => event.type === 'tool.failed'
+    );
+    expect(failed?.payload.error.code).toBe('TOOL_MODE_DENIED');
+  });
+
+  it('pauses for ask_user and feeds answers back to the model', async () => {
+    const requests: ProviderRequest[] = [];
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
+      async *stream(request) {
+        requests.push(request);
+        if (requests.length === 1) {
+          const toolCall = {
+            id: 'ask-1',
+            name: 'ask_user',
+            arguments: {
+              questions: [
+                {
+                  id: 'scope',
+                  question: '要处理哪个范围？',
+                  options: [
+                    { id: 'core', label: 'Core' },
+                    { id: 'desktop', label: 'Desktop' }
+                  ],
+                  required: true
+                }
+              ]
+            }
+          };
+          yield { type: 'tool-call-start', id: toolCall.id, name: toolCall.name };
+          yield {
+            type: 'tool-call-delta',
+            id: toolCall.id,
+            argumentsDelta: JSON.stringify(toolCall.arguments)
+          };
+          yield { type: 'tool-call-end', toolCall };
+          yield { type: 'finish', reason: 'tool_calls' };
+          return;
+        }
+        yield { type: 'text-delta', text: '收到范围' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const service = new AgentService({ createProvider: () => provider });
+    const providerConfig = {
+      id: 'provider-1',
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+    const events: NexusEvent[] = [];
+    const askUser = vi
+      .fn()
+      .mockResolvedValue([{ questionId: 'scope', selectedOptionIds: ['core'] }]);
+
+    const result = await service.run(
+      {
+        sessionId: 'session-1',
+        prompt: '开始',
+        rootPaths: [],
+        providerId: providerConfig.id,
+        modelId: 'mock-model'
+      },
+      providerConfig,
+      { askUser, onEvent: (event) => events.push(event) }
+    );
+
+    expect(result.finishReason).toBe('stop');
+    expect(askUser).toHaveBeenCalledTimes(1);
+    expect(events.some((event) => event.type === 'ask_user.requested')).toBe(true);
+    expect(events.some((event) => event.type === 'ask_user.resolved')).toBe(true);
+    expect(requests[1]?.messages.some((message) => message.content.includes('"core"'))).toBe(true);
   });
 
   it('compacts oversized tool output into artifacts before the next model call', async () => {

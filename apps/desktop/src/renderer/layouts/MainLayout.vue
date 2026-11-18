@@ -20,6 +20,7 @@
         :root-label="rootLabel"
         :providers="providers"
         :models="models"
+        :mode="activeMode"
         :provider-id="providerId"
         :model-id="modelId"
         :disabled-reason="disabledReason"
@@ -29,11 +30,15 @@
         @choose-root="chat.addRoot"
         @update-provider="updateProvider"
         @update-model="updateModel"
+        @update-mode="changeMode"
         @open-settings="settingsOpen = true"
         @send="send"
         @stop="stop"
         @approve="(id) => chat.decideApproval(id, true)"
         @reject="(id) => chat.decideApproval(id, false)"
+        @answer-user="answerUser"
+        @edit-message="editMessage"
+        @regenerate-message="regenerateMessage"
       />
     </div>
 
@@ -62,12 +67,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useMessage } from 'naive-ui';
 import { storeToRefs } from 'pinia';
-import type { ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
+import type { AgentMode, ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
+import type { AskUserAnswer } from '@shared/ask-user';
 import { setLocale, t } from '@/app/i18n';
 import ChatView from '@/modules/chat/views/ChatView.vue';
 import { projectEvents } from '@/modules/chat/projection';
 import { useChatStore } from '@/modules/chat/stores/chat.store';
 import SessionSidebar from '@/modules/session/components/SessionSidebar.vue';
+import { subscribeSessionChanges } from '@/modules/session/api/session.api';
 import { useSessionStore } from '@/modules/session/stores/session.store';
 import { getLanguage } from '@/modules/settings/api/settings.api';
 import SettingsModal from '@/modules/settings/views/SettingsModal.vue';
@@ -83,7 +90,12 @@ const { providers, providerId, modelId, models, rootPaths, runningBySession } = 
 
 const { version, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
 const focusMessage = ref<{ id: string; token: number; sessionId: string }>();
+let unsubscribeSessionChanges: (() => void) | undefined;
 let focusSequence = 0;
+
+const activeMode = computed(
+  () => sessionList.value.find((session) => session.id === activeId.value)?.mode ?? 'build'
+);
 
 const projection = computed(() => {
   const id = activeId.value;
@@ -91,6 +103,9 @@ const projection = computed(() => {
 });
 
 const runningCount = computed(() => Object.values(runningBySession.value).filter(Boolean).length);
+const activeRunning = computed(() =>
+  activeId.value ? Boolean(runningBySession.value[activeId.value]) : false
+);
 const rootLabel = computed(() =>
   rootPaths.value.length ? `${t('app.workspace')} · ${rootPaths.value.length}` : t('app.noRoot')
 );
@@ -130,7 +145,8 @@ watch(
  * 新建会话并使用当前 Provider。
  */
 const createSession = async (): Promise<void> => {
-  await sessions.create(providerId.value, modelId.value);
+  const created = await sessions.create(providerId.value, modelId.value);
+  if (!created) message.error(sessions.error ?? t('session.createFailed'));
 };
 
 /**
@@ -196,9 +212,15 @@ const clearAllSessions = async (): Promise<void> => {
 const send = async (prompt: string): Promise<void> => {
   if (!activeId.value) {
     const created = await sessions.create(providerId.value, modelId.value);
-    if (!created) return;
+    if (!created) {
+      message.error(sessions.error ?? t('session.createFailed'));
+      return;
+    }
   }
-  if (activeId.value) await chat.send(activeId.value, prompt);
+  if (activeId.value) {
+    const started = await chat.send(activeId.value, prompt);
+    if (!started) message.error(chat.error ?? t('chat.sendFailed'));
+  }
 };
 
 /**
@@ -229,6 +251,48 @@ const updateModel = (id: string): void => {
 };
 
 /**
+ * 回答 Agent 的结构化提问。
+ */
+const answerUser = async (
+  requestId: string,
+  answers: AskUserAnswer[] | undefined
+): Promise<void> => {
+  const answered = await chat.answerAskUser(requestId, answers);
+  if (!answered) message.error(chat.error ?? t('chat.askUserFailed'));
+};
+
+/**
+ * 编辑用户消息并重发。
+ */
+const editMessage = async (messageId: string, content: string): Promise<void> => {
+  if (!activeId.value || activeRunning.value) return;
+  const started = await chat.editMessage(activeId.value, messageId, content);
+  if (!started) message.error(chat.error ?? t('chat.editFailed'));
+};
+
+/**
+ * 重新生成最后一条助手回复。
+ */
+const regenerateMessage = async (messageId: string): Promise<void> => {
+  if (!activeId.value || activeRunning.value) return;
+  const prompt = [...projection.value.messages]
+    .reverse()
+    .find((message) => message.role === 'user')?.content;
+  if (!prompt) return;
+  const started = await chat.regenerateMessage(activeId.value, messageId, prompt);
+  if (!started) message.error(chat.error ?? t('chat.regenerateFailed'));
+};
+
+/**
+ * 切换 Agent 模式；运行中禁止切换。
+ */
+const changeMode = async (mode: AgentMode): Promise<void> => {
+  if (!activeId.value || activeRunning.value) return;
+  const updated = await sessions.updateMode(activeId.value, mode);
+  if (!updated) message.error(sessions.error ?? t('chat.modeChangeFailed'));
+};
+
+/**
  * 停止当前会话的 Run。
  */
 const stop = async (): Promise<void> => {
@@ -236,6 +300,7 @@ const stop = async (): Promise<void> => {
 };
 
 onMounted(async () => {
+  unsubscribeSessionChanges = subscribeSessionChanges((session) => sessions.applyUpdate(session));
   try {
     setLocale(await getLanguage());
   } catch {
@@ -248,6 +313,8 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  unsubscribeSessionChanges?.();
+  unsubscribeSessionChanges = undefined;
   chat.dispose();
 });
 </script>

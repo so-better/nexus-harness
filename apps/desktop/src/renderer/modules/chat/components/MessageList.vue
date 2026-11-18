@@ -7,7 +7,14 @@
         :message="message"
         :grouped="isGrouped(index)"
         :highlighted="message.id === highlightedId"
+        :ask-user="askForMessage(message.id)"
+        :ask-first="askForMessage(message.id)?.merged === true"
+        :is-last-assistant="message.id === lastAssistantId"
+        :actions-disabled="actionsDisabled"
         @content-growth="handleContentGrowth"
+        @answer-user="(requestId, answers) => emit('answer-user', requestId, answers)"
+        @edit-message="(content) => emit('edit-message', message.id, content)"
+        @regenerate-message="emit('regenerate-message', message.id)"
       />
     </div>
   </div>
@@ -18,9 +25,17 @@
  * 消息列表：限制阅读宽度，并在新消息到达时滚动到底部。
  */
 
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import type { ChatMessageView } from '../types';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import type { AskUserAnswer } from '@shared/ask-user';
+import { indexAskUsersByMessage } from '../ask-user-index';
+import type { ChatAskUser, ChatMessageView } from '../types';
 import ChatMessageItem from './ChatMessageItem.vue';
+
+const emit = defineEmits<{
+  'answer-user': [requestId: string, answers: AskUserAnswer[] | undefined];
+  'edit-message': [messageId: string, content: string];
+  'regenerate-message': [messageId: string];
+}>();
 
 const props = defineProps<{
   messages: ChatMessageView[];
@@ -28,9 +43,23 @@ const props = defineProps<{
   focusToken?: number | undefined;
   focusSessionId?: string | undefined;
   sessionId?: string | undefined;
+  askUsers?: ChatAskUser[] | undefined;
+  actionsDisabled?: boolean | undefined;
 }>();
 
 const viewport = ref<HTMLElement | null>(null);
+
+const lastAssistantId = computed(
+  () => [...props.messages].reverse().find((message) => message.role === 'assistant')?.id
+);
+
+/**
+ * 按投影给出的 messageId 关联提问；同一消息有多次提问时保留最新一条。
+ */
+const asksByMessage = computed(() => indexAskUsersByMessage(props.askUsers ?? []));
+
+const askForMessage = (messageId: string): ChatAskUser | undefined =>
+  asksByMessage.value.get(messageId);
 const highlightedId = ref<string>();
 let highlightTimer: ReturnType<typeof setTimeout> | undefined;
 let focusRequest = 0;
@@ -150,6 +179,15 @@ const isGrouped = (index: number): boolean => {
 };
 
 watch(
+  () => props.askUsers?.filter((ask) => ask.status === 'pending').length ?? 0,
+  async (count, previous) => {
+    if (count <= (previous ?? 0)) return;
+    await nextTick();
+    if (!focusing.value && stickToBottom.value) scrollToLatest();
+  }
+);
+
+watch(
   () => props.messages.length,
   async () => {
     await nextTick();
@@ -175,7 +213,7 @@ watch(
 .nh-message-list__stack {
   display: flex;
   width: 100%;
-  max-width: 760px;
+  max-width: 1040px;
   flex-direction: column;
   gap: 28px;
   margin: 0 auto;

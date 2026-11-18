@@ -5,6 +5,8 @@
 /**
  * 工具调用在 UI 中的生命周期。
  */
+import type { AskQuestion, AskUserAnswer } from '@shared/ask-user';
+
 export type ToolCallStatus =
   'requested' | 'waiting_approval' | 'approved' | 'rejected' | 'running' | 'succeeded' | 'failed';
 
@@ -32,6 +34,9 @@ export interface ChatMessageView {
   toolCalls: ChatToolCall[];
   createdAt: number;
   streaming?: boolean;
+  superseded?: boolean;
+  hidden?: boolean;
+  runId?: string;
 }
 
 /**
@@ -56,13 +61,31 @@ export interface ChatUsage {
 /**
  * 事件流投影结果；UI 只读取，不持有业务真相。
  */
+export interface ChatAskUser {
+  requestId: string;
+  questions: AskQuestion[];
+  status: 'pending' | 'resolved' | 'cancelled';
+  answers?: AskUserAnswer[];
+  messageId?: string;
+  runId?: string;
+  merged?: boolean;
+}
+
 export interface ChatProjection {
   messages: ChatMessageView[];
   approvals: ChatApproval[];
+  askUsers: ChatAskUser[];
   usage: ChatUsage;
   runId?: string;
   running: boolean;
   status:
-    'idle' | 'running' | 'waiting_approval' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
+    | 'idle'
+    | 'running'
+    | 'waiting_approval'
+    | 'waiting_user'
+    | 'completed'
+    | 'failed'
+    | 'cancelled'
+    | 'interrupted';
   error?: string;
 }

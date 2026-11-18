@@ -8,6 +8,7 @@ import { IPC_CHANNELS } from '@shared/ipc/channels';
 import {
   sessionCreateInputSchema,
   sessionRenameInputSchema,
+  sessionSetModeInputSchema,
   sessionSetModelInputSchema,
   sessionSetPinnedInputSchema,
   type SessionClearAllResult,
@@ -172,6 +173,31 @@ export const registerSessionIpc = (): void => {
         return fail(
           'SESSION_MODEL_FAILED',
           error instanceof Error ? error.message : '更新会话模型失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.sessionSetMode,
+    async (_event, rawInput: unknown): Promise<Result<SessionSummary>> => {
+      const parsed = sessionSetModeInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return fail('SESSION_INVALID_INPUT', '会话模式参数不合法', parsed.error.flatten());
+      }
+      if (!sessions.get(parsed.data.id)) {
+        return fail('SESSION_NOT_FOUND', `会话不存在：${parsed.data.id}`);
+      }
+      if (hasRunForSession(parsed.data.id)) {
+        return fail('SESSION_BUSY', `会话有运行中的 Run：${parsed.data.id}`);
+      }
+
+      try {
+        return ok(sessions.setMode(parsed.data));
+      } catch (error) {
+        return fail(
+          'SESSION_MODE_FAILED',
+          error instanceof Error ? error.message : '更新会话模式失败'
         );
       }
     }

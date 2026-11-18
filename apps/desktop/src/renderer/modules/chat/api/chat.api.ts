@@ -3,6 +3,7 @@
  */
 
 import type { NexusEvent } from '@shared/events';
+import type { AskUserResolveInput, AskUserResolveResult } from '@shared/ask-user';
 import type { AgentCancelResult, AgentStartResult, ProviderPublic } from '@shared/ipc/contracts';
 import { unwrap } from '@/app/ipc';
 
@@ -33,6 +34,8 @@ export const runAgent = async (input: {
   rootPaths: string[];
   providerId: string;
   modelId: string;
+  editMessageId?: string;
+  regenerateMessageId?: string;
 }): Promise<AgentStartResult> => unwrap(await window.nexus.agent.run(input));
 
 /**
@@ -55,3 +58,9 @@ export const resolveApproval = async (
  */
 export const subscribeAgentEvents = (handler: (event: NexusEvent) => void): (() => void) =>
   window.nexus.agent.onEvent(handler);
+
+/**
+ * 回答 Agent 的结构化提问。
+ */
+export const answerAskUser = async (input: AskUserResolveInput): Promise<AskUserResolveResult> =>
+  unwrap(await window.nexus.agent.answerUser(input));

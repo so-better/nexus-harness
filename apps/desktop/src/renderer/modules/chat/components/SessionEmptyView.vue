@@ -20,11 +20,13 @@
         :root-label="rootLabel"
         :providers="providers"
         :models="models"
+        :mode="mode"
         :provider-id="providerId"
         :model-id="modelId"
         @choose-root="emit('choose-root')"
         @update-provider="emit('update-provider', $event)"
         @update-model="emit('update-model', $event)"
+        @update-mode="emit('update-mode', $event)"
         @open-settings="emit('open-settings')"
         @send="emit('send', $event)"
         @stop="emit('stop')"
@@ -38,7 +40,7 @@
  * 会话内空状态：一条简短提示与主输入区。
  */
 
-import type { ProviderModel, ProviderPublic } from '@shared/ipc/contracts';
+import type { AgentMode, ProviderModel, ProviderPublic } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import ComposerBox from './ComposerBox.vue';
@@ -49,6 +51,7 @@ defineProps<{
   rootLabel: string;
   providers: ProviderPublic[];
   models: ProviderModel[];
+  mode: AgentMode;
   providerId?: string | undefined;
   modelId?: string | undefined;
 }>();
@@ -59,6 +62,7 @@ const emit = defineEmits<{
   'choose-root': [];
   'update-provider': [id: string];
   'update-model': [id: string];
+  'update-mode': [mode: AgentMode];
   'open-settings': [];
 }>();
 </script>
@@ -120,7 +124,7 @@ const emit = defineEmits<{
 .nh-session-empty__inner {
   display: flex;
   width: 100%;
-  max-width: 820px;
+  max-width: 1040px;
   flex-direction: column;
   gap: 32px;
   animation: session-empty-in var(--nh-duration-panel) var(--nh-ease-standard) both;

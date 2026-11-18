@@ -120,6 +120,7 @@ vi.mock('../services/agent/agent-service', () => ({
 }));
 
 import { approvalService } from '../services/agent/approval-service';
+import { askUserService } from '../services/agent/ask-user-service';
 import { registerAgentIpc } from './agent';
 
 const input = {
@@ -187,6 +188,7 @@ describe('agent IPC', () => {
     const runHandler = state.handlers.get(IPC_CHANNELS.agentRun);
     const cancelHandler = state.handlers.get(IPC_CHANNELS.agentCancel);
     if (!runHandler || !cancelHandler) throw new Error('agent handlers not registered');
+    const cancelAskUser = vi.spyOn(askUserService, 'cancelRun');
 
     const started = (await runHandler({ sender }, input)) as {
       ok: boolean;
@@ -199,6 +201,8 @@ describe('agent IPC', () => {
 
     expect(cancelled.ok).toBe(true);
     expect(cancelled.data.cancelled).toBe(true);
+    expect(cancelAskUser).toHaveBeenCalledWith(started.data.runId);
+    cancelAskUser.mockRestore();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(
       state.sent.some((item) => (item.payload as { type?: string }).type === 'run.cancelled')

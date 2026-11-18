@@ -4,6 +4,7 @@
 
 import type { NexusEvent } from '@shared/events';
 import type {
+  AgentMode,
   SessionCreateInput,
   SessionRenameInput,
   SessionSearchResult,
@@ -52,6 +53,12 @@ export const setSessionModel = async (
   unwrap(await window.nexus.session.setModel({ id, providerId, modelId }));
 
 /**
+ * 设置会话 Agent 模式。
+ */
+export const setSessionMode = async (id: string, mode: AgentMode): Promise<SessionSummary> =>
+  unwrap(await window.nexus.session.setMode({ id, mode }));
+
+/**
  * 删除会话。
  */
 export const removeSession = async (id: string): Promise<void> => {
@@ -69,3 +76,9 @@ export const clearAllSessions = async (): Promise<number> =>
  */
 export const searchSessions = async (query: string): Promise<SessionSearchResult[]> =>
   unwrap(await window.nexus.session.search(query));
+
+/**
+ * 订阅会话标题等投影变更。
+ */
+export const subscribeSessionChanges = (handler: (session: SessionSummary) => void): (() => void) =>
+  window.nexus.session.onChanged(handler);

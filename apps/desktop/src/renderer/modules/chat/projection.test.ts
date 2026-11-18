@@ -77,6 +77,163 @@ describe('projectEvents', () => {
     });
   });
 
+  it('tracks pending Ask User questions until they are answered', () => {
+    const questions = [
+      {
+        id: 'scope',
+        question: '要处理哪个范围？',
+        options: [
+          { id: 'core', label: 'Core' },
+          { id: 'desktop', label: 'Desktop' }
+        ],
+        required: true
+      }
+    ];
+    const requested = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'run.started',
+        payload: { model: 'mock-model' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'ask_user.requested',
+        payload: { requestId: 'ask-1', questions }
+      })
+    ]);
+
+    expect(requested.status).toBe('waiting_user');
+    expect(requested.askUsers[0]).toMatchObject({ requestId: 'ask-1', status: 'pending' });
+
+    const resolved = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'run.started',
+        payload: { model: 'mock-model' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'ask_user.requested',
+        payload: { requestId: 'ask-1', questions }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'ask_user.resolved',
+        payload: {
+          requestId: 'ask-1',
+          answers: [{ questionId: 'scope', selectedOptionIds: ['core'] }],
+          cancelled: false
+        }
+      })
+    ]);
+
+    expect(resolved.status).toBe('running');
+    expect(resolved.askUsers[0]).toMatchObject({
+      status: 'resolved',
+      answers: [{ questionId: 'scope', selectedOptionIds: ['core'] }]
+    });
+  });
+
+  it('merges an answered ask into the continuation assistant message', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: { messageId: 'assistant-1', role: 'assistant', content: '' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'tool.requested',
+        payload: { toolCallId: 'call-ask', name: 'ask_user', input: {} }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'ask_user.requested',
+        payload: { requestId: 'ask-1', questions: [] }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 4,
+        type: 'ask_user.resolved',
+        payload: {
+          requestId: 'ask-1',
+          answers: [{ questionId: 'scope', selectedOptionIds: ['core'] }],
+          cancelled: false
+        }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 5,
+        type: 'message.completed',
+        payload: { messageId: 'assistant-2', role: 'assistant', content: '继续处理' }
+      })
+    ]);
+
+    expect(projection.messages).toHaveLength(1);
+    expect(projection.messages[0]).toMatchObject({ id: 'assistant-2', content: '继续处理' });
+    expect(projection.askUsers[0]).toMatchObject({
+      status: 'resolved',
+      messageId: 'assistant-2',
+      merged: true
+    });
+  });
+
+  it('hides superseded messages from the visible conversation', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: { messageId: 'user-1', role: 'user', content: '旧问题' }
+      }),
+      event({
+        sessionId: 'session-1',
+        seq: 2,
+        type: 'message.completed',
+        payload: { messageId: 'assistant-1', role: 'assistant', content: '旧回答' }
+      }),
+      event({
+        sessionId: 'session-1',
+        seq: 3,
+        type: 'message.superseded',
+        payload: { messageId: 'user-1', reason: 'edited' }
+      }),
+      event({
+        sessionId: 'session-1',
+        seq: 4,
+        type: 'message.superseded',
+        payload: { messageId: 'assistant-1', reason: 'edited' }
+      }),
+      event({
+        sessionId: 'session-1',
+        seq: 5,
+        type: 'message.completed',
+        payload: { messageId: 'user-2', role: 'user', content: '新问题' }
+      })
+    ]);
+
+    expect(projection.messages).toHaveLength(1);
+    expect(projection.messages[0]).toMatchObject({ id: 'user-2', content: '新问题' });
+  });
+
   it('projects messages, tool calls, approvals and usage', () => {
     const events: NexusEvent[] = [
       event({

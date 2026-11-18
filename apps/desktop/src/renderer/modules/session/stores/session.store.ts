@@ -4,13 +4,14 @@
 
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import type { SessionStatus, SessionSummary } from '@shared/ipc/contracts';
+import type { AgentMode, SessionStatus, SessionSummary } from '@shared/ipc/contracts';
 import {
   clearAllSessions,
   createSession,
   listSessions,
   removeSession,
   renameSession,
+  setSessionMode,
   setSessionModel,
   setSessionPinned
 } from '../api/session.api';
@@ -83,6 +84,35 @@ export const useSessionStore = defineStore('sessions', () => {
     error.value = undefined;
     try {
       const updated = await renameSession({ id, title });
+      sessions.value = sessions.value.map((session) => (session.id === id ? updated : session));
+      return true;
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+      return false;
+    }
+  };
+
+  /**
+   * 接收主进程推送的会话投影更新。
+   */
+  const applyUpdate = (updated: SessionSummary): void => {
+    const index = sessions.value.findIndex((session) => session.id === updated.id);
+    if (index < 0) {
+      sessions.value = [updated, ...sessions.value];
+      return;
+    }
+    sessions.value = sessions.value.map((session) =>
+      session.id === updated.id ? updated : session
+    );
+  };
+
+  /**
+   * 设置会话模式。
+   */
+  const updateMode = async (id: string, mode: AgentMode): Promise<boolean> => {
+    error.value = undefined;
+    try {
+      const updated = await setSessionMode(id, mode);
       sessions.value = sessions.value.map((session) => (session.id === id ? updated : session));
       return true;
     } catch (reason) {
@@ -170,6 +200,8 @@ export const useSessionStore = defineStore('sessions', () => {
     load,
     create,
     updateModel,
+    updateMode,
+    applyUpdate,
     rename,
     select,
     remove,

@@ -9,6 +9,7 @@ import type {
   AgentMode,
   SessionCreateInput,
   SessionRenameInput,
+  SessionSetModeInput,
   SessionSetModelInput,
   SessionStatus,
   SessionSummary
@@ -29,6 +30,8 @@ interface SessionRow {
   updated_at: number;
   last_active_at: number;
 }
+
+const DEFAULT_SESSION_TITLE = '新会话';
 
 const toSummary = (row: SessionRow): SessionSummary => ({
   id: row.id,
@@ -57,7 +60,7 @@ export class SessionService {
   create(input: SessionCreateInput = {}): SessionSummary {
     const id = randomUUID();
     const now = Date.now();
-    const title = input.title?.trim() || '新会话';
+    const title = input.title?.trim() || DEFAULT_SESSION_TITLE;
     const mode = input.mode ?? 'build';
 
     return this.transaction(() => {
@@ -115,6 +118,40 @@ export class SessionService {
       .prepare('SELECT * FROM sessions WHERE id = ? AND deleted_at IS NULL')
       .get(id) as unknown as SessionRow | undefined;
     return row ? toSummary(row) : undefined;
+  }
+
+  /**
+   * 写入自动标题；只更新仍处于默认标题且来源为 auto 的会话。
+   */
+  setAutoTitle(id: string, title: string): SessionSummary | undefined {
+    const current = this.get(id);
+    if (
+      !current ||
+      current.titleSource !== 'auto' ||
+      current.title !== DEFAULT_SESSION_TITLE ||
+      !title.trim()
+    ) {
+      return undefined;
+    }
+
+    const now = Date.now();
+    return this.transaction(() => {
+      const result = this.db
+        .prepare(
+          "UPDATE sessions SET title = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL AND title_source = 'auto' AND title = ?"
+        )
+        .run(title.trim(), now, id, DEFAULT_SESSION_TITLE);
+      if (Number(result.changes) === 0) return undefined;
+      this.events.append(
+        createNexusEvent({
+          sessionId: id,
+          seq: 1,
+          type: 'session.renamed',
+          payload: { title: title.trim(), source: 'auto' }
+        })
+      );
+      return this.get(id);
+    });
   }
 
   /**
@@ -222,6 +259,30 @@ export class SessionService {
           seq: 1,
           type: 'session.model.changed',
           payload: { providerId: input.providerId, modelId: input.modelId }
+        })
+      );
+      return this.getRequired(input.id);
+    });
+  }
+
+  /**
+   * 设置 Agent 模式；仅由用户操作触发。
+   */
+  setMode(input: SessionSetModeInput): SessionSummary {
+    const now = Date.now();
+
+    return this.transaction(() => {
+      this.db
+        .prepare(
+          'UPDATE sessions SET mode = ?, updated_at = ?, last_active_at = ? WHERE id = ? AND deleted_at IS NULL'
+        )
+        .run(input.mode, now, now, input.id);
+      this.events.append(
+        createNexusEvent({
+          sessionId: input.id,
+          seq: 1,
+          type: 'session.mode.changed',
+          payload: { mode: input.mode }
         })
       );
       return this.getRequired(input.id);

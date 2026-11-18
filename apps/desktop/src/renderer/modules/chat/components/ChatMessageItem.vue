@@ -9,7 +9,7 @@
     <span>{{ message.content }}</span>
   </article>
   <article
-    v-else
+    v-else-if="message.content || displayToolCalls.length || askUser"
     class="nh-message"
     :class="[
       `nh-message--${message.role}`,
@@ -17,35 +17,95 @@
     ]"
     :data-message-id="message.id"
   >
-    <NAvatar
-      v-if="message.role === 'assistant' && !grouped"
-      round
-      :size="24"
-      :style="assistantAvatarStyle"
-    >
-      N
-    </NAvatar>
-    <div class="nh-message__body">
-      <header v-if="!grouped" class="nh-message__header">
-        <span class="nh-message__role">{{ roleLabel }}</span>
-        <span class="nh-message__time">{{ timeLabel }}</span>
-      </header>
-
+    <div class="nh-message__body" :class="{ 'nh-message__body--editing': editing }">
       <div
-        v-if="message.content || message.toolCalls.length"
+        v-if="message.content || displayToolCalls.length || askUser"
         class="nh-message__bubble"
-        :class="{ 'nh-message__bubble--tools': message.toolCalls.length > 0 }"
+        :class="{
+          'nh-message__bubble--tools': displayToolCalls.length > 0 || askUser?.status === 'pending',
+          'nh-message__bubble--editing': editing
+        }"
       >
-        <p v-if="message.content" class="nh-message__content">
-          {{ contentText }}<span v-if="isTyping" class="nh-message__caret" />
-        </p>
-        <div
-          v-if="message.toolCalls.length"
-          class="nh-message__tools"
-          :class="{ 'nh-message__tools--after-content': Boolean(message.content) }"
+        <template v-if="editing">
+          <NInput
+            ref="editInput"
+            v-model:value="draft"
+            type="textarea"
+            :autosize="{ minRows: 2, maxRows: 6 }"
+            @keydown.esc.prevent="cancelEdit"
+            @keydown.ctrl.enter.prevent="saveEdit"
+            @keydown.meta.enter.prevent="saveEdit"
+          />
+          <div class="nh-message__edit-actions">
+            <NButton size="small" @click="cancelEdit">{{ t('chat.askUserCancel') }}</NButton>
+            <NButton size="small" type="primary" :disabled="!draft.trim()" @click="saveEdit">
+              {{ t('app.send') }}
+            </NButton>
+          </div>
+        </template>
+        <template v-else>
+          <AskUserCard
+            v-if="askUser && askFirst"
+            class="nh-message__ask nh-message__ask--first"
+            embedded
+            :ask="askUser"
+            @submit="submitAsk"
+            @cancel="cancelAsk"
+          />
+          <p v-if="message.content" class="nh-message__content">
+            {{ contentText }}<span v-if="isTyping" class="nh-message__caret" />
+          </p>
+          <div
+            v-if="displayToolCalls.length"
+            class="nh-message__tools"
+            :class="{ 'nh-message__tools--after-content': Boolean(message.content) }"
+          >
+            <ToolCallCard v-for="tool in displayToolCalls" :key="tool.id" :tool="tool" flush />
+          </div>
+
+          <AskUserCard
+            v-if="askUser && !askFirst"
+            class="nh-message__ask"
+            embedded
+            :ask="askUser"
+            @submit="submitAsk"
+            @cancel="cancelAsk"
+          />
+        </template>
+      </div>
+
+      <div v-if="!editing" class="nh-message__actions">
+        <NButton
+          v-if="message.role === 'user'"
+          text
+          size="tiny"
+          :disabled="actionsDisabled"
+          @click="startEdit"
         >
-          <ToolCallCard v-for="tool in message.toolCalls" :key="tool.id" :tool="tool" flush />
-        </div>
+          <template #icon>
+            <AppIcon name="edit" :size="13" />
+          </template>
+          {{ t('chat.edit') }}
+        </NButton>
+        <NButton v-if="message.role === 'assistant'" text size="tiny" @click="copyMessage">
+          <template #icon>
+            <AppIcon name="copy" :size="13" />
+          </template>
+          {{ t('chat.copy') }}
+        </NButton>
+        <NButton
+          v-if="message.role === 'assistant' && isLastAssistant"
+          text
+          size="tiny"
+          :disabled="actionsDisabled"
+          @click="emit('regenerate-message')"
+        >
+          <template #icon>
+            <AppIcon name="refresh" :size="13" />
+          </template>
+          {{ t('chat.regenerate') }}
+        </NButton>
+        <span class="nh-message__time">{{ timeLabel }}</span>
       </div>
     </div>
   </article>
@@ -56,10 +116,13 @@
  * 单条消息：用户、助手或系统提示，并挂载工具调用卡片。
  */
 
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { NAvatar } from 'naive-ui';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { NButton, NInput, useMessage, type InputInst } from 'naive-ui';
 import { t } from '@/app/i18n';
-import type { ChatMessageView } from '../types';
+import type { AskUserAnswer } from '@shared/ask-user';
+import type { ChatAskUser, ChatMessageView } from '../types';
+import AppIcon from '@/components/AppIcon.vue';
+import AskUserCard from './AskUserCard.vue';
 import ToolCallCard from './ToolCallCard.vue';
 
 const props = withDefaults(
@@ -67,12 +130,32 @@ const props = withDefaults(
     message: ChatMessageView;
     grouped?: boolean;
     highlighted?: boolean;
+    askUser?: ChatAskUser | undefined;
+    askFirst?: boolean;
+    isLastAssistant?: boolean;
+    actionsDisabled?: boolean;
   }>(),
-  { grouped: false, highlighted: false }
+  {
+    grouped: false,
+    highlighted: false,
+    askUser: undefined,
+    askFirst: false,
+    isLastAssistant: false,
+    actionsDisabled: false
+  }
 );
 
-const emit = defineEmits<{ 'content-growth': [] }>();
+const emit = defineEmits<{
+  'content-growth': [];
+  'answer-user': [requestId: string, answers: AskUserAnswer[] | undefined];
+  'edit-message': [content: string];
+  'regenerate-message': [];
+}>();
 
+const messageApi = useMessage();
+const editing = ref(false);
+const draft = ref('');
+const editInput = ref<InputInst | null>(null);
 const visibleContent = ref(props.message.content);
 let frameId: number | undefined;
 
@@ -107,6 +190,65 @@ const pump = (): void => {
 const startPump = (): void => {
   if (frameId === undefined) frameId = requestAnimationFrame(pump);
 };
+
+/**
+ * 回传当前提问的回答。
+ */
+const submitAsk = (answers: AskUserAnswer[]): void => {
+  if (props.askUser) emit('answer-user', props.askUser.requestId, answers);
+};
+
+/**
+ * 取消当前提问。
+ */
+const cancelAsk = (): void => {
+  if (props.askUser) emit('answer-user', props.askUser.requestId, undefined);
+};
+
+/**
+ * 进入用户消息编辑态。
+ */
+const startEdit = async (): Promise<void> => {
+  if (props.actionsDisabled || props.message.role !== 'user') return;
+  draft.value = props.message.content;
+  editing.value = true;
+  await nextTick();
+  editInput.value?.focus();
+};
+
+/**
+ * 提交编辑后的消息；父级会创建新的 Run。
+ */
+const saveEdit = (): void => {
+  const content = draft.value.trim();
+  if (!content) return;
+  editing.value = false;
+  emit('edit-message', content);
+};
+
+/**
+ * 取消编辑并恢复原文。
+ */
+const cancelEdit = (): void => {
+  editing.value = false;
+  draft.value = '';
+};
+
+/**
+ * 复制完整 Markdown 消息。
+ */
+const copyMessage = async (): Promise<void> => {
+  try {
+    await navigator.clipboard.writeText(props.message.content);
+    messageApi.success(t('chat.copied'));
+  } catch {
+    messageApi.error(t('chat.copyFailed'));
+  }
+};
+
+const displayToolCalls = computed(() =>
+  props.message.toolCalls.filter((tool) => tool.name !== 'ask_user')
+);
 
 const contentText = computed(() =>
   props.message.role === 'assistant' ? visibleContent.value : props.message.content
@@ -143,19 +285,6 @@ onBeforeUnmount(() => {
   if (frameId !== undefined) cancelAnimationFrame(frameId);
 });
 
-const roleLabel = computed(() => {
-  if (props.message.role === 'user') return t('chat.user');
-  if (props.message.role === 'assistant') return t('chat.assistant');
-  return t('chat.system');
-});
-
-const assistantAvatarStyle = {
-  background: 'color-mix(in srgb, var(--nh-color-accent) 12%, transparent)',
-  color: 'var(--nh-color-accent)',
-  fontSize: '12px',
-  fontWeight: '600'
-};
-
 const timeLabel = computed(() =>
   new Intl.DateTimeFormat('zh-CN', {
     hour: '2-digit',
@@ -191,10 +320,6 @@ const timeLabel = computed(() =>
   gap: 6px;
 }
 
-.nh-message--grouped .nh-message__body {
-  padding-left: 36px;
-}
-
 .nh-message--user {
   justify-content: flex-end;
 }
@@ -205,23 +330,9 @@ const timeLabel = computed(() =>
   align-items: flex-end;
 }
 
-.nh-message__header {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.nh-message--user .nh-message__header {
-  justify-content: flex-end;
-}
-
-.nh-message__role {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.nh-message--user .nh-message__role {
-  color: var(--nh-color-accent);
+.nh-message--user .nh-message__body--editing {
+  width: min(520px, 100%);
+  max-width: 100%;
 }
 
 .nh-message__time {
@@ -230,12 +341,20 @@ const timeLabel = computed(() =>
 }
 
 .nh-message__bubble {
+  --bubble-bg: color-mix(in srgb, var(--nh-color-bg-elevated) 72%, transparent);
+  --bubble-border: var(--nh-color-border);
+
+  position: relative;
   width: fit-content;
   max-width: 100%;
   padding: 10px 13px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--bubble-border);
   border-radius: 16px;
-  background: color-mix(in srgb, var(--nh-color-bg-elevated) 72%, transparent);
+  background: var(--bubble-bg);
+}
+
+.nh-message--assistant .nh-message__bubble {
+  border-top-left-radius: 0;
 }
 
 .nh-message--assistant .nh-message__bubble--tools {
@@ -243,10 +362,15 @@ const timeLabel = computed(() =>
 }
 
 .nh-message--user .nh-message__bubble {
-  border-color: color-mix(in srgb, var(--nh-color-accent) 12%, var(--nh-color-border));
-  border-bottom-right-radius: 5px;
-  background: color-mix(in srgb, var(--nh-color-accent) 8%, var(--nh-color-bg-base));
+  --bubble-bg: color-mix(in srgb, var(--nh-color-accent) 8%, var(--nh-color-bg-base));
+  --bubble-border: color-mix(in srgb, var(--nh-color-accent) 12%, var(--nh-color-border));
+
+  border-top-right-radius: 0;
   box-shadow: var(--nh-highlight);
+}
+
+.nh-message__bubble--editing {
+  width: 100%;
 }
 
 .nh-message__content {
@@ -286,6 +410,33 @@ const timeLabel = computed(() =>
   margin-top: 9px;
   padding-top: 7px;
   border-top: 1px solid var(--nh-color-border);
+}
+
+.nh-message__ask {
+  margin-top: 9px;
+}
+
+.nh-message__ask--first {
+  margin-top: 0;
+  margin-bottom: 9px;
+}
+
+.nh-message__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.nh-message--user .nh-message__actions {
+  justify-content: flex-end;
+}
+
+.nh-message__edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .nh-message--system {

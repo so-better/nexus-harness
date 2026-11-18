@@ -4,6 +4,7 @@
 
 import type { EventPayloadMap, NexusEvent } from '@shared/events';
 import type {
+  ChatAskUser,
   ChatApproval,
   ChatMessageView,
   ChatProjection,
@@ -12,6 +13,15 @@ import type {
 } from './types';
 
 const emptyUsage = (): ChatUsage => ({ inputTokens: 0, outputTokens: 0, cost: 0 });
+
+/**
+ * Run 终止时取消尚未回答的问题，避免残留旧卡片。
+ */
+const finishAskUsers = (askUsers: ChatAskUser[]): void => {
+  for (const ask of askUsers) {
+    if (ask.status === 'pending') ask.status = 'cancelled';
+  }
+};
 
 /**
  * Run 终止时关闭残留的流式状态，避免光标一直闪烁。
@@ -23,11 +33,35 @@ const finishStreaming = (messages: ChatMessageView[]): void => {
 };
 
 /**
+ * 回答完成后，把回显卡片并入本轮后续的助手消息，避免拆成两条打断阅读。
+ */
+const mergeResolvedAskUsers = (messages: ChatMessageView[], askUsers: ChatAskUser[]): void => {
+  for (const ask of askUsers) {
+    if (ask.status !== 'resolved' || !ask.messageId || !ask.runId) continue;
+    const carrierIndex = messages.findIndex((message) => message.id === ask.messageId);
+    if (carrierIndex < 0) continue;
+    const carrier = messages[carrierIndex];
+    if (!carrier) continue;
+    const nextAssistant = messages
+      .slice(carrierIndex + 1)
+      .find((message) => message.role === 'assistant' && message.runId === ask.runId);
+    if (!nextAssistant) continue;
+
+    ask.messageId = nextAssistant.id;
+    ask.merged = true;
+    const onlyAskTool =
+      !carrier.content.trim() && carrier.toolCalls.every((tool) => tool.name === 'ask_user');
+    if (onlyAskTool) carrier.hidden = true;
+  }
+};
+
+/**
  * 按事件顺序重建聊天视图；消息与工具调用保持原始顺序。
  */
 export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => {
   const messages: ChatMessageView[] = [];
   const approvals: ChatApproval[] = [];
+  const askUsers: ChatAskUser[] = [];
   const usage = emptyUsage();
   let lastAssistant: ChatMessageView | undefined;
   let runId: string | undefined;
@@ -46,11 +80,13 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
           content: '',
           toolCalls: [],
           createdAt: event.ts,
-          streaming: true
+          streaming: true,
+          ...(event.runId ? { runId: event.runId } : {})
         };
         messages.push(message);
       }
       message.content += payload.text;
+      if (event.runId) message.runId = event.runId;
       message.streaming = true;
       lastAssistant = message;
       continue;
@@ -63,6 +99,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
         existing.role = payload.role;
         existing.content = payload.content;
         existing.streaming = false;
+        if (event.runId) existing.runId = event.runId;
         lastAssistant = payload.role === 'assistant' ? existing : undefined;
       } else {
         const message: ChatMessageView = {
@@ -71,10 +108,21 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
           content: payload.content,
           toolCalls: [],
           createdAt: event.ts,
-          streaming: false
+          streaming: false,
+          ...(event.runId ? { runId: event.runId } : {})
         };
         messages.push(message);
         lastAssistant = payload.role === 'assistant' ? message : undefined;
+      }
+      continue;
+    }
+
+    if (event.type === 'message.superseded') {
+      const payload = event.payload as EventPayloadMap['message.superseded'];
+      const message = messages.find((item) => item.id === payload.messageId);
+      if (message) {
+        message.superseded = true;
+        if (lastAssistant === message) lastAssistant = undefined;
       }
       continue;
     }
@@ -87,7 +135,8 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
           role: 'assistant',
           content: '',
           toolCalls: [],
-          createdAt: event.ts
+          createdAt: event.ts,
+          ...(event.runId ? { runId: event.runId } : {})
         };
         messages.push(lastAssistant);
       }
@@ -168,6 +217,31 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       running = false;
       status = 'completed';
       finishStreaming(messages);
+      finishAskUsers(askUsers);
+      continue;
+    }
+
+    if (event.type === 'ask_user.requested') {
+      const payload = event.payload as EventPayloadMap['ask_user.requested'];
+      askUsers.push({
+        requestId: payload.requestId,
+        questions: payload.questions,
+        status: 'pending',
+        ...(lastAssistant ? { messageId: lastAssistant.id } : {}),
+        ...(event.runId ? { runId: event.runId } : {})
+      });
+      status = 'waiting_user';
+      continue;
+    }
+
+    if (event.type === 'ask_user.resolved') {
+      const payload = event.payload as EventPayloadMap['ask_user.resolved'];
+      const ask = askUsers.find((item) => item.requestId === payload.requestId);
+      if (ask) {
+        ask.status = payload.cancelled ? 'cancelled' : 'resolved';
+        ask.answers = payload.answers;
+      }
+      status = running ? 'running' : status;
       continue;
     }
 
@@ -177,6 +251,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       status = 'failed';
       error = payload.error.message;
       finishStreaming(messages);
+      finishAskUsers(askUsers);
       messages.push(systemMessage(event, `${payload.error.code}: ${payload.error.message}`));
       continue;
     }
@@ -185,6 +260,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       running = false;
       status = 'cancelled';
       finishStreaming(messages);
+      finishAskUsers(askUsers);
       continue;
     }
 
@@ -192,6 +268,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       running = false;
       status = 'interrupted';
       finishStreaming(messages);
+      finishAskUsers(askUsers);
       continue;
     }
 
@@ -206,9 +283,12 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
     }
   }
 
+  mergeResolvedAskUsers(messages, askUsers);
+
   return {
-    messages,
+    messages: messages.filter((message) => !message.superseded && !message.hidden),
     approvals,
+    askUsers,
     usage,
     running,
     status,

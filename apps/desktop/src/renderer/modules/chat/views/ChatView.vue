@@ -19,11 +19,13 @@
       :root-label="rootLabel"
       :providers="providers"
       :models="models"
+      :mode="mode"
       :provider-id="providerId"
       :model-id="modelId"
       @choose-root="emit('choose-root')"
       @update-provider="emit('update-provider', $event)"
       @update-model="emit('update-model', $event)"
+      @update-mode="emit('update-mode', $event)"
       @open-settings="emit('open-settings')"
       @send="emit('send', $event)"
       @stop="emit('stop')"
@@ -36,6 +38,11 @@
         :focus-token="focusToken"
         :focus-session-id="focusSessionId"
         :session-id="session?.id"
+        :ask-users="projection.askUsers"
+        :actions-disabled="projection.running"
+        @answer-user="(requestId, answers) => emit('answer-user', requestId, answers)"
+        @edit-message="(messageId, content) => emit('edit-message', messageId, content)"
+        @regenerate-message="(messageId) => emit('regenerate-message', messageId)"
       />
 
       <div class="nh-chat__bottom">
@@ -56,11 +63,13 @@
           :root-label="rootLabel"
           :providers="providers"
           :models="models"
+          :mode="mode"
           :provider-id="providerId"
           :model-id="modelId"
           @choose-root="emit('choose-root')"
           @update-provider="emit('update-provider', $event)"
           @update-model="emit('update-model', $event)"
+          @update-mode="emit('update-mode', $event)"
           @send="emit('send', $event)"
           @stop="emit('stop')"
         />
@@ -76,7 +85,13 @@
 
 import { computed } from 'vue';
 import { NTag } from 'naive-ui';
-import type { ProviderModel, ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
+import type {
+  AgentMode,
+  ProviderModel,
+  ProviderPublic,
+  SessionSummary
+} from '@shared/ipc/contracts';
+import type { AskUserAnswer } from '@shared/ask-user';
 import { sessionStatusLabel, sessionStatusTagColor } from '@/app/session-status';
 import AppIcon from '@/components/AppIcon.vue';
 import ApprovalCard from '../components/ApprovalCard.vue';
@@ -91,6 +106,7 @@ const props = defineProps<{
   rootLabel: string;
   providers: ProviderPublic[];
   models: ProviderModel[];
+  mode: AgentMode;
   providerId?: string | undefined;
   modelId?: string | undefined;
   disabledReason?: string | undefined;
@@ -103,11 +119,15 @@ const emit = defineEmits<{
   'choose-root': [];
   'update-provider': [id: string];
   'update-model': [id: string];
+  'update-mode': [mode: AgentMode];
   'open-settings': [];
   send: [prompt: string];
   stop: [];
   approve: [approvalId: string];
   reject: [approvalId: string];
+  'answer-user': [requestId: string, answers: AskUserAnswer[] | undefined];
+  'edit-message': [messageId: string, content: string];
+  'regenerate-message': [messageId: string];
 }>();
 
 const isEmpty = computed(() => !props.session || props.projection.messages.length === 0);
@@ -175,7 +195,7 @@ const pendingApprovals = computed(() =>
 .nh-chat__approvals {
   display: flex;
   width: calc(100% - 64px);
-  max-width: 820px;
+  max-width: 1040px;
   flex-direction: column;
   gap: 8px;
   margin: 0 auto;

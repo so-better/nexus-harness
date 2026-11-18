@@ -57,6 +57,26 @@ describe('session storage', () => {
     expect(sessions.get(session.id)?.pinned).toBe(true);
   });
 
+  it('persists Agent mode changes and emits an event', () => {
+    const session = sessions.create();
+    const updated = sessions.setMode({ id: session.id, mode: 'plan' });
+
+    expect(updated.mode).toBe('plan');
+    expect(events.list(session.id).some((event) => event.type === 'session.mode.changed')).toBe(
+      true
+    );
+  });
+
+  it('sets auto titles only before a user title exists', () => {
+    const session = sessions.create();
+    expect(sessions.setAutoTitle(session.id, '自动标题')?.title).toBe('自动标题');
+    expect(sessions.setAutoTitle(session.id, '再次覆盖')).toBeUndefined();
+
+    const renamed = sessions.rename({ id: session.id, title: '用户标题' });
+    expect(renamed.titleSource).toBe('user');
+    expect(sessions.setAutoTitle(session.id, '不能覆盖')).toBeUndefined();
+  });
+
   it('rejects oversized event payloads', () => {
     const session = sessions.create();
 
