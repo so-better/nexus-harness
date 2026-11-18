@@ -36,31 +36,33 @@
         :focus-token="focusToken"
       />
 
-      <div v-if="pendingApprovals.length" class="nh-chat__approvals">
-        <ApprovalCard
-          v-for="approval in pendingApprovals"
-          :key="approval.id"
-          :approval="approval"
-          @approve="emit('approve', approval.id)"
-          @reject="emit('reject', approval.id)"
+      <div class="nh-chat__bottom">
+        <div v-if="pendingApprovals.length" class="nh-chat__approvals">
+          <ApprovalCard
+            v-for="approval in pendingApprovals"
+            :key="approval.id"
+            :approval="approval"
+            @approve="emit('approve', approval.id)"
+            @reject="emit('reject', approval.id)"
+          />
+        </div>
+
+        <ComposerBox
+          :disabled="Boolean(disabledReason)"
+          :disabled-reason="disabledReason"
+          :running="projection.running"
+          :root-label="rootLabel"
+          :providers="providers"
+          :models="models"
+          :provider-id="providerId"
+          :model-id="modelId"
+          @choose-root="emit('choose-root')"
+          @update-provider="emit('update-provider', $event)"
+          @update-model="emit('update-model', $event)"
+          @send="emit('send', $event)"
+          @stop="emit('stop')"
         />
       </div>
-
-      <ComposerBox
-        :disabled="Boolean(disabledReason)"
-        :disabled-reason="disabledReason"
-        :running="projection.running"
-        :root-label="rootLabel"
-        :providers="providers"
-        :models="models"
-        :provider-id="providerId"
-        :model-id="modelId"
-        @choose-root="emit('choose-root')"
-        @update-provider="emit('update-provider', $event)"
-        @update-model="emit('update-model', $event)"
-        @send="emit('send', $event)"
-        @stop="emit('stop')"
-      />
     </template>
   </main>
 </template>
@@ -158,10 +160,19 @@ const pendingApprovals = computed(() =>
   white-space: nowrap;
 }
 
+.nh-chat__bottom {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .nh-chat__approvals {
+  display: flex;
   width: calc(100% - 64px);
   max-width: 820px;
+  flex-direction: column;
+  gap: 8px;
   margin: 0 auto;
-  padding: 8px 0 0;
 }
 </style>

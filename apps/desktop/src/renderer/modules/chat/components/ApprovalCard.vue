@@ -45,10 +45,10 @@ const emit = defineEmits<{ approve: []; reject: [] }>();
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--nh-color-warning) 32%, var(--nh-color-border));
+  border: 1px solid color-mix(in srgb, var(--nh-color-warning) 28%, var(--nh-color-border));
   border-radius: var(--nh-radius-md);
-  background: color-mix(in srgb, var(--nh-color-warning) 6%, var(--nh-color-bg-base));
-  box-shadow: var(--nh-highlight);
+  background: var(--nh-color-bg-base);
+  box-shadow: var(--nh-shadow-card);
 }
 
 .nh-approval__icon {
