@@ -30,11 +30,22 @@
         <span class="nh-message__role">{{ roleLabel }}</span>
         <span class="nh-message__time">{{ timeLabel }}</span>
       </header>
-      <p v-if="message.content" class="nh-message__content">
-        {{ contentText }}<span v-if="isTyping" class="nh-message__caret" />
-      </p>
-      <div v-if="message.toolCalls.length" class="nh-message__tools">
-        <ToolCallCard v-for="tool in message.toolCalls" :key="tool.id" :tool="tool" />
+
+      <div
+        v-if="message.content || message.toolCalls.length"
+        class="nh-message__bubble"
+        :class="{ 'nh-message__bubble--tools': message.toolCalls.length > 0 }"
+      >
+        <p v-if="message.content" class="nh-message__content">
+          {{ contentText }}<span v-if="isTyping" class="nh-message__caret" />
+        </p>
+        <div
+          v-if="message.toolCalls.length"
+          class="nh-message__tools"
+          :class="{ 'nh-message__tools--after-content': Boolean(message.content) }"
+        >
+          <ToolCallCard v-for="tool in message.toolCalls" :key="tool.id" :tool="tool" flush />
+        </div>
       </div>
     </div>
   </article>
@@ -159,17 +170,17 @@ const timeLabel = computed(() =>
   scroll-margin: 24px;
   gap: 12px;
   align-items: flex-start;
-  border-radius: 12px;
+  border-radius: 14px;
   transition: background var(--nh-duration-base) var(--nh-ease-standard);
+}
+
+.nh-message--grouped {
+  margin-top: -12px;
 }
 
 .nh-message--highlighted {
   background: color-mix(in srgb, var(--nh-color-accent) 8%, transparent);
   box-shadow: 0 0 0 6px color-mix(in srgb, var(--nh-color-accent) 5%, transparent);
-}
-
-.nh-message--grouped {
-  margin-top: -12px;
 }
 
 .nh-message__body {
@@ -218,6 +229,26 @@ const timeLabel = computed(() =>
   font-size: 12px;
 }
 
+.nh-message__bubble {
+  width: fit-content;
+  max-width: 100%;
+  padding: 10px 13px;
+  border: 1px solid var(--nh-color-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--nh-color-bg-elevated) 72%, transparent);
+}
+
+.nh-message--assistant .nh-message__bubble--tools {
+  width: 100%;
+}
+
+.nh-message--user .nh-message__bubble {
+  border-color: color-mix(in srgb, var(--nh-color-accent) 12%, var(--nh-color-border));
+  border-bottom-right-radius: 5px;
+  background: color-mix(in srgb, var(--nh-color-accent) 8%, var(--nh-color-bg-base));
+  box-shadow: var(--nh-highlight);
+}
+
 .nh-message__content {
   max-width: 100%;
   margin: 0;
@@ -244,21 +275,17 @@ const timeLabel = computed(() =>
   }
 }
 
-.nh-message--user .nh-message__content {
-  width: fit-content;
-  padding: 10px 12px;
-  border: 1px solid var(--nh-color-border);
-  border-radius: 14px;
-  border-bottom-right-radius: 4px;
-  background: color-mix(in srgb, var(--nh-color-accent) 8%, var(--nh-color-bg-base));
-  box-shadow: var(--nh-highlight);
-}
-
 .nh-message__tools {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 2px;
+  gap: 2px;
+  margin: 8px -5px -4px;
+}
+
+.nh-message__tools--after-content {
+  margin-top: 9px;
+  padding-top: 7px;
+  border-top: 1px solid var(--nh-color-border);
 }
 
 .nh-message--system {

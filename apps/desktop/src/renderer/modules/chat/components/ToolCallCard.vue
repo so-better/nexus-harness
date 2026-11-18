@@ -1,5 +1,5 @@
 <template>
-  <NCollapse class="nh-tool">
+  <NCollapse class="nh-tool" :class="{ 'nh-tool--flush': flush }">
     <NCollapseItem :name="tool.id">
       <template #header>
         <div class="nh-tool__summary">
@@ -41,7 +41,9 @@ import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import type { ChatToolCall } from '../types';
 
-const props = defineProps<{ tool: ChatToolCall }>();
+const props = withDefaults(defineProps<{ tool: ChatToolCall; flush?: boolean }>(), {
+  flush: false
+});
 
 const toolIcon = computed<
   'file' | 'edit' | 'terminal' | 'globe' | 'spark' | 'settings' | 'history'
@@ -104,6 +106,13 @@ const statusType = computed(() => {
   border: 1px solid var(--nh-color-border);
   border-radius: var(--nh-radius-md);
   background: var(--nh-color-bg-elevated);
+}
+
+.nh-tool--flush {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .nh-tool__summary {

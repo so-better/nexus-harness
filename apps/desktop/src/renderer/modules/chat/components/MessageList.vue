@@ -117,7 +117,7 @@ const handleScroll = (): void => {
 /**
  * 滚动到最新消息。
  */
-const scrollToLatest = (behavior: ScrollBehavior = 'smooth'): void => {
+const scrollToLatest = (behavior: 'auto' | 'smooth' = 'smooth'): void => {
   const view = viewport.value;
   if (!view) return;
   view.scrollTo({ top: view.scrollHeight, behavior });
