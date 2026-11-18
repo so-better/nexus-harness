@@ -1,5 +1,5 @@
 /**
- * 应用级 IPC：返回运行时基础信息，供渲染进程确认桥接可用。
+ * 应用级 IPC：返回运行时基础信息。
  */
 
 import { app, ipcMain } from 'electron';

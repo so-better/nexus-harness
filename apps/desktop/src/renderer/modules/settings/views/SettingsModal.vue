@@ -45,9 +45,9 @@ import { ref, watch } from 'vue';
 import { NModal, NRadioButton, NRadioGroup, NTabPane, NTabs } from 'naive-ui';
 import type { ThemeSource } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
-import CacheSettings from '../components/CacheSettings.vue';
-import GeneralSettings from '../components/GeneralSettings.vue';
-import ProviderSettingsPanel from '../components/ProviderSettingsPanel.vue';
+import CacheSettings from './CacheSettings.vue';
+import GeneralSettings from './GeneralSettings.vue';
+import ProviderSettingsPanel from './ProviderSettingsPanel.vue';
 import { getThemeInfo, setThemeSource } from '../api/settings.api';
 
 const props = defineProps<{

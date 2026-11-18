@@ -1,89 +1,85 @@
 <template>
   <footer class="nh-statusbar">
-    <div class="nh-statusbar__group">
-      <NTag size="small" :type="running ? 'info' : 'default'" :bordered="false">
-        {{ running ? t('app.running') : t('app.idle') }}
-      </NTag>
-
-      <NPopover placement="top-start" trigger="click" :show-arrow="false">
-        <template #trigger>
-          <NButton text size="tiny">{{ totalTokens.toLocaleString('zh-CN') }} tokens</NButton>
-        </template>
-        <div class="nh-usage">
-          <p class="nh-usage__model">{{ modelLabel || '—' }}</p>
-          <div class="nh-usage__row">
-            <span>{{ t('app.tokensIn') }}</span>
-            <strong>{{ usage.inputTokens.toLocaleString('zh-CN') }}</strong>
-          </div>
-          <div class="nh-usage__row">
-            <span>{{ t('app.tokensOut') }}</span>
-            <strong>{{ usage.outputTokens.toLocaleString('zh-CN') }}</strong>
-          </div>
-          <div class="nh-usage__row">
-            <span>{{ t('app.cost') }}</span>
-            <strong>{{ usage.cost.toFixed(4) }}</strong>
-          </div>
-          <template v-if="errors.length">
-            <NDivider />
-            <p v-for="message in errors" :key="message" class="nh-usage__error">{{ message }}</p>
-          </template>
-        </div>
-      </NPopover>
+    <div class="nh-statusbar__meta">
+      <span class="nh-statusbar__version">v{{ version }}</span>
     </div>
 
-    <div class="nh-statusbar__group">
-      <div class="nh-theme-control" role="group" :aria-label="t('app.theme')">
-        <NButton
-          v-for="option in themeOptions"
-          :key="option.value"
-          size="tiny"
-          quaternary
-          :type="themeSource === option.value ? 'primary' : 'default'"
-          :aria-label="option.label"
-          :aria-pressed="themeSource === option.value"
-          :title="option.label"
-          @click="emit('update-theme', option.value)"
-        >
+    <div class="nh-statusbar__actions">
+      <NDropdown trigger="click" placement="top-end" :options="themeOptions" @select="selectTheme">
+        <NButton text size="tiny" :aria-label="t('app.theme')" :title="t('app.theme')">
           <template #icon>
-            <AppIcon :name="option.icon" :size="14" />
+            <AppIcon :name="currentThemeIcon" :size="14" />
           </template>
+          <AppIcon name="chevron-down" :size="12" />
         </NButton>
-      </div>
-      <NButton text size="tiny" @click="emit('open-settings')">{{ t('app.settings') }}</NButton>
-      <NText depth="3">{{ t('app.version') }} {{ version }}</NText>
+      </NDropdown>
+
+      <NButton text size="tiny" @click="emit('open-settings')">
+        <template #icon>
+          <AppIcon name="settings" :size="14" />
+        </template>
+        {{ t('app.settings') }}
+      </NButton>
     </div>
   </footer>
 </template>
 
 <script setup lang="ts">
 /**
- * 状态栏：运行状态、用量浮层、主题、设置与版本。
+ * 状态栏：版本、主题下拉菜单与设置入口。
  */
 
-import { computed } from 'vue';
-import { NButton, NDivider, NPopover, NTag, NText } from 'naive-ui';
+import { computed, h } from 'vue';
+import { NButton, NDropdown, type DropdownOption } from 'naive-ui';
 import type { ThemeSource } from '@shared/ipc/contracts';
-import type { ChatUsage } from '@/modules/chat/types';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 
 const props = defineProps<{
-  running: boolean;
-  usage: ChatUsage;
-  modelLabel: string;
-  errors: string[];
   themeSource: ThemeSource;
   version: string;
 }>();
 
-const emit = defineEmits<{ 'update-theme': [source: ThemeSource]; 'open-settings': [] }>();
+const emit = defineEmits<{
+  'update-theme': [source: ThemeSource];
+  'open-settings': [];
+}>();
 
-const totalTokens = computed(() => props.usage.inputTokens + props.usage.outputTokens);
-const themeOptions = computed(() => [
-  { value: 'system' as const, icon: 'monitor' as const, label: t('settings.themeSystem') },
-  { value: 'light' as const, icon: 'sun' as const, label: t('settings.themeLight') },
-  { value: 'dark' as const, icon: 'moon' as const, label: t('settings.themeDark') }
+/**
+ * 主题菜单项：图标、文案与选择键。
+ */
+const themeOptions = computed<DropdownOption[]>(() => [
+  {
+    key: 'system',
+    label: t('settings.themeSystem'),
+    icon: () => h(AppIcon, { name: 'monitor', size: 14 })
+  },
+  {
+    key: 'light',
+    label: t('settings.themeLight'),
+    icon: () => h(AppIcon, { name: 'sun', size: 14 })
+  },
+  {
+    key: 'dark',
+    label: t('settings.themeDark'),
+    icon: () => h(AppIcon, { name: 'moon', size: 14 })
+  }
 ]);
+
+/**
+ * 当前主题在触发按钮上显示的图标。
+ */
+const currentThemeIcon = computed(() => {
+  if (props.themeSource === 'system') return 'monitor' as const;
+  return props.themeSource === 'light' ? ('sun' as const) : ('moon' as const);
+});
+
+/**
+ * 提交主题选择；Naive UI Dropdown 会在选择后自动关闭。
+ */
+const selectTheme = (key: string | number): void => {
+  emit('update-theme', key as ThemeSource);
+};
 </script>
 
 <style scoped lang="less">
@@ -91,62 +87,23 @@ const themeOptions = computed(() => [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 24px;
   border-top: 1px solid var(--nh-color-border);
   background: var(--nh-color-bg-elevated);
+  box-shadow: var(--nh-highlight);
   font-size: 12px;
 }
 
-.nh-statusbar__group {
+.nh-statusbar__meta,
+.nh-statusbar__actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
-.nh-theme-control {
-  display: flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--nh-color-border);
-  border-radius: 6px;
-  background: var(--nh-color-bg-base);
-}
-
-.nh-usage {
-  display: flex;
-  width: 240px;
-  flex-direction: column;
-  gap: 8px;
-  padding: 4px;
-}
-
-.nh-usage__model {
-  overflow: hidden;
-  margin: 0;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.nh-usage__row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
+.nh-statusbar__version {
   color: var(--nh-color-text-secondary);
-  font-size: 12px;
-}
-
-.nh-usage__row strong {
-  color: var(--nh-color-text-primary);
   font-family: var(--nh-font-mono);
-  font-weight: 500;
-}
-
-.nh-usage__error {
-  margin: 0;
-  color: var(--nh-color-danger);
   font-size: 12px;
-  overflow-wrap: anywhere;
 }
 </style>

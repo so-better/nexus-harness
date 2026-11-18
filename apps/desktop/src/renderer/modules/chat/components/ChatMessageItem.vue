@@ -134,7 +134,7 @@ const timeLabel = computed(() =>
   margin: 0 auto;
   padding: 6px 12px;
   border: 1px solid var(--nh-color-border);
-  border-radius: 999px;
+  border-radius: 12px;
   background: var(--nh-color-bg-elevated);
   color: var(--nh-color-text-secondary);
   font-size: 12px;

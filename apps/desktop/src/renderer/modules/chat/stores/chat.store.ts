@@ -5,6 +5,7 @@
 import { reactive, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { t } from '@/app/i18n';
+import { appendAgentEvent } from '../event-cache';
 import type { NexusEvent } from '@shared/events';
 import type { ProviderPublic } from '@shared/ipc/contracts';
 import {
@@ -58,7 +59,9 @@ export const useChatStore = defineStore('chat', () => {
     if (initialized) return;
     initialized = true;
     await refreshProviders();
-    unsubscribe = subscribeAgentEvents(handleEvent);
+    unsubscribe = subscribeAgentEvents((event) =>
+      appendAgentEvent(eventsBySession, runningBySession, runIds, event)
+    );
   };
 
   /**
@@ -81,27 +84,6 @@ export const useChatStore = defineStore('chat', () => {
       loadedSessions[sessionId] = true;
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);
-    }
-  };
-
-  /**
-   * 追加实时事件；无论当前是否选中都缓存。
-   */
-  const handleEvent = (event: NexusEvent): void => {
-    const list = eventsBySession[event.sessionId] ?? [];
-    list.push(event);
-    eventsBySession[event.sessionId] = list;
-
-    if (event.type === 'run.started') {
-      runningBySession[event.sessionId] = true;
-      if (event.runId) runIds[event.sessionId] = event.runId;
-    } else if (
-      event.type === 'run.completed' ||
-      event.type === 'run.failed' ||
-      event.type === 'run.cancelled'
-    ) {
-      runningBySession[event.sessionId] = false;
-      delete runIds[event.sessionId];
     }
   };
 

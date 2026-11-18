@@ -20,6 +20,7 @@
         :disabled-reason="disabledReason"
         @choose-root="chat.addRoot"
         @update-provider="chat.setProvider"
+        @open-settings="settingsOpen = true"
         @send="send"
         @stop="stop"
         @approve="(id) => chat.decideApproval(id, true)"
@@ -28,10 +29,6 @@
     </div>
 
     <AppStatusbar
-      :running="running"
-      :usage="projection.usage"
-      :model-label="providerLabel"
-      :errors="errors"
       :theme-source="themeSource"
       :version="version"
       @update-theme="setTheme"
@@ -41,7 +38,7 @@
     <SettingsModal
       :show="settingsOpen"
       :version="version"
-      :busy="anyRunning"
+      :busy="runningCount > 0"
       @update:show="settingsOpen = $event"
       @changed="chat.refreshProviders"
     />
@@ -70,7 +67,7 @@ import { useSessionStatusSync } from './use-session-status';
 const sessions = useSessionStore();
 const chat = useChatStore();
 const { sessions: sessionList, activeId } = storeToRefs(sessions);
-const { providers, providerId, rootPaths, runningBySession, error } = storeToRefs(chat);
+const { providers, providerId, rootPaths, runningBySession } = storeToRefs(chat);
 
 const { version, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
 
@@ -79,12 +76,7 @@ const projection = computed(() => {
   return projectEvents(id ? (chat.eventsBySession[id] ?? []) : []);
 });
 
-const running = computed(() => Boolean(activeId.value && runningBySession.value[activeId.value]));
-const anyRunning = computed(() => Object.values(runningBySession.value).some(Boolean));
-const providerLabel = computed(
-  () =>
-    providers.value.find((provider: ProviderPublic) => provider.id === providerId.value)?.name ?? ''
-);
+const runningCount = computed(() => Object.values(runningBySession.value).filter(Boolean).length);
 const rootLabel = computed(() =>
   rootPaths.value.length ? `${t('app.workspace')} · ${rootPaths.value.length}` : t('app.noRoot')
 );
@@ -93,12 +85,6 @@ const disabledReason = computed(() => {
   if (rootPaths.value.length === 0) return t('chat.needsRoot');
   return undefined;
 });
-const errors = computed(() =>
-  [projection.value.error, error.value, sessions.error].filter((message): message is string =>
-    Boolean(message)
-  )
-);
-
 useSessionStatusSync(sessions, projection, activeId);
 
 /**
@@ -169,7 +155,7 @@ onBeforeUnmount(() => {
 .nh-layout {
   display: grid;
   height: 100%;
-  grid-template-rows: minmax(0, 1fr) 32px;
+  grid-template-rows: minmax(0, 1fr) 44px;
   background: var(--nh-color-bg-base);
 }
 

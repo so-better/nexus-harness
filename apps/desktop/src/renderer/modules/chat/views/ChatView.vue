@@ -16,6 +16,7 @@
       :provider-id="providerId"
       @choose-root="emit('choose-root')"
       @update-provider="emit('update-provider', $event)"
+      @open-settings="emit('open-settings')"
       @send="emit('send', $event)"
       @stop="emit('stop')"
     />
@@ -76,6 +77,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'choose-root': [];
   'update-provider': [id: string];
+  'open-settings': [];
   send: [prompt: string];
   stop: [];
   approve: [approvalId: string];

@@ -7,12 +7,18 @@
         </template>
         {{ rootLabel }}
       </NButton>
+      <NButton v-if="providers.length === 0" size="tiny" secondary @click="emit('open-settings')">
+        <template #icon>
+          <AppIcon name="settings" :size="14" />
+        </template>
+        {{ t('chat.configureModel') }}
+      </NButton>
       <NSelect
+        v-else
         class="nh-composer__provider"
         size="tiny"
         :value="providerId ?? null"
         :options="providerOptions"
-        :disabled="providers.length === 0"
         :placeholder="t('app.noProvider')"
         @update:value="onProviderChange"
       />
@@ -78,6 +84,7 @@ const emit = defineEmits<{
   stop: [];
   'choose-root': [];
   'update-provider': [id: string];
+  'open-settings': [];
 }>();
 
 const draft = ref('');

@@ -1288,8 +1288,9 @@ interface AskUserAnswer {
  * 背景与表面
  */
 --nh-color-bg-base: #ffffff;
---nh-color-bg-elevated: #f5f8fc;
---nh-color-bg-hover: #edf3fa;
+--nh-color-bg-elevated: #fbfcfe;
+--nh-color-bg-popover: #ffffff;
+--nh-color-bg-hover: #f1f6fc;
 
 /**
  * 文本
@@ -1301,7 +1302,7 @@ interface AskUserAnswer {
 /**
  * 边框、强调、状态
  */
---nh-color-border: #e2e8f0;
+--nh-color-border: #e6ebf2;
 --nh-color-accent: #3b82f6;
 --nh-color-accent-hover: #2563eb;
 --nh-color-accent-pressed: #1d4ed8;
@@ -1319,6 +1320,8 @@ interface AskUserAnswer {
 --nh-shadow-card: 0 1px 2px rgb(28 27 25 / 4%), 0 8px 24px rgb(28 27 25 / 5%);
 --nh-shadow-float: 0 2px 8px rgb(28 27 25 / 6%), 0 16px 48px rgb(28 27 25 / 8%);
 --nh-shadow-popover: 0 8px 24px rgb(0 0 0 / 12%);
+--nh-highlight: inset 0 1px 0 rgb(255 255 255 / 70%);
+--nh-mask: #000;
 
 /**
  * 字体与动效

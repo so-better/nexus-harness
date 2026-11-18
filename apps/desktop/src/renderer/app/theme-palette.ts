@@ -10,6 +10,7 @@ import type { GlobalThemeOverrides } from 'naive-ui';
 export interface ThemePalette {
   bgBase: string;
   bgElevated: string;
+  bgPopover: string;
   bgHover: string;
   textPrimary: string;
   textSecondary: string;
@@ -28,12 +29,13 @@ export interface ThemePalette {
  */
 export const lightPalette: ThemePalette = {
   bgBase: '#ffffff',
-  bgElevated: '#f5f8fc',
-  bgHover: '#edf3fa',
+  bgElevated: '#fbfcfe',
+  bgPopover: '#ffffff',
+  bgHover: '#f1f6fc',
   textPrimary: '#111827',
   textSecondary: '#5b6472',
   textDisabled: '#9ca3af',
-  border: '#e2e8f0',
+  border: '#e6ebf2',
   accent: '#3b82f6',
   accentHover: '#2563eb',
   accentPressed: '#1d4ed8',
@@ -48,6 +50,7 @@ export const lightPalette: ThemePalette = {
 export const darkPalette: ThemePalette = {
   bgBase: '#090d13',
   bgElevated: '#101720',
+  bgPopover: '#111a24',
   bgHover: '#172233',
   textPrimary: '#f3f7ff',
   textSecondary: '#93a4bd',
@@ -70,6 +73,7 @@ export const getPalette = (mode: 'light' | 'dark'): ThemePalette =>
 const cssVariables: Record<keyof ThemePalette, string> = {
   bgBase: '--nh-color-bg-base',
   bgElevated: '--nh-color-bg-elevated',
+  bgPopover: '--nh-color-bg-popover',
   bgHover: '--nh-color-bg-hover',
   textPrimary: '--nh-color-text-primary',
   textSecondary: '--nh-color-text-secondary',
@@ -106,7 +110,7 @@ export const getNaiveOverrides = (palette: ThemePalette): GlobalThemeOverrides =
     bodyColor: palette.bgBase,
     cardColor: palette.bgElevated,
     modalColor: palette.bgElevated,
-    popoverColor: palette.bgElevated,
+    popoverColor: palette.bgPopover,
     inputColor: palette.bgBase,
     actionColor: palette.bgElevated,
     hoverColor: palette.bgHover,
@@ -137,7 +141,11 @@ export const getNaiveOverrides = (palette: ThemePalette): GlobalThemeOverrides =
     borderRadius: '8px'
   },
   Input: {
-    borderRadius: '8px'
+    borderRadius: '8px',
+    color: palette.bgBase,
+    colorHover: palette.bgBase,
+    colorFocus: palette.bgBase,
+    colorDisabled: palette.bgBase
   },
   Tag: {
     borderRadius: '4px'

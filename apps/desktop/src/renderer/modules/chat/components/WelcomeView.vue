@@ -7,18 +7,7 @@
         <p class="nh-welcome__description">{{ t('welcome.description') }}</p>
       </div>
 
-      <div class="nh-welcome__flow">
-        <article v-for="(item, index) in capabilities" :key="item.title" class="nh-flow__step">
-          <div class="nh-flow__head">
-            <span class="nh-flow__icon">
-              <AppIcon :name="item.icon" :size="18" />
-            </span>
-            <span class="nh-flow__index">0{{ index + 1 }}</span>
-          </div>
-          <h2 class="nh-flow__title">{{ item.title }}</h2>
-          <p class="nh-flow__description">{{ item.description }}</p>
-        </article>
-      </div>
+      <WelcomeFlow />
 
       <ComposerBox
         class="nh-welcome__composer"
@@ -31,6 +20,7 @@
         :provider-id="providerId"
         @choose-root="emit('choose-root')"
         @update-provider="emit('update-provider', $event)"
+        @open-settings="emit('open-settings')"
         @send="emit('send', $event)"
         @stop="emit('stop')"
       />
@@ -43,11 +33,10 @@
  * 欢迎页：品牌化首屏、能力说明与主输入区。
  */
 
-import { computed } from 'vue';
 import type { ProviderPublic } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
-import AppIcon from '@/components/AppIcon.vue';
 import ComposerBox from './ComposerBox.vue';
+import WelcomeFlow from './WelcomeFlow.vue';
 
 defineProps<{
   disabledReason?: string | undefined;
@@ -62,30 +51,8 @@ const emit = defineEmits<{
   stop: [];
   'choose-root': [];
   'update-provider': [id: string];
+  'open-settings': [];
 }>();
-
-const capabilities = computed(() => [
-  {
-    icon: 'file' as const,
-    title: t('welcome.read'),
-    description: t('welcome.readDesc')
-  },
-  {
-    icon: 'edit' as const,
-    title: t('welcome.write'),
-    description: t('welcome.writeDesc')
-  },
-  {
-    icon: 'terminal' as const,
-    title: t('welcome.run'),
-    description: t('welcome.runDesc')
-  },
-  {
-    icon: 'history' as const,
-    title: t('welcome.rollback'),
-    description: t('welcome.rollbackDesc')
-  }
-]);
 </script>
 
 <style scoped lang="less">
@@ -118,7 +85,7 @@ const capabilities = computed(() => [
     );
   background-size: 40px 40px;
   content: '';
-  mask-image: radial-gradient(circle at 50% 42%, #000 0%, transparent 68%);
+  mask-image: radial-gradient(circle at 50% 42%, var(--nh-mask) 0%, transparent 68%);
   opacity: 0.55;
   pointer-events: none;
 }
@@ -148,7 +115,7 @@ const capabilities = computed(() => [
   max-width: 860px;
   flex-direction: column;
   gap: 32px;
-  animation: welcome-in 480ms var(--nh-ease-standard) both;
+  animation: welcome-in var(--nh-duration-panel) var(--nh-ease-standard) both;
 }
 
 .nh-welcome__eyebrow {
@@ -178,64 +145,12 @@ const capabilities = computed(() => [
   text-wrap: pretty;
 }
 
-.nh-welcome__flow {
-  display: grid;
-  overflow: hidden;
-  border: 1px solid var(--nh-color-border);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--nh-color-bg-elevated) 58%, transparent);
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.nh-flow__step {
-  padding: 16px;
-  transition: background var(--nh-duration-base) var(--nh-ease-standard);
-}
-
-.nh-flow__step + .nh-flow__step {
-  border-left: 1px solid var(--nh-color-border);
-}
-
-.nh-flow__step:hover {
-  background: color-mix(in srgb, var(--nh-color-bg-base) 70%, transparent);
-}
-
-.nh-flow__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.nh-flow__icon {
-  color: var(--nh-color-accent);
-}
-
-.nh-flow__index {
-  color: var(--nh-color-text-disabled);
-  font-family: var(--nh-font-mono);
-  font-size: 12px;
-}
-
-.nh-flow__title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.nh-flow__description {
-  margin: 4px 0 0;
-  color: var(--nh-color-text-secondary);
-  font-size: 12px;
-  line-height: 1.6;
-  text-wrap: pretty;
-}
-
 .nh-welcome__composer {
   margin: 0;
   max-width: none;
   width: 100%;
-  animation: composer-in 520ms 80ms var(--nh-ease-standard) both;
+  animation: composer-in var(--nh-duration-panel) var(--nh-duration-fast) var(--nh-ease-standard)
+    both;
 }
 
 @keyframes welcome-in {
@@ -255,19 +170,6 @@ const capabilities = computed(() => [
 @media (width <= 1024px) {
   .nh-welcome {
     padding: 32px;
-  }
-
-  .nh-welcome__flow {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .nh-flow__step:nth-child(3),
-  .nh-flow__step:nth-child(4) {
-    border-top: 1px solid var(--nh-color-border);
-  }
-
-  .nh-flow__step:nth-child(3) {
-    border-left: 0;
   }
 }
 </style>
