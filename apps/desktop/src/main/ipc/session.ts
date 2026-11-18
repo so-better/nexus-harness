@@ -1,6 +1,9 @@
-/* 会话 IPC：列表、创建、读取、重命名与删除。 */
+/**
+ * 会话 IPC：列表、创建、读取、重命名与删除。
+ */
 
 import { ipcMain } from 'electron';
+import type { NexusEvent } from '@shared/events';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import {
   sessionCreateInputSchema,
@@ -15,10 +18,34 @@ import { EventStore } from '../services/session/event-store';
 import { SessionService } from '../services/session/session-service';
 import { getDatabase } from '../services/storage/database';
 
-/* 注册会话相关 IPC；数据库在 app ready 后已初始化。 */
+/**
+ * 注册会话相关 IPC；数据库在 app ready 后已初始化。
+ */
 export const registerSessionIpc = (): void => {
   const db = getDatabase();
-  const sessions = new SessionService(db, new EventStore(db));
+  const events = new EventStore(db);
+  const sessions = new SessionService(db, events);
+
+  ipcMain.handle(
+    IPC_CHANNELS.sessionEvents,
+    async (_event, rawId: unknown): Promise<Result<NexusEvent[]>> => {
+      if (typeof rawId !== 'string' || !rawId) {
+        return fail('SESSION_INVALID_INPUT', '会话 id 不合法');
+      }
+      if (!sessions.get(rawId)) {
+        return fail('SESSION_NOT_FOUND', `会话不存在：${rawId}`);
+      }
+
+      try {
+        return ok(events.list(rawId));
+      } catch (error) {
+        return fail(
+          'SESSION_EVENTS_FAILED',
+          error instanceof Error ? error.message : '读取会话事件失败'
+        );
+      }
+    }
+  );
 
   ipcMain.handle(IPC_CHANNELS.sessionList, async (): Promise<Result<SessionSummary[]>> => {
     try {

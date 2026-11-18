@@ -1,4 +1,6 @@
-/* Agent 服务：把 Provider、文件工具与 AgentLoop 组装成一次运行。 */
+/**
+ * Agent 服务：把 Provider、文件工具与 AgentLoop 组装成一次运行。
+ */
 
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
@@ -26,10 +28,14 @@ import {
 import type { NexusEvent } from '@shared/events';
 import type { AgentProviderConfig, AgentRunInput, AgentRunResult } from '@shared/ipc/contracts';
 
-/* 测试可注入 Provider 工厂；生产默认使用 OpenAI 兼容实现。 */
+/**
+ * 测试可注入 Provider 工厂；生产默认使用 OpenAI 兼容实现。
+ */
 export type ProviderFactory = (config: AgentProviderConfig) => ChatProvider;
 
-/* AgentService 依赖；测试可注入 Provider 工厂、产物目录与数据库。 */
+/**
+ * AgentService 依赖；测试可注入 Provider 工厂、产物目录与数据库。
+ */
 export interface AgentServiceOptions {
   createProvider?: ProviderFactory;
   artifactBaseDir?: string;
@@ -48,7 +54,9 @@ export interface AgentRunHooks {
   ) => Promise<boolean>;
 }
 
-/* 从工具参数中读取 path；其他工具返回 undefined。 */
+/**
+ * 从工具参数中读取 path；其他工具返回 undefined。
+ */
 const getPathArgument = (input: unknown): string | undefined => {
   if (!input || typeof input !== 'object' || !('path' in input)) return undefined;
   const pathValue = (input as { path?: unknown }).path;
@@ -79,7 +87,9 @@ export class AgentService {
     this.database = options.database;
   }
 
-  /* 执行一次完整任务；事件通过 hooks.onEvent 实时回传。 */
+  /**
+   * 执行一次完整任务；事件通过 hooks.onEvent 实时回传。
+   */
   async run(
     input: AgentRunInput,
     providerConfig: AgentProviderConfig,

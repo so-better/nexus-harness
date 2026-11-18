@@ -1,4 +1,6 @@
-/* 上下文预算测试：估算、预算边界与压缩触发线。 */
+/**
+ * 上下文预算测试：估算、预算边界与压缩触发线。
+ */
 
 import { describe, expect, it } from 'vitest';
 import { createContextBudget, estimateMessagesTokens, estimateTextTokens } from './context';

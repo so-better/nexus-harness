@@ -1,10 +1,14 @@
-/* 跨进程契约：应用级 IPC 的 zod schema 与 preload 桥接类型。 */
+/**
+ * 跨进程契约：应用级 IPC 的 zod schema 与 preload 桥接类型。
+ */
 
 import { z } from 'zod';
 import type { NexusEvent } from '../events';
 import type { Result } from './result';
 
-/* 应用基础信息，用于确认渲染进程与主进程通道可用。 */
+/**
+ * 应用基础信息，用于确认渲染进程与主进程通道可用。
+ */
 export const appInfoSchema = z.object({
   name: z.string(),
   version: z.string(),
@@ -13,10 +17,14 @@ export const appInfoSchema = z.object({
 
 export type AppInfo = z.infer<typeof appInfoSchema>;
 
-/* 主题来源：跟随系统、强制浅色或强制深色。 */
+/**
+ * 主题来源：跟随系统、强制浅色或强制深色。
+ */
 export const themeSourceSchema = z.enum(['system', 'light', 'dark']);
 
-/* 主题状态：source 为用户选择，effective 为当前实际生效主题。 */
+/**
+ * 主题状态：source 为用户选择，effective 为当前实际生效主题。
+ */
 export const themeInfoSchema = z.object({
   source: themeSourceSchema,
   effective: z.enum(['light', 'dark'])
@@ -25,7 +33,9 @@ export const themeInfoSchema = z.object({
 export type ThemeSource = z.infer<typeof themeSourceSchema>;
 export type ThemeInfo = z.infer<typeof themeInfoSchema>;
 
-/* Provider 保存参数；apiKey 省略时保留旧密钥。 */
+/**
+ * Provider 保存参数；apiKey 省略时保留旧密钥。
+ */
 export const providerSettingsSchema = z
   .object({
     id: z.string().optional(),
@@ -47,7 +57,9 @@ export const providerSettingsSchema = z
     { message: 'maxOutputTokens 必须小于 contextWindow', path: ['maxOutputTokens'] }
   );
 
-/* 对外展示的 Provider 配置，不包含 API Key。 */
+/**
+ * 对外展示的 Provider 配置，不包含 API Key。
+ */
 export const providerPublicSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -58,7 +70,9 @@ export const providerPublicSchema = z.object({
   maxOutputTokens: z.number().int().positive()
 });
 
-/* 主进程内部使用的完整 Provider 配置；headers/extraParams 视为敏感字段。 */
+/**
+ * 主进程内部使用的完整 Provider 配置；headers/extraParams 视为敏感字段。
+ */
 export const agentProviderConfigSchema = providerPublicSchema.extend({
   apiKey: z.string().min(1),
   headers: z.record(z.string(), z.string()).optional(),
@@ -67,10 +81,14 @@ export const agentProviderConfigSchema = providerPublicSchema.extend({
 
 export const providerRemoveResultSchema = z.object({ id: z.string().min(1) });
 
-/* 取消订阅函数，preload 与插件 API 共用。 */
+/**
+ * 取消订阅函数，preload 与插件 API 共用。
+ */
 export type Unsubscribe = () => void;
 
-/* preload 暴露到 window.nexus 的桥接接口。 */
+/**
+ * preload 暴露到 window.nexus 的桥接接口。
+ */
 export interface NexusBridge {
   app: {
     getInfo: () => Promise<Result<AppInfo>>;
@@ -87,6 +105,7 @@ export interface NexusBridge {
   };
   session: {
     list: () => Promise<Result<SessionSummary[]>>;
+    events: (id: string) => Promise<Result<NexusEvent[]>>;
     create: (input: SessionCreateInput) => Promise<Result<SessionSummary>>;
     get: (id: string) => Promise<Result<SessionSummary>>;
     rename: (input: SessionRenameInput) => Promise<Result<SessionSummary>>;
@@ -99,6 +118,9 @@ export interface NexusBridge {
   artifact: {
     read: (input: ArtifactReadInput) => Promise<Result<ArtifactReadResult>>;
   };
+  workspace: {
+    chooseRoot: () => Promise<Result<WorkspaceRootSelection>>;
+  };
   approval: {
     resolve: (input: ApprovalResolveInput) => Promise<Result<ApprovalResolveResult>>;
   };
@@ -109,7 +131,9 @@ export interface NexusBridge {
   };
 }
 
-/* Agent 运行只引用已保存的 Provider，避免渲染进程直接传 API Key。 */
+/**
+ * Agent 运行只引用已保存的 Provider，避免渲染进程直接传 API Key。
+ */
 export const agentRunInputSchema = z.object({
   sessionId: z.string().min(1),
   prompt: z.string().min(1),
@@ -148,7 +172,9 @@ export type AgentStartResult = z.infer<typeof agentStartResultSchema>;
 export type AgentCancelResult = z.infer<typeof agentCancelResultSchema>;
 export type AgentRunResult = z.infer<typeof agentRunResultSchema>;
 
-/* 会话状态与 Agent 模式。 */
+/**
+ * 会话状态与 Agent 模式。
+ */
 export const sessionStatusSchema = z.enum([
   'idle',
   'running',
@@ -203,7 +229,18 @@ export type SessionRenameInput = z.infer<typeof sessionRenameInputSchema>;
 export type SessionRemoveResult = z.infer<typeof sessionRemoveResultSchema>;
 export type SessionSetPinnedInput = z.infer<typeof sessionSetPinnedInputSchema>;
 
-/* 读取长输出产物；路径只由主进程解析。 */
+/**
+ * 用户通过系统对话框选择的临时 root 集合。
+ */
+export const workspaceRootSelectionSchema = z.object({
+  paths: z.array(z.string().min(1))
+});
+
+export type WorkspaceRootSelection = z.infer<typeof workspaceRootSelectionSchema>;
+
+/**
+ * 读取长输出产物；路径只由主进程解析。
+ */
 export const artifactReadInputSchema = z.object({
   sessionId: z.string().min(1),
   artifactId: z.string().min(1)
@@ -219,7 +256,9 @@ export const artifactReadResultSchema = z.object({
 export type ArtifactReadInput = z.infer<typeof artifactReadInputSchema>;
 export type ArtifactReadResult = z.infer<typeof artifactReadResultSchema>;
 
-/* 用户对审批请求的决定。 */
+/**
+ * 用户对审批请求的决定。
+ */
 export const approvalResolveInputSchema = z.object({
   approvalId: z.string().min(1),
   approved: z.boolean()
@@ -233,7 +272,9 @@ export const approvalResolveResultSchema = z.object({
 export type ApprovalResolveInput = z.infer<typeof approvalResolveInputSchema>;
 export type ApprovalResolveResult = z.infer<typeof approvalResolveResultSchema>;
 
-/* 恢复检查点。 */
+/**
+ * 恢复检查点。
+ */
 export const checkpointRestoreInputSchema = z.object({
   sessionId: z.string().min(1),
   checkpointId: z.string().min(1)

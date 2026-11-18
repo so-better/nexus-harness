@@ -1,4 +1,6 @@
-/* 会话历史投影测试：用户、助手、工具调用与审批状态重建。 */
+/**
+ * 会话历史投影测试：用户、助手、工具调用与审批状态重建。
+ */
 
 import { createNexusEvent } from '@nexus/core';
 import type { NexusEvent } from '@shared/events';

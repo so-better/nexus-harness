@@ -1,4 +1,6 @@
-/* 主进程权限网关单元测试：scope 隔离与断言。 */
+/**
+ * 主进程权限网关单元测试：scope 隔离与断言。
+ */
 
 import { PermissionDeniedError } from '@nexus/core';
 import { describe, expect, it } from 'vitest';

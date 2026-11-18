@@ -1,4 +1,6 @@
-/* Agent 循环测试：工具调用、结果回填、失败回填与最大步骤。 */
+/**
+ * Agent 循环测试：工具调用、结果回填、失败回填与最大步骤。
+ */
 
 import type { NexusEvent } from '@nexus/shared';
 import { MockProvider, type ChatProvider, type ProviderRequest } from '@nexus/providers';

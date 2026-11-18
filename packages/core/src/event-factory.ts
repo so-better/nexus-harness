@@ -1,4 +1,6 @@
-/* 事件工厂：补齐事件信封的 id、时间戳与版本。 */
+/**
+ * 事件工厂：补齐事件信封的 id、时间戳与版本。
+ */
 
 import { randomUUID } from 'node:crypto';
 import type { EventPayloadMap, NexusEvent, NexusEventType } from '@nexus/shared';
@@ -11,7 +13,9 @@ export interface CreateEventInput<T extends NexusEventType> {
   payload: EventPayloadMap[T];
 }
 
-/* 构造不可变事件信封；runId 为空时不写入字段。 */
+/**
+ * 构造不可变事件信封；runId 为空时不写入字段。
+ */
 export const createNexusEvent = <T extends NexusEventType>(
   input: CreateEventInput<T>
 ): NexusEvent<T> => {

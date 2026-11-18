@@ -1,4 +1,6 @@
-/* 文件工具：读取与列目录，所有路径限制在授权 roots 内。 */
+/**
+ * 文件工具：读取与列目录，所有路径限制在授权 roots 内。
+ */
 
 import { spawn } from 'node:child_process';
 import { mkdir, open, readFile, readdir, realpath, stat, writeFile } from 'node:fs/promises';
@@ -58,7 +60,9 @@ const runCommandInput = z.object({
   timeoutMs: z.number().int().positive().max(120_000).optional()
 });
 
-/* 内部错误携带稳定错误码。 */
+/**
+ * 内部错误携带稳定错误码。
+ */
 class FileToolError extends Error {
   constructor(
     readonly code: string,
@@ -69,7 +73,9 @@ class FileToolError extends Error {
   }
 }
 
-/* 相对路径基于 primary root，绝对路径必须落在任一 root 内。 */
+/**
+ * 相对路径基于 primary root，绝对路径必须落在任一 root 内。
+ */
 const resolveWithinRoots = async (
   roots: readonly string[],
   primaryRoot: string,
@@ -149,11 +155,15 @@ const listDirTool = async (
   return { ok: true, output: lines.join('\n') };
 };
 
-/* 判断真实路径是否在 roots 内。 */
+/**
+ * 判断真实路径是否在 roots 内。
+ */
 const isInsideRoots = (roots: readonly string[], target: string): boolean =>
   roots.some((root) => target === root || target.startsWith(`${root}${sep}`));
 
-/* 写入路径允许末级文件不存在；先校验最近存在的祖先，避免符号链接逃逸。 */
+/**
+ * 写入路径允许末级文件不存在；先校验最近存在的祖先，避免符号链接逃逸。
+ */
 const resolveForWrite = async (
   roots: readonly string[],
   primaryRoot: string,
@@ -357,7 +367,9 @@ const runCommandTool = async (
   });
 };
 
-/* 创建绑定到 roots 的文件工具集；路径解析与越界校验在此统一处理。 */
+/**
+ * 创建绑定到 roots 的文件工具集；路径解析与越界校验在此统一处理。
+ */
 export const createFileToolset = async (rootPaths: readonly string[]): Promise<FileToolset> => {
   if (rootPaths.length === 0) throw new Error('至少需要一个授权 root');
 

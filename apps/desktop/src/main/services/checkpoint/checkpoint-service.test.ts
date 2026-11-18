@@ -1,4 +1,6 @@
-/* 检查点测试：快照与恢复。 */
+/**
+ * 检查点测试：快照与恢复。
+ */
 
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

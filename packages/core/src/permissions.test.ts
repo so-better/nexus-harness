@@ -1,4 +1,6 @@
-/* 权限模型单元测试：授予、撤销与断言。 */
+/**
+ * 权限模型单元测试：授予、撤销与断言。
+ */
 
 import { describe, expect, it } from 'vitest';
 import { PermissionDeniedError, PermissionGateway } from './permissions';

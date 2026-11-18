@@ -1,4 +1,6 @@
-/* Provider 配置 IPC：只回传公开字段，API Key 由 safeStorage 加密保存。 */
+/**
+ * Provider 配置 IPC：只回传公开字段，API Key 由 safeStorage 加密保存。
+ */
 
 import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
@@ -10,7 +12,9 @@ import {
 import { fail, ok, type Result } from '@shared/ipc/result';
 import { providerStore } from '../services/provider/provider-store';
 
-/* 注册 Provider 列表、保存与删除。 */
+/**
+ * 注册 Provider 列表、保存与删除。
+ */
 export const registerProviderIpc = (): void => {
   ipcMain.handle(IPC_CHANNELS.providerList, async (): Promise<Result<ProviderPublic[]>> => {
     try {

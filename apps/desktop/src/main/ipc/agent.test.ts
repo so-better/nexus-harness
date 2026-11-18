@@ -1,4 +1,6 @@
-/* Agent IPC 集成测试：启动、事件推送与取消。 */
+/**
+ * Agent IPC 集成测试：启动、事件推送与取消。
+ */
 
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

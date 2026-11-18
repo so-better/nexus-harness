@@ -1,4 +1,6 @@
-/* EventBus 单元测试：订阅、取消订阅、错误隔离。 */
+/**
+ * EventBus 单元测试：订阅、取消订阅、错误隔离。
+ */
 
 import type { NexusEvent } from '@nexus/shared';
 import { describe, expect, it, vi } from 'vitest';

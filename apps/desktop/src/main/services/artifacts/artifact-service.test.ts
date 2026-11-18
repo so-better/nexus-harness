@@ -1,4 +1,6 @@
-/* Artifact 服务测试：落盘、净化与大小上限。 */
+/**
+ * Artifact 服务测试：落盘、净化与大小上限。
+ */
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

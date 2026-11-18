@@ -1,4 +1,6 @@
-/* 事件存储：append-only 写入并按 session 回放。 */
+/**
+ * 事件存储：append-only 写入并按 session 回放。
+ */
 
 import type { DatabaseSync } from 'node:sqlite';
 import type { NexusEvent, NexusEventType } from '@shared/events';
@@ -38,7 +40,9 @@ const toEvent = (row: EventRow): NexusEvent => {
 export class EventStore {
   constructor(private readonly db: DatabaseSync) {}
 
-  /* 追加事件；seq 由 session 维度统一分配，覆盖调用方的 run 内序号。 */
+  /**
+   * 追加事件；seq 由 session 维度统一分配，覆盖调用方的 run 内序号。
+   */
   append(event: NexusEvent): NexusEvent {
     const row = this.db
       .prepare('SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM events WHERE session_id = ?')
@@ -69,7 +73,9 @@ export class EventStore {
     return stored;
   }
 
-  /* 按 seq 回放会话事件。 */
+  /**
+   * 按 seq 回放会话事件。
+   */
   list(sessionId: string): NexusEvent[] {
     const rows = this.db
       .prepare('SELECT * FROM events WHERE session_id = ? ORDER BY seq ASC')

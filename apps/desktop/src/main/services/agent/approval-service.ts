@@ -1,4 +1,6 @@
-/* 审批服务：主进程等待渲染进程对工具调用做出决定。 */
+/**
+ * 审批服务：主进程等待渲染进程对工具调用做出决定。
+ */
 
 interface PendingApproval {
   runId: string;
@@ -12,7 +14,9 @@ const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 export class ApprovalService {
   private readonly pending = new Map<string, PendingApproval>();
 
-  /* 发起审批并等待用户决定；超时按拒绝处理。 */
+  /**
+   * 发起审批并等待用户决定；超时按拒绝处理。
+   */
   request(approvalId: string, runId: string, senderId: number): Promise<boolean> {
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
@@ -24,7 +28,9 @@ export class ApprovalService {
     });
   }
 
-  /* 处理用户决定；只允许发起 Run 的窗口操作。 */
+  /**
+   * 处理用户决定；只允许发起 Run 的窗口操作。
+   */
   resolve(approvalId: string, approved: boolean, senderId: number): boolean {
     const item = this.pending.get(approvalId);
     if (!item || item.senderId !== senderId) return false;
@@ -35,7 +41,9 @@ export class ApprovalService {
     return true;
   }
 
-  /* Run 取消或结束时拒绝所有待处理审批。 */
+  /**
+   * Run 取消或结束时拒绝所有待处理审批。
+   */
   cancelRun(runId: string): void {
     for (const [approvalId, item] of this.pending) {
       if (item.runId !== runId) continue;
@@ -46,5 +54,7 @@ export class ApprovalService {
   }
 }
 
-/* 主进程共享的审批队列。 */
+/**
+ * 主进程共享的审批队列。
+ */
 export const approvalService = new ApprovalService();

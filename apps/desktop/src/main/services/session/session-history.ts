@@ -1,14 +1,20 @@
-/* 会话历史投影：从 append-only 事件重建供模型使用的消息序列。 */
+/**
+ * 会话历史投影：从 append-only 事件重建供模型使用的消息序列。
+ */
 
 import type { ChatMessage, ProviderToolCall } from '@nexus/providers';
 import type { EventPayloadMap } from '@shared/events';
 import type { EventStore } from './event-store';
 
-/* 把单会话事件转换为 ChatMessage；工具调用与结果按事件顺序配对。 */
+/**
+ * 把单会话事件转换为 ChatMessage；工具调用与结果按事件顺序配对。
+ */
 export class SessionHistoryService {
   constructor(private readonly events: EventStore) {}
 
-  /* 重建历史消息；跳过运行控制事件与审批事件本身。 */
+  /**
+   * 重建历史消息；跳过运行控制事件与审批事件本身。
+   */
   load(sessionId: string): ChatMessage[] {
     const messages: ChatMessage[] = [];
     const approvalToCall = new Map<string, string>();

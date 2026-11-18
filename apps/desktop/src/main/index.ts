@@ -1,4 +1,6 @@
-/* Electron 主进程入口：单实例、窗口生命周期与 IPC 注册。 */
+/**
+ * Electron 主进程入口：单实例、窗口生命周期与 IPC 注册。
+ */
 
 import { app, BrowserWindow, nativeTheme } from 'electron';
 import { createNexusEvent } from '@nexus/core';

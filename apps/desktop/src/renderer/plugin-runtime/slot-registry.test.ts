@@ -1,4 +1,6 @@
-/* 插槽注册表单元测试：位置过滤、注销与重名保护。 */
+/**
+ * 插槽注册表单元测试：位置过滤、注销与重名保护。
+ */
 
 import { describe, expect, it } from 'vitest';
 import { SlotRegistry, type SlotMount } from './slot-registry';

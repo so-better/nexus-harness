@@ -1,4 +1,6 @@
-/* Artifact IPC 测试：参数校验与读取结果。 */
+/**
+ * Artifact IPC 测试：参数校验与读取结果。
+ */
 
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

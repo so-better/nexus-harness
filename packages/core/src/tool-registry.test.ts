@@ -1,4 +1,6 @@
-/* 工具注册表单元测试：注册、读取与重名保护。 */
+/**
+ * 工具注册表单元测试：注册、读取与重名保护。
+ */
 
 import { describe, expect, it } from 'vitest';
 import { DuplicateToolError, ToolRegistry, type ToolDefinition } from './tool-registry';

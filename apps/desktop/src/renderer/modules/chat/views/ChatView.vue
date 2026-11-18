@@ -1,0 +1,157 @@
+<template>
+  <main class="nh-chat">
+    <header class="nh-chat__header">
+      <div class="nh-chat__title-group">
+        <h1 class="nh-chat__title">{{ session?.title ?? t('app.noSession') }}</h1>
+        <span v-if="session" class="nh-chat__status">{{ statusLabel }}</span>
+      </div>
+      <span class="nh-chat__meta">{{ providerLabel }}</span>
+    </header>
+
+    <section v-if="!session" class="nh-chat__empty">
+      <h2>{{ t('app.emptyTitle') }}</h2>
+      <p>{{ t('app.emptyDescription') }}</p>
+    </section>
+
+    <section v-else-if="projection.messages.length === 0" class="nh-chat__empty">
+      <h2>{{ t('app.emptyTitle') }}</h2>
+      <p>{{ t('app.emptyDescription') }}</p>
+    </section>
+
+    <MessageList v-else :messages="projection.messages" />
+
+    <div v-if="pendingApprovals.length" class="nh-chat__approvals">
+      <ApprovalCard
+        v-for="approval in pendingApprovals"
+        :key="approval.id"
+        :approval="approval"
+        @approve="emit('approve', approval.id)"
+        @reject="emit('reject', approval.id)"
+      />
+    </div>
+
+    <ComposerBox
+      :disabled="Boolean(disabledReason)"
+      :disabled-reason="disabledReason"
+      :running="projection.running"
+      @send="emit('send', $event)"
+      @stop="emit('stop')"
+    />
+  </main>
+</template>
+
+<script setup lang="ts">
+/**
+ * 会话主区：标题、消息流、审批与输入区。
+ */
+
+import { computed } from 'vue';
+import type { SessionSummary } from '@shared/ipc/contracts';
+import { t } from '@/app/i18n';
+import ApprovalCard from '../components/ApprovalCard.vue';
+import ComposerBox from '../components/ComposerBox.vue';
+import MessageList from '../components/MessageList.vue';
+import type { ChatProjection } from '../types';
+
+const props = defineProps<{
+  session?: SessionSummary | undefined;
+  projection: ChatProjection;
+  providerLabel: string;
+  disabledReason?: string | undefined;
+}>();
+
+const emit = defineEmits<{
+  send: [prompt: string];
+  stop: [];
+  approve: [approvalId: string];
+  reject: [approvalId: string];
+}>();
+
+const pendingApprovals = computed(() =>
+  props.projection.approvals.filter((approval) => approval.status === 'pending')
+);
+
+const statusLabel = computed(() => {
+  if (!props.session) return t('app.idle');
+  switch (props.projection.status) {
+    case 'running':
+      return t('session.status.running');
+    case 'waiting_approval':
+      return t('session.status.waiting_approval');
+    case 'completed':
+      return t('session.status.completed');
+    case 'failed':
+      return t('session.status.failed');
+    case 'cancelled':
+      return t('session.status.cancelled');
+    default:
+      return t('session.status.idle');
+  }
+});
+</script>
+
+<style scoped lang="less">
+.nh-chat {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  background: var(--nh-color-bg-base);
+}
+
+.nh-chat__header {
+  display: flex;
+  height: 44px;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nh-space-md);
+  padding: 0 24px;
+  border-bottom: 1px solid var(--nh-color-border);
+}
+
+.nh-chat__title-group {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.nh-chat__title {
+  overflow: hidden;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nh-chat__status,
+.nh-chat__meta {
+  color: var(--nh-color-text-secondary);
+  font-size: 12px;
+}
+
+.nh-chat__empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--nh-color-text-secondary);
+  text-align: center;
+}
+
+.nh-chat__empty h2,
+.nh-chat__empty p {
+  margin: 0;
+}
+
+.nh-chat__approvals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 24px 0;
+}
+</style>

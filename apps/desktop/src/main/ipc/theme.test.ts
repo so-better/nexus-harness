@@ -1,4 +1,6 @@
-/* 主题 IPC 单元测试：参数校验、持久化与广播。 */
+/**
+ * 主题 IPC 单元测试：参数校验、持久化与广播。
+ */
 
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

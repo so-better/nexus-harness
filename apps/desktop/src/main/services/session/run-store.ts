@@ -1,4 +1,6 @@
-/* Run 投影：记录运行状态，启动时把未完成 Run 标记为 interrupted。 */
+/**
+ * Run 投影：记录运行状态，启动时把未完成 Run 标记为 interrupted。
+ */
 
 import type { DatabaseSync } from 'node:sqlite';
 
@@ -12,14 +14,18 @@ interface RunRow {
 export class RunStore {
   constructor(private readonly db: DatabaseSync) {}
 
-  /* 创建运行记录。 */
+  /**
+   * 创建运行记录。
+   */
   create(runId: string, sessionId: string, startedAt = Date.now()): void {
     this.db
       .prepare('INSERT INTO runs (id, session_id, status, started_at) VALUES (?, ?, ?, ?)')
       .run(runId, sessionId, 'running', startedAt);
   }
 
-  /* 更新运行状态并记录结束时间。 */
+  /**
+   * 更新运行状态并记录结束时间。
+   */
   updateStatus(runId: string, status: string): void {
     const endedAt = ['succeeded', 'failed', 'cancelled', 'interrupted'].includes(status)
       ? Date.now()
@@ -29,7 +35,9 @@ export class RunStore {
       .run(status, endedAt, runId);
   }
 
-  /* 启动时中断所有未完成 Run，返回受影响的记录。 */
+  /**
+   * 启动时中断所有未完成 Run，返回受影响的记录。
+   */
   markInterrupted(): RunRow[] {
     const rows = this.db
       .prepare(

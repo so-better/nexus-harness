@@ -1,4 +1,6 @@
-/* userData 目录结构：集中定义并确保插件、技能、MCP 等目录存在。 */
+/**
+ * userData 目录结构：集中定义并确保插件、技能、MCP 等目录存在。
+ */
 
 import { app } from 'electron';
 import { mkdir } from 'node:fs/promises';
@@ -16,7 +18,9 @@ export interface AppDataPaths {
   logs: string;
 }
 
-/* 计算全部运行时路径；路径统一收敛在 userData 下。 */
+/**
+ * 计算全部运行时路径；路径统一收敛在 userData 下。
+ */
 export const getAppDataPaths = (): AppDataPaths => {
   const root = app.getPath('userData');
 
@@ -33,7 +37,9 @@ export const getAppDataPaths = (): AppDataPaths => {
   };
 };
 
-/* 启动时创建缺失目录；失败时向上抛出，由启动流程统一处理。 */
+/**
+ * 启动时创建缺失目录；失败时向上抛出，由启动流程统一处理。
+ */
 export const ensureAppDataDirectories = async (): Promise<void> => {
   const paths = getAppDataPaths();
   const directories = [

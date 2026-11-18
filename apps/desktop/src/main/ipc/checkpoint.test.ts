@@ -1,4 +1,6 @@
-/* 检查点 IPC 测试：参数校验与恢复调用。 */
+/**
+ * 检查点 IPC 测试：参数校验与恢复调用。
+ */
 
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,4 +1,6 @@
-/* 活跃 Run 注册表测试：会话互斥与注销。 */
+/**
+ * 活跃 Run 注册表测试：会话互斥与注销。
+ */
 
 import { describe, expect, it } from 'vitest';
 import {

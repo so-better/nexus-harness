@@ -1,10 +1,14 @@
-/* 进程内事件总线：发布领域事件，订阅者只做观察，不修改事件。 */
+/**
+ * 进程内事件总线：发布领域事件，订阅者只做观察，不修改事件。
+ */
 
 import type { NexusEvent, NexusEventType } from '@nexus/shared';
 
 type AnyEventHandler = (event: NexusEvent) => void;
 
-/* 事件总线的最小实现；持久化事件流由上层负责。 */
+/**
+ * 事件总线的最小实现；持久化事件流由上层负责。
+ */
 export class EventBus {
   private readonly handlers = new Map<NexusEventType, Set<AnyEventHandler>>();
   private readonly allHandlers = new Set<AnyEventHandler>();
@@ -14,7 +18,9 @@ export class EventBus {
     this.onError = onError;
   }
 
-  /* 订阅指定事件，返回取消订阅函数。 */
+  /**
+   * 订阅指定事件，返回取消订阅函数。
+   */
   subscribe<T extends NexusEventType>(
     type: T,
     handler: (event: NexusEvent<T>) => void
@@ -37,7 +43,9 @@ export class EventBus {
     };
   }
 
-  /* 订阅全部事件，用于 IPC 转发与调试；返回取消订阅函数。 */
+  /**
+   * 订阅全部事件，用于 IPC 转发与调试；返回取消订阅函数。
+   */
   subscribeAll(handler: (event: NexusEvent) => void): () => void {
     this.allHandlers.add(handler);
     return () => {
@@ -45,7 +53,9 @@ export class EventBus {
     };
   }
 
-  /* 同步发布事件；单个订阅者异常不影响其他订阅者。 */
+  /**
+   * 同步发布事件；单个订阅者异常不影响其他订阅者。
+   */
   publish<T extends NexusEventType>(event: NexusEvent<T>): void {
     for (const handler of [...this.allHandlers]) {
       try {
@@ -67,7 +77,9 @@ export class EventBus {
     }
   }
 
-  /* 清空所有订阅。 */
+  /**
+   * 清空所有订阅。
+   */
   clear(): void {
     this.handlers.clear();
     this.allHandlers.clear();

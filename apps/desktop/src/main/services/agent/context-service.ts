@@ -1,4 +1,6 @@
-/* 运行内上下文管理：预算估算、工具输出落盘、摘要压缩与硬截断兜底。 */
+/**
+ * 运行内上下文管理：预算估算、工具输出落盘、摘要压缩与硬截断兜底。
+ */
 
 import {
   ContextLimitError,
@@ -11,18 +13,30 @@ import type { ChatMessage, ChatProvider, ProviderRequest, ToolSchema } from '@ne
 import type { UsageSummary } from '@nexus/shared';
 import type { ArtifactService } from '../artifacts/artifact-service';
 
-/* 工具输出超过该字符数时落 Artifact，不再进入模型上下文。 */
+/**
+ * 工具输出超过该字符数时落 Artifact，不再进入模型上下文。
+ */
 export const TOOL_OUTPUT_ARTIFACT_CHAR_LIMIT = 4_000;
-/* Artifact 替换文本中保留的预览长度。 */
+/**
+ * Artifact 替换文本中保留的预览长度。
+ */
 export const TOOL_OUTPUT_PREVIEW_CHAR_LIMIT = 1_200;
-/* 硬截断兜底时每条消息保留的最大字符数。 */
+/**
+ * 硬截断兜底时每条消息保留的最大字符数。
+ */
 const HARD_TRUNCATE_CHAR_LIMIT = 600;
-/* 摘要压缩时保留的最近消息条数。 */
+/**
+ * 摘要压缩时保留的最近消息条数。
+ */
 const KEEP_RECENT_MESSAGES = 6;
-/* 摘要调用的输出 token 上限。 */
+/**
+ * 摘要调用的输出 token 上限。
+ */
 const SUMMARY_MAX_TOKENS = 1_024;
 
-/* 上下文服务依赖：同一 Run 内复用 Provider 与产物存储。 */
+/**
+ * 上下文服务依赖：同一 Run 内复用 Provider 与产物存储。
+ */
 export interface AgentContextOptions {
   provider: ChatProvider;
   model: string;
@@ -46,7 +60,9 @@ interface SummaryFailure {
   usage?: UsageSummary;
 }
 
-/* 管理单次 Run 的上下文；压缩失败时降级为硬截断。 */
+/**
+ * 管理单次 Run 的上下文；压缩失败时降级为硬截断。
+ */
 export class AgentContextService {
   private readonly budget: ContextBudget;
   private readonly artifactized = new WeakSet<ChatMessage>();
@@ -58,7 +74,9 @@ export class AgentContextService {
     });
   }
 
-  /* 在模型调用前压缩消息；无法压入预算时抛出 ContextLimitError。 */
+  /**
+   * 在模型调用前压缩消息；无法压入预算时抛出 ContextLimitError。
+   */
   async prepare(
     messages: ChatMessage[],
     tools?: readonly ToolSchema[]
@@ -127,7 +145,9 @@ export class AgentContextService {
     };
   }
 
-  /* 把过长工具输出保存为 artifact，并用带引用的预览替换上下文内容。 */
+  /**
+   * 把过长工具输出保存为 artifact，并用带引用的预览替换上下文内容。
+   */
   private async truncateToolOutputs(messages: ChatMessage[]): Promise<{
     messages: ChatMessage[];
     changed: boolean;
@@ -180,7 +200,9 @@ export class AgentContextService {
     return { messages: next, changed, artifactIds, failed };
   }
 
-  /* 保留首条用户消息与最近消息，把中间历史压缩为摘要。 */
+  /**
+   * 保留首条用户消息与最近消息，把中间历史压缩为摘要。
+   */
   private async summarizeOlderMessages(
     messages: ChatMessage[]
   ): Promise<SummaryResult | SummaryFailure | undefined> {
@@ -246,7 +268,9 @@ export class AgentContextService {
     };
   }
 
-  /* 选择压缩边界：保留首条用户消息与最近若干条，边界不能落在 tool 消息上。 */
+  /**
+   * 选择压缩边界：保留首条用户消息与最近若干条，边界不能落在 tool 消息上。
+   */
   private splitForSummary(
     messages: ChatMessage[]
   ): { head: ChatMessage[]; middle: ChatMessage[]; tail: ChatMessage[] } | undefined {
@@ -282,7 +306,9 @@ export class AgentContextService {
     };
   }
 
-  /* 摘要输入保留角色与工具调用 ID，避免丢失可审计信息。 */
+  /**
+   * 摘要输入保留角色与工具调用 ID，避免丢失可审计信息。
+   */
   private formatForSummary(message: ChatMessage): string {
     const toolCalls = message.toolCalls?.length
       ? ` 工具调用：${message.toolCalls
@@ -296,7 +322,9 @@ export class AgentContextService {
     return `[${message.role}${toolCallId}${approval}${toolCalls}]\n${message.content}`;
   }
 
-  /* 摘要只保留路径、命令等关键参数，避免把文件正文重复写进摘要请求。 */
+  /**
+   * 摘要只保留路径、命令等关键参数，避免把文件正文重复写进摘要请求。
+   */
   private summarizeArguments(args: unknown): string {
     if (!args || typeof args !== 'object') return '';
 
@@ -311,7 +339,9 @@ export class AgentContextService {
     return json ? `参数：${json.slice(0, 400)}` : '';
   }
 
-  /* 最后兜底：保留首尾用户消息，截断其余过长内容。 */
+  /**
+   * 最后兜底：保留首尾用户消息，截断其余过长内容。
+   */
   private hardTruncate(messages: ChatMessage[]): {
     messages: ChatMessage[];
     changed: boolean;

@@ -1,4 +1,6 @@
-/* 会话、事件与 Run 存储测试：投影、事件顺序与级联删除。 */
+/**
+ * 会话、事件与 Run 存储测试：投影、事件顺序与级联删除。
+ */
 
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

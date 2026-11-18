@@ -1,4 +1,6 @@
-/* OpenAI 兼容 Provider 测试：SSE 解析、工具调用、usage 与 HTTP 错误。 */
+/**
+ * OpenAI 兼容 Provider 测试：SSE 解析、工具调用、usage 与 HTTP 错误。
+ */
 
 import { describe, expect, it } from 'vitest';
 import { OpenAICompatibleProvider } from './openai-compatible';

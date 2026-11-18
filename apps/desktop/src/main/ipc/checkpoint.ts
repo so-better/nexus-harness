@@ -1,4 +1,6 @@
-/* 检查点 IPC：按会话与检查点 ID 恢复文件。 */
+/**
+ * 检查点 IPC：按会话与检查点 ID 恢复文件。
+ */
 
 import { ipcMain } from 'electron';
 import { createNexusEvent } from '@nexus/core';
@@ -9,7 +11,9 @@ import { CheckpointService } from '../services/checkpoint/checkpoint-service';
 import { EventStore } from '../services/session/event-store';
 import { getDatabase } from '../services/storage/database';
 
-/* 注册 checkpoint:restore。 */
+/**
+ * 注册 checkpoint:restore。
+ */
 export const registerCheckpointIpc = (): void => {
   const checkpoints = new CheckpointService();
   const events = new EventStore(getDatabase());

@@ -1,15 +1,11 @@
 <template>
-  <main class="nh-app" />
+  <MainLayout />
 </template>
 
 <script setup lang="ts">
-/* 应用根组件：当前仅保留空白容器，页面由后续设计接管。 */
-</script>
+/**
+ * 应用根组件：只承载主布局，页面细节由布局与模块组件负责。
+ */
 
-<style scoped lang="less">
-.nh-app {
-  width: 100%;
-  height: 100%;
-  background: var(--nh-color-bg-base);
-}
-</style>
+import MainLayout from '@/layouts/MainLayout.vue';
+</script>

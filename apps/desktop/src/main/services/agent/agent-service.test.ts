@@ -1,4 +1,6 @@
-/* Agent 服务测试：用 MockProvider 和真实文件工具跑通闭环。 */
+/**
+ * Agent 服务测试：用 MockProvider 和真实文件工具跑通闭环。
+ */
 
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

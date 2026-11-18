@@ -1,4 +1,6 @@
-/* 文件工具测试：读取、列目录与路径越界保护。 */
+/**
+ * 文件工具测试：读取、列目录与路径越界保护。
+ */
 
 import { access, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

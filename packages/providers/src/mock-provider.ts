@@ -1,4 +1,6 @@
-/* 可编排的 Mock Provider：用于 Agent 循环与工具调用测试。 */
+/**
+ * 可编排的 Mock Provider：用于 Agent 循环与工具调用测试。
+ */
 
 import type { UsageSummary } from '@nexus/shared';
 import type {
@@ -25,7 +27,9 @@ const MOCK_CAPABILITIES: ProviderCapabilities = {
   reasoning: true
 };
 
-/* 按顺序返回预设轮次；用于测试，不访问网络。 */
+/**
+ * 按顺序返回预设轮次；用于测试，不访问网络。
+ */
 export class MockProvider implements ChatProvider {
   readonly capabilities = MOCK_CAPABILITIES;
 

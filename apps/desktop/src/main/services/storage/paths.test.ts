@@ -1,4 +1,6 @@
-/* userData 目录初始化测试：所有运行时目录都被创建。 */
+/**
+ * userData 目录初始化测试：所有运行时目录都被创建。
+ */
 
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

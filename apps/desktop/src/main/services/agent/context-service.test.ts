@@ -1,4 +1,6 @@
-/* 上下文服务测试：工具输出落盘、摘要压缩与硬截断兜底。 */
+/**
+ * 上下文服务测试：工具输出落盘、摘要压缩与硬截断兜底。
+ */
 
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

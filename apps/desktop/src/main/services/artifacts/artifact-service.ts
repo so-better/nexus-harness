@@ -1,4 +1,6 @@
-/* 工具产物存储：把完整输出写入 userData/artifacts，并记录可查询的元数据。 */
+/**
+ * 工具产物存储：把完整输出写入 userData/artifacts，并记录可查询的元数据。
+ */
 
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
@@ -6,19 +8,27 @@ import { join, resolve, sep } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { getAppDataPaths } from '../storage/paths';
 
-/* 单个 artifact 上限，避免一次写入撑爆磁盘。 */
+/**
+ * 单个 artifact 上限，避免一次写入撑爆磁盘。
+ */
 const MAX_ARTIFACT_BYTES = 10_000_000;
-/* 文件路径片段只允许安全字符，防止路径穿越。 */
+/**
+ * 文件路径片段只允许安全字符，防止路径穿越。
+ */
 const SAFE_SEGMENT = /[^a-zA-Z0-9_-]/g;
 
-/* 已落盘的产物引用；path 仅供主进程使用，不直接暴露给渲染层。 */
+/**
+ * 已落盘的产物引用；path 仅供主进程使用，不直接暴露给渲染层。
+ */
 export interface StoredArtifact {
   artifactId: string;
   path: string;
   bytes: number;
 }
 
-/* 供渲染层读取的产物内容；路径不对外暴露。 */
+/**
+ * 供渲染层读取的产物内容；路径不对外暴露。
+ */
 export interface ArtifactContent {
   artifactId: string;
   label: string;
@@ -33,7 +43,9 @@ interface ArtifactRow {
   bytes: number;
 }
 
-/* 把会话内的长文本保存为 artifact；baseDir/db 可注入用于测试。 */
+/**
+ * 把会话内的长文本保存为 artifact；baseDir/db 可注入用于测试。
+ */
 export class ArtifactService {
   constructor(
     private readonly baseDir?: string,
@@ -44,7 +56,9 @@ export class ArtifactService {
     return this.baseDir ?? getAppDataPaths().artifacts;
   }
 
-  /* 保存文本产物并写入索引；sessionId 会被净化，避免路径穿越。 */
+  /**
+   * 保存文本产物并写入索引；sessionId 会被净化，避免路径穿越。
+   */
   async saveText(
     sessionId: string,
     label: string,
@@ -82,7 +96,9 @@ export class ArtifactService {
     return { artifactId, path, bytes };
   }
 
-  /* 按会话与 ID 读取产物；路径必须位于 artifacts 根目录内。 */
+  /**
+   * 按会话与 ID 读取产物；路径必须位于 artifacts 根目录内。
+   */
   async read(sessionId: string, artifactId: string): Promise<ArtifactContent | undefined> {
     if (!this.db) return undefined;
 

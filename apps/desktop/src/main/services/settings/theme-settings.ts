@@ -1,4 +1,6 @@
-/* 主题偏好持久化：在设置服务落地前先使用 userData/settings 下的轻量 JSON。 */
+/**
+ * 主题偏好持久化：在设置服务落地前先使用 userData/settings 下的轻量 JSON。
+ */
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -7,7 +9,9 @@ import { getAppDataPaths } from '../storage/paths';
 
 const themeFileName = 'theme.json';
 
-/* 读取已保存的主题来源；文件缺失或内容无效时回退到 system。 */
+/**
+ * 读取已保存的主题来源；文件缺失或内容无效时回退到 system。
+ */
 export const loadThemeSource = async (): Promise<ThemeSource> => {
   const paths = getAppDataPaths();
 
@@ -23,7 +27,9 @@ export const loadThemeSource = async (): Promise<ThemeSource> => {
   }
 };
 
-/* 保存主题来源；写入失败时抛错，由调用方转换为结构化错误。 */
+/**
+ * 保存主题来源；写入失败时抛错，由调用方转换为结构化错误。
+ */
 export const saveThemeSource = async (source: ThemeSource): Promise<void> => {
   const paths = getAppDataPaths();
 

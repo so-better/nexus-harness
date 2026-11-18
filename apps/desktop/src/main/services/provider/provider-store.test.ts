@@ -1,4 +1,6 @@
-/* Provider 配置存储测试：加密落盘、保留旧密钥与删除。 */
+/**
+ * Provider 配置存储测试：加密落盘、保留旧密钥与删除。
+ */
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

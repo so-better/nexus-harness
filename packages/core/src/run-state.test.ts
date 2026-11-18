@@ -1,4 +1,6 @@
-/* Run 状态机单元测试：合法迁移与非法迁移。 */
+/**
+ * Run 状态机单元测试：合法迁移与非法迁移。
+ */
 
 import { describe, expect, it } from 'vitest';
 import { assertRunTransition, canTransitionRun, InvalidRunTransitionError } from './run-state';

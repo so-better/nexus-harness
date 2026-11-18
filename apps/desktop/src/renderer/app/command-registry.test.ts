@@ -1,4 +1,6 @@
-/* 命令注册表单元测试：注册、执行、禁用与重名保护。 */
+/**
+ * 命令注册表单元测试：注册、执行、禁用与重名保护。
+ */
 
 import { describe, expect, it, vi } from 'vitest';
 import { CommandDisabledError, CommandRegistry, DuplicateCommandError } from './command-registry';

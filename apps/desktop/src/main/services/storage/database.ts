@@ -1,4 +1,6 @@
-/* SQLite 主库：负责打开、迁移与单例生命周期。 */
+/**
+ * SQLite 主库：负责打开、迁移与单例生命周期。
+ */
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -77,7 +79,9 @@ const migrate = (db: DatabaseSync): void => {
   }
 };
 
-/* 打开任意路径的数据库并完成迁移，供主进程与测试共用。 */
+/**
+ * 打开任意路径的数据库并完成迁移，供主进程与测试共用。
+ */
 export const createDatabase = (filePath: string): DatabaseSync => {
   const db = new DatabaseSync(filePath);
   db.exec('PRAGMA journal_mode = WAL');
@@ -87,7 +91,9 @@ export const createDatabase = (filePath: string): DatabaseSync => {
   return db;
 };
 
-/* 打开主库并执行迁移；启动流程在 app ready 后调用。 */
+/**
+ * 打开主库并执行迁移；启动流程在 app ready 后调用。
+ */
 export const initDatabase = (): DatabaseSync => {
   if (database) return database;
 
@@ -98,13 +104,17 @@ export const initDatabase = (): DatabaseSync => {
   return database;
 };
 
-/* 获取已初始化的主库；未初始化时抛错，避免静默使用临时库。 */
+/**
+ * 获取已初始化的主库；未初始化时抛错，避免静默使用临时库。
+ */
 export const getDatabase = (): DatabaseSync => {
   if (!database) throw new Error('数据库尚未初始化');
   return database;
 };
 
-/* 关闭主库，应用退出时调用。 */
+/**
+ * 关闭主库，应用退出时调用。
+ */
 export const closeDatabase = (): void => {
   database?.close();
   database = undefined;

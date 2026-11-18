@@ -1,4 +1,6 @@
-/* Agent IPC：异步启动 Run、持久化事件、转发事件并支持按窗口取消。 */
+/**
+ * Agent IPC：异步启动 Run、持久化事件、转发事件并支持按窗口取消。
+ */
 
 import { randomUUID } from 'node:crypto';
 import { ipcMain } from 'electron';
@@ -28,7 +30,9 @@ import {
   unregisterRun
 } from '../services/agent/run-registry';
 
-/* 注册 agent:run 与 agent:cancel；事件只回传给发起窗口。 */
+/**
+ * 注册 agent:run 与 agent:cancel；事件只回传给发起窗口。
+ */
 export const registerAgentIpc = (): void => {
   const db = getDatabase();
   const events = new EventStore(db);
@@ -91,7 +95,9 @@ export const registerAgentIpc = (): void => {
           }
         };
 
-        /* 先落库再推送；失败时仍推送原事件，避免 UI 卡住。 */
+        /**
+         * 先落库再推送；失败时仍推送原事件，避免 UI 卡住。
+         */
         const enqueueEvent = (agentEvent: NexusEvent): void => {
           persistChain = persistChain.then(() => {
             try {

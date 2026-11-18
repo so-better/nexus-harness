@@ -1,4 +1,6 @@
-/* 会话投影：读写 sessions 表，事件流仍是业务真相。 */
+/**
+ * 会话投影：读写 sessions 表，事件流仍是业务真相。
+ */
 
 import { randomUUID } from 'node:crypto';
 import { createNexusEvent } from '@nexus/core';
@@ -46,7 +48,9 @@ export class SessionService {
     private readonly events: EventStore
   ) {}
 
-  /* 创建会话；标题暂用默认值，后续由 AI 摘要或用户重命名。 */
+  /**
+   * 创建会话；标题暂用默认值，后续由 AI 摘要或用户重命名。
+   */
   create(input: SessionCreateInput = {}): SessionSummary {
     const id = randomUUID();
     const now = Date.now();
@@ -78,7 +82,9 @@ export class SessionService {
     });
   }
 
-  /* 列出会话：置顶优先，其次按最近活跃排序。 */
+  /**
+   * 列出会话：置顶优先，其次按最近活跃排序。
+   */
   list(): SessionSummary[] {
     const rows = this.db
       .prepare(
@@ -88,7 +94,9 @@ export class SessionService {
     return rows.map(toSummary);
   }
 
-  /* 读取会话；不存在返回 undefined。 */
+  /**
+   * 读取会话；不存在返回 undefined。
+   */
   get(id: string): SessionSummary | undefined {
     const row = this.db
       .prepare('SELECT * FROM sessions WHERE id = ? AND deleted_at IS NULL')
@@ -96,7 +104,9 @@ export class SessionService {
     return row ? toSummary(row) : undefined;
   }
 
-  /* 用户重命名；titleSource 变为 user，后续自动标题不得覆盖。 */
+  /**
+   * 用户重命名；titleSource 变为 user，后续自动标题不得覆盖。
+   */
   rename(input: SessionRenameInput): SessionSummary {
     const now = Date.now();
 
@@ -120,7 +130,9 @@ export class SessionService {
     });
   }
 
-  /* 删除会话；事件与 Run 由外键级联清理。 */
+  /**
+   * 删除会话；事件与 Run 由外键级联清理。
+   */
   remove(id: string): void {
     const now = Date.now();
 
@@ -134,7 +146,9 @@ export class SessionService {
     });
   }
 
-  /* 设置置顶状态并写入事件。 */
+  /**
+   * 设置置顶状态并写入事件。
+   */
   setPinned(id: string, pinned: boolean): SessionSummary {
     const now = Date.now();
 
@@ -156,7 +170,9 @@ export class SessionService {
     });
   }
 
-  /* 更新会话状态与最近活跃时间。 */
+  /**
+   * 更新会话状态与最近活跃时间。
+   */
   setStatus(id: string, status: SessionStatus): void {
     const now = Date.now();
     this.db

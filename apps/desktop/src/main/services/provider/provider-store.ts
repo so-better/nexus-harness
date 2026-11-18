@@ -1,4 +1,6 @@
-/* Provider 配置存储：API Key 使用 safeStorage 加密，明文不落盘。 */
+/**
+ * Provider 配置存储：API Key 使用 safeStorage 加密，明文不落盘。
+ */
 
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -31,7 +33,9 @@ const emptyFile = (): ProviderFile => ({ version: 1, providers: [] });
 const defaultMaxOutput = (contextWindow: number): number =>
   Math.min(DEFAULT_MAX_OUTPUT_TOKENS, Math.max(256, Math.floor(contextWindow / 4)));
 
-/* 加密/解密 API Key；系统安全存储不可用时明确失败。 */
+/**
+ * 加密/解密 API Key；系统安全存储不可用时明确失败。
+ */
 const encryptKey = (apiKey: string): string => {
   if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储不可用');
   return safeStorage.encryptString(apiKey).toString('base64');
@@ -57,7 +61,9 @@ const toPublic = (provider: StoredProvider): ProviderPublic => ({
     provider.maxOutputTokens ?? defaultMaxOutput(provider.contextWindow ?? DEFAULT_CONTEXT_WINDOW)
 });
 
-/* Provider 配置文件读写；baseDir 可注入用于测试。 */
+/**
+ * Provider 配置文件读写；baseDir 可注入用于测试。
+ */
 export class ProviderStore {
   constructor(private readonly baseDir?: string) {}
 
@@ -105,13 +111,17 @@ export class ProviderStore {
     await rename(temporaryPath, this.filePath);
   }
 
-  /* 列出公开配置，不解密 API Key。 */
+  /**
+   * 列出公开配置，不解密 API Key。
+   */
   async list(): Promise<ProviderPublic[]> {
     const file = await this.readFile();
     return file.providers.map(toPublic);
   }
 
-  /* 新增或更新配置；未提供 apiKey 时保留旧密钥。 */
+  /**
+   * 新增或更新配置；未提供 apiKey 时保留旧密钥。
+   */
   async save(input: ProviderSettings): Promise<ProviderPublic> {
     const file = await this.readFile();
     const existing = input.id ? file.providers.find((item) => item.id === input.id) : undefined;
@@ -158,7 +168,9 @@ export class ProviderStore {
     return toPublic(provider);
   }
 
-  /* 读取完整配置并解密 API Key，仅供主进程使用。 */
+  /**
+   * 读取完整配置并解密 API Key，仅供主进程使用。
+   */
   async get(id: string): Promise<AgentProviderConfig | undefined> {
     const file = await this.readFile();
     const provider = file.providers.find((item) => item.id === id);
@@ -176,7 +188,9 @@ export class ProviderStore {
     };
   }
 
-  /* 删除配置；不存在时视为成功。 */
+  /**
+   * 删除配置；不存在时视为成功。
+   */
   async remove(id: string): Promise<void> {
     const file = await this.readFile();
     await this.writeFile({
@@ -186,5 +200,7 @@ export class ProviderStore {
   }
 }
 
-/* 主进程共享的单例；IPC 与 AgentService 使用同一份配置。 */
+/**
+ * 主进程共享的单例；IPC 与 AgentService 使用同一份配置。
+ */
 export const providerStore = new ProviderStore();

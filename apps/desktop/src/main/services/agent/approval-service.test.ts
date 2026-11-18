@@ -1,4 +1,6 @@
-/* 审批服务测试：窗口隔离与 Run 取消。 */
+/**
+ * 审批服务测试：窗口隔离与 Run 取消。
+ */
 
 import { describe, expect, it } from 'vitest';
 import { ApprovalService } from './approval-service';

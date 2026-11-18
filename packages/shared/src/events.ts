@@ -1,8 +1,12 @@
-/* 领域事件契约：事件类型、payload schema 与统一信封。 */
+/**
+ * 领域事件契约：事件类型、payload schema 与统一信封。
+ */
 
 import { z } from 'zod';
 
-/* 事件 payload 映射；新增事件时先在此登记，再实现发布与订阅。 */
+/**
+ * 事件 payload 映射；新增事件时先在此登记，再实现发布与订阅。
+ */
 export const eventPayloadSchemas = {
   'session.created': z.object({
     workspaceId: z.string().optional(),
@@ -110,15 +114,21 @@ export const eventPayloadSchemas = {
   })
 } as const;
 
-/* 所有领域事件类型。 */
+/**
+ * 所有领域事件类型。
+ */
 export type NexusEventType = keyof typeof eventPayloadSchemas;
 
-/* 事件类型到 payload 的映射。 */
+/**
+ * 事件类型到 payload 的映射。
+ */
 export type EventPayloadMap = {
   [K in NexusEventType]: z.infer<(typeof eventPayloadSchemas)[K]>;
 };
 
-/* 统一事件信封；payload 由 type 决定。 */
+/**
+ * 统一事件信封；payload 由 type 决定。
+ */
 export interface NexusEvent<T extends NexusEventType = NexusEventType> {
   id: string;
   sessionId: string;
@@ -131,7 +141,9 @@ export interface NexusEvent<T extends NexusEventType = NexusEventType> {
   persisted?: boolean;
 }
 
-/* 事件信封的基础 zod schema；payload 由具体事件 schema 再校验。 */
+/**
+ * 事件信封的基础 zod schema；payload 由具体事件 schema 再校验。
+ */
 export const nexusEventEnvelopeSchema = z.object({
   id: z.string(),
   sessionId: z.string(),

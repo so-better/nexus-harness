@@ -1,4 +1,6 @@
-/* 主题偏好持久化测试：读写、默认值与损坏文件回退。 */
+/**
+ * 主题偏好持久化测试：读写、默认值与损坏文件回退。
+ */
 
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

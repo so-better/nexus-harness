@@ -48,6 +48,8 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 
 体验目标：对齐 Apple 的设计与交互水准，macOS 优先，Windows 兼容。
 
+成本目标：完成同等任务时尽量少消耗 token。功能设计、提示词、上下文组装、工具输出与界面展示都必须以“最小必要上下文”为约束，不能为了实现方便把大段无关内容塞给模型。
+
 定位禁区：不使用“全能 AI 助手”“聊天 + 工具”“自动化一切”等模糊或过度承诺的表述。
 
 ### 1.2 目标用户与典型场景
@@ -143,6 +145,7 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 | 崩溃恢复 | 100% 不丢事件 | 重启回放测试 |
 | 首字延迟 P95 | < 2s（不含模型排队） | 本地埋点 |
 | 成本可见性 | 100% 调用有 usage | 事件核对 |
+| 任务 token 效率 | 同类任务平均 token 不因新功能回退，逐步下降 | 按任务类型对比 usage 回归 |
 | 冷启动 | < 1.5s（Apple Silicon） | 启动计时 |
 
 ---
@@ -413,7 +416,9 @@ MCP Server 不是独立能力层，而是工具来源：配置位于 `<userData>
 事件信封：
 
 ```ts
-/* 事件信封是所有持久化事件的统一外层结构，payload 由具体事件类型定义 */
+/**
+ * 事件信封是所有持久化事件的统一外层结构，payload 由具体事件类型定义
+ */
 interface NexusEvent<T = unknown> {
   id: string;
   sessionId: string;
@@ -435,7 +440,9 @@ interface NexusEvent<T = unknown> {
 统一接口只暴露归一化后的请求与流式事件，禁止 UI 或 core 直接依赖某家 SDK 的原始类型。
 
 ```ts
-/* 模型能力声明，用于设置页提示与降级说明；视觉输入默认发送，不因声明缺失而丢弃 */
+/**
+ * 模型能力声明，用于设置页提示与降级说明；视觉输入默认发送，不因声明缺失而丢弃
+ */
 interface ProviderCapabilities {
   streaming: boolean;
   toolCalling: boolean;
@@ -491,7 +498,9 @@ interface ProviderCapabilities {
 - 图像模型接口：
 
 ```ts
-/* 图像模型适配器，文本模型通过 generate_image 工具调用 */
+/**
+ * 图像模型适配器，文本模型通过 generate_image 工具调用
+ */
 interface ImageProvider {
   capabilities: {
     textToImage: boolean;
@@ -511,6 +520,8 @@ interface ImageProvider {
 
 上下文预算 = 模型窗口 - 预留输出 - 安全余量。预算不足时自动压缩，不中断任务。
 
+上下文是核心成本，也是产品竞争力的一部分。所有上下文组装都必须以“完成当前任务所需的最少信息”为目标，不能因为实现简单就注入全量内容。
+
 系统提示由宿主统一组装：身份与安全约束、工具使用规则、工作区规则与当前任务；提供商适配层只做格式转换，不允许各提供商各自实现一套。
 
 系统提示保持稳定的静态前缀；平台、时间等动态上下文追加到最后一条用户消息，避免破坏 prompt cache。用户自定义提示词可追加，但与默认系统提示冲突时以默认提示为准；场景模式提示词按需追加。
@@ -518,6 +529,15 @@ interface ImageProvider {
 技能库只在系统提示中说明“存在可用技能”，不注入完整目录；Agent 通过 `search_skills` / `read_skill` 按需检索与读取。
 
 工具 schema 按当前模式与权限注入：计划模式只注入只读工具；MCP 工具只注入已启用且已连接的 Server。
+
+低 token 约束：
+
+- 只注入当前任务必要的信息；禁止把整个工作区、完整会话历史、重复静态规范或无差别工具清单塞进上下文。
+- 优先传递路径、ID、摘要与 Artifact 引用；需要细节时再按需读取，不直接发送全文。
+- 系统提示与工具 schema 保持精简且稳定；静态前缀与动态内容分离，避免破坏 prompt cache。
+- 工具输出与文件内容默认截断；完整内容落 Artifact，摘要只保留路径、命令、错误码、决策与待办。
+- 新功能必须评估 token 成本，并纳入验收；能降低 token 的方案优先，不得因新功能让同类任务 token 明显回退。
+- 新增自动注入内容必须说明必要性，并提供关闭或按需加载路径。
 
 分配顺序（从不可压缩到可压缩）：
 
@@ -905,7 +925,9 @@ ctx.workspace.list(dir: string): Promise<WorkspaceEntry[]>;
 ```
 
 ```ts
-/* 插槽上下文，按 location 提供只读的会话/消息/工具/文件/用量信息 */
+/**
+ * 插槽上下文，按 location 提供只读的会话/消息/工具/文件/用量信息
+ */
 interface SlotContext {
   location: string;
   sessionId: string;
@@ -1203,7 +1225,9 @@ interface SlotContext {
 - Agent 只在存在阻塞性歧义或需要用户决策时提问；能合理假设时先执行，并在结果中说明。
 
 ```ts
-/* 结构化提问请求，ask_user 工具使用；questions 为 1–4 个问题 */
+/**
+ * 结构化提问请求，ask_user 工具使用；questions 为 1–4 个问题
+ */
 interface AskQuestion {
   id: string;
   header?: string;
@@ -1214,7 +1238,9 @@ interface AskQuestion {
   required?: boolean;
 }
 
-/* 用户回答，按 questionId 回填给 Agent */
+/**
+ * 用户回答，按 questionId 回填给 Agent
+ */
 interface AskUserAnswer {
   questionId: string;
   selectedOptionIds?: string[];
@@ -1244,31 +1270,41 @@ interface AskUserAnswer {
 `renderer/styles/tokens.less` 定义语义变量名与尺寸、字体、动效等与主题无关的 token；颜色赋值放在 `themes/light.less` 与 `themes/dark.less`。以下为完整语义清单，颜色值仅作 light 主题示例：
 
 ```less
-/* 背景与表面 */
+/**
+ * 背景与表面
+ */
 --nh-color-bg-base: #ffffff;
 --nh-color-bg-elevated: #f7f8fa;
 --nh-color-bg-hover: #eef0f4;
 
-/* 文本 */
+/**
+ * 文本
+ */
 --nh-color-text-primary: #1f2329;
 --nh-color-text-secondary: #5c6570;
 --nh-color-text-disabled: #a8b0ba;
 
-/* 边框、强调、状态 */
+/**
+ * 边框、强调、状态
+ */
 --nh-color-border: #e3e6eb;
 --nh-color-accent: #3b82f6;
 --nh-color-success: #16a34a;
 --nh-color-warning: #d97706;
 --nh-color-danger: #dc2626;
 
-/* 尺寸与动效 */
+/**
+ * 尺寸与动效
+ */
 --nh-radius-sm: 4px;
 --nh-radius-md: 8px;
 --nh-space-sm: 8px;
 --nh-space-md: 16px;
 --nh-shadow-popover: 0 8px 24px rgb(0 0 0 / 12%);
 
-/* 字体与动效 */
+/**
+ * 字体与动效
+ */
 --nh-font-sans: -apple-system, "SF Pro Text", "Segoe UI Variable", "Segoe UI", sans-serif;
 --nh-font-mono: "SF Mono", "Cascadia Code", ui-monospace, monospace;
 --nh-duration-fast: 120ms;
@@ -1322,6 +1358,8 @@ interface AskUserAnswer {
 - 编辑器、终端、图表等重模块全部懒加载，首屏只加载当前界面。
 - 列表超过 50 项必须虚拟化；流式消息采用增量更新，禁止整列表重渲染。
 - 新增依赖必须评估包体积与启动开销，核心界面不引入重型 UI 依赖。
+- token 属于产品预算：同等任务优先低 token 方案；新增提示词、工具 schema、自动注入上下文与默认工具输出必须有成本依据。
+- 任何“为了省实现时间而多塞上下文”的做法都不接受；必要时先做按需读取、索引、摘要或 Artifact 引用。
 
 ### 5.6 无障碍与国际化
 
@@ -1387,16 +1425,18 @@ interface AskUserAnswer {
 
 允许与禁止：
 
-- 允许：`//` 单行注释、`/* ... */` 块注释。
-- **禁止**：`/** ... */` 文档注释（JSDoc 风格），任何位置都不得出现。
+- 允许：`//` 单行注释、`/** ... */` 多行文档注释。
+- **禁止**：`/* ... */` 单星块注释，无论行内还是独立成行。
+- 文档注释必须使用换行块形式，禁止压缩成单行 `/** ... */`。
+- 注释形式不强制统一；优先选择能清楚说明意图的形式。
 - 禁止：注释掉的死代码；需要保留的实现请用 Git 历史或 `// TODO` 说明，不得整段注释。
 - 禁止：与代码不一致的过期注释。改代码必须同步改注释。
 - 禁止：无信息量的注释，如 `// 设置变量`、`// 循环数组`。
 
 必须注释的位置：
 
-- 每个文件顶部：用块注释说明文件职责、所属模块、关键约束。
-- 每个导出的函数、方法、类型、接口、枚举、常量：上方用块注释说明用途、参数含义、返回值、异常与副作用。
+- 每个文件顶部：用文档注释或单行注释说明文件职责、所属模块、关键约束。
+- 每个导出的函数、方法、类型、接口、枚举、常量：上方用文档注释说明用途、参数含义、返回值、异常与副作用。
 - 每个 store 的 state、getter、action。
 - 每个 IPC handler、每个事件订阅与发布。
 - 函数内部非显而易见的分支、正则、算法、兼容处理、性能取舍：用 `//` 说明**为什么**这样做，而不是重复代码在做什么。
@@ -1406,14 +1446,14 @@ interface AskUserAnswer {
 风格：
 
 - 注释语言统一使用**中文**；专有名词、API 名、类型名保留英文。
-- 块注释用于“对外说明”，单行注释用于“对内解释”。
+- 文档注释用于“对外说明”，单行注释用于“对内解释”。
 - 用 `TODO(负责人): 原因与计划`、`FIXME(负责人): 问题与影响` 标记待办，禁止裸 `TODO`。
 - 注释不写变更日志，不写“新增”“修改”等历史信息。
 
 示例：
 
 ```ts
-/*
+/**
  * 将模型返回的工具调用归一化为内部格式。
  * 不同提供商对 arguments 的编码不一致，这里统一为对象并做 schema 校验。
  * 校验失败时抛出 ToolCallParseError，由上层转为可展示的错误消息。
@@ -1561,6 +1601,8 @@ pnpm format         # Prettier
 - 禁止提交 `typecheck` 或 `lint` 失败代码。
 - 禁止在源码中写死环境路径、密钥、服务地址。
 - 依赖新增必须在 PR 说明用途与替代方案评估。
+- 涉及提示词、工具 schema、上下文注入或会话历史的功能，必须在 PR 说明 token 影响，并对比修改前后的输入 token。
+- 不得无依据增加默认上下文；新增自动注入内容必须提供按需加载或关闭路径。
 - 构建产物、插件产物、日志文件不得入库。
 - 提交前必须确认 `.gitignore` 覆盖 `node_modules`、`dist`、`out`、日志与本地数据库。
 - `tsconfig.base.json` 只提供共享编译选项；其 `include` 仅用于避免 IDE 把空 base 配置判为非法项目，子配置必须用各自的 `include` / `exclude` 覆盖。
@@ -1706,13 +1748,15 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 组件已按标准拆分，展示组件不访问 store 与 IPC。
 - [ ] 命名符合第 6 节，无拼音、无无意义缩写。
 - [ ] 新能力通过 tool / skill / plugin 进入，`core` 中没有领域硬编码。
-- [ ] 所有导出成员与关键代码块有中文注释；没有 `/** */`；没有死代码。
+- [ ] 所有导出成员与关键代码块有中文注释；没有 `/* ... */`，没有死代码。
 - [ ] 所有颜色来自语义 token，深浅主题下均已检查。
 - [ ] 尺寸、间距、字号与圆角使用偶数（推荐 4 的倍数），1px 边框除外。
 - [ ] 异步调用未使用 `void` 抑制，已显式 `await` 或 `.catch()`。
 - [ ] 动效使用 token，`prefers-reduced-motion` 与 Windows 回退均已验证。
 - [ ] 长列表已虚拟化，重计算没有阻塞渲染主线程。
 - [ ] 跨进程数据经过 zod 校验，公开方法有显式返回类型。
+- [ ] 已评估 token 成本：没有注入无关全文或重复提示，工具输出、历史与文件内容可按需读取或压缩。
+- [ ] 新功能提供低 token 路径，并对同类任务的输入 token 做了前后对比或回归验证。
 - [ ] 设置项经 zod 校验，API Key 只存安全存储，设置表只存引用。
 - [ ] 模型配置支持 `extra_params`、自定义 headers、上下文窗口与 token 价格，并可测试连接与刷新模型列表。
 - [ ] 上下文压缩保留不可压缩内容，写入 `context.compacted`，失败可降级为硬截断。

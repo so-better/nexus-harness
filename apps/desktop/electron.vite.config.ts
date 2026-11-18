@@ -1,4 +1,6 @@
-/* electron-vite 构建配置：主进程、preload 与渲染进程共用 @shared 别名。 */
+/**
+ * electron-vite 构建配置：主进程、preload 与渲染进程共用 @shared 别名。
+ */
 
 import { resolve } from 'node:path';
 import vue from '@vitejs/plugin-vue';

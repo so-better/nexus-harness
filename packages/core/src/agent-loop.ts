@@ -1,4 +1,6 @@
-/* 单 Agent 循环：模型调用 → 工具执行 → 结果回填，直到停止条件。 */
+/**
+ * 单 Agent 循环：模型调用 → 工具执行 → 结果回填，直到停止条件。
+ */
 
 import { randomUUID } from 'node:crypto';
 import type {
@@ -33,7 +35,9 @@ export type ToolExecutor = (
   context: ToolExecutionContext
 ) => Promise<ToolExecutionResult>;
 
-/* Agent 工具定义：在 Provider schema 之外补充权限与审批要求。 */
+/**
+ * Agent 工具定义：在 Provider schema 之外补充权限与审批要求。
+ */
 export interface AgentToolDefinition extends ToolSchema {
   permission: PermissionLevel;
   requiresApproval: boolean;
@@ -71,7 +75,9 @@ export interface AgentLoopResult {
 
 const DEFAULT_MAX_STEPS = 10;
 
-/* 执行单次 Run；工具失败会作为 tool 消息回填，让模型自行调整。 */
+/**
+ * 执行单次 Run；工具失败会作为 tool 消息回填，让模型自行调整。
+ */
 export class AgentLoop {
   private readonly options: AgentLoopOptions;
   private messages: ChatMessage[];
@@ -236,7 +242,9 @@ export class AgentLoop {
     };
   }
 
-  /* 调用宿主提供的上下文准备器；压缩事件由循环统一写入，保证序号一致。 */
+  /**
+   * 调用宿主提供的上下文准备器；压缩事件由循环统一写入，保证序号一致。
+   */
   private async prepareContext(): Promise<void> {
     const preparer = this.options.prepareContext;
     if (!preparer) return;
@@ -265,7 +273,9 @@ export class AgentLoop {
     this.messages = prepared.messages;
   }
 
-  /* 执行一步模型调用，收集文本、工具调用与 usage。 */
+  /**
+   * 执行一步模型调用，收集文本、工具调用与 usage。
+   */
   private async runStep(): Promise<{
     text: string;
     toolCalls: ProviderToolCall[];
@@ -328,7 +338,9 @@ export class AgentLoop {
     return { text, toolCalls, finishReason, ...(error ? { error } : {}) };
   }
 
-  /* 工具调用前的权限与审批门禁；拒绝时返回结构化错误。 */
+  /**
+   * 工具调用前的权限与审批门禁；拒绝时返回结构化错误。
+   */
   private async authorizeTool(
     call: ProviderToolCall
   ): Promise<{ code: string; message: string } | undefined> {
@@ -376,7 +388,9 @@ export class AgentLoop {
     return undefined;
   }
 
-  /* 将门禁失败记录为 tool.failed，并回填给模型。 */
+  /**
+   * 将门禁失败记录为 tool.failed，并回填给模型。
+   */
   private recordToolFailure(
     call: ProviderToolCall,
     error: { code: string; message: string }
@@ -392,7 +406,9 @@ export class AgentLoop {
     });
   }
 
-  /* 执行单个工具调用；没有执行器或执行抛错时转为结构化失败。 */
+  /**
+   * 执行单个工具调用；没有执行器或执行抛错时转为结构化失败。
+   */
   private async executeTool(call: ProviderToolCall): Promise<ToolExecutionResult> {
     const executor = this.options.executeTool;
     if (!executor) {

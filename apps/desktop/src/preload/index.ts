@@ -1,4 +1,6 @@
-/* preload 唯一入口：通过 contextBridge 暴露类型化 API。 */
+/**
+ * preload 唯一入口：通过 contextBridge 暴露类型化 API。
+ */
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
@@ -11,6 +13,7 @@ const bridge: NexusBridge = {
   },
   session: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.sessionList),
+    events: (id) => ipcRenderer.invoke(IPC_CHANNELS.sessionEvents, id),
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionCreate, input),
     get: (id) => ipcRenderer.invoke(IPC_CHANNELS.sessionGet, id),
     rename: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionRename, input),
@@ -27,6 +30,9 @@ const bridge: NexusBridge = {
   },
   artifact: {
     read: (input) => ipcRenderer.invoke(IPC_CHANNELS.artifactRead, input)
+  },
+  workspace: {
+    chooseRoot: () => ipcRenderer.invoke(IPC_CHANNELS.workspaceChooseRoot)
   },
   approval: {
     resolve: (input) => ipcRenderer.invoke(IPC_CHANNELS.approvalResolve, input)

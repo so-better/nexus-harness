@@ -1,4 +1,6 @@
-/* OpenAI 兼容 Provider：用 fetch 解析 SSE，归一化为统一流式事件。 */
+/**
+ * OpenAI 兼容 Provider：用 fetch 解析 SSE，归一化为统一流式事件。
+ */
 
 import type { UsageSummary } from '@nexus/shared';
 import type {
@@ -33,7 +35,9 @@ const DEFAULT_CAPABILITIES: ProviderCapabilities = {
   reasoning: true
 };
 
-/* 把内部消息转换为 OpenAI chat/completions 消息。 */
+/**
+ * 把内部消息转换为 OpenAI chat/completions 消息。
+ */
 const toOpenAIMessage = (message: ChatMessage): Record<string, unknown> => {
   if (message.role === 'tool') {
     return {
@@ -61,7 +65,9 @@ const toOpenAIMessage = (message: ChatMessage): Record<string, unknown> => {
   return { role: message.role, content: message.content };
 };
 
-/* 把内部工具 schema 转换为 OpenAI function 工具。 */
+/**
+ * 把内部工具 schema 转换为 OpenAI function 工具。
+ */
 const toOpenAITool = (tool: ToolSchema): Record<string, unknown> => ({
   type: 'function',
   function: {
@@ -71,7 +77,9 @@ const toOpenAITool = (tool: ToolSchema): Record<string, unknown> => ({
   }
 });
 
-/* 尽力解析流式工具参数；失败时保留原始文本。 */
+/**
+ * 尽力解析流式工具参数；失败时保留原始文本。
+ */
 const parseArguments = (text: string): unknown => {
   if (!text.trim()) return {};
   try {
@@ -81,7 +89,9 @@ const parseArguments = (text: string): unknown => {
   }
 };
 
-/* 从流式 delta 中提取文本，兼容字符串与文本片段数组。 */
+/**
+ * 从流式 delta 中提取文本，兼容字符串与文本片段数组。
+ */
 const extractText = (value: unknown): string => {
   if (typeof value === 'string') return value;
   if (!Array.isArray(value)) return '';
@@ -98,7 +108,9 @@ const extractText = (value: unknown): string => {
     .join('');
 };
 
-/* OpenAI 兼容流式聊天实现；只依赖标准 fetch。 */
+/**
+ * OpenAI 兼容流式聊天实现；只依赖标准 fetch。
+ */
 export class OpenAICompatibleProvider implements ChatProvider {
   readonly capabilities: ProviderCapabilities;
 
@@ -155,7 +167,9 @@ export class OpenAICompatibleProvider implements ChatProvider {
     let finishReason = 'stop';
     let done = false;
 
-    /* 处理单行 SSE，返回需要下发的事件并更新工具调用状态。 */
+    /**
+     * 处理单行 SSE，返回需要下发的事件并更新工具调用状态。
+     */
     const processLine = (rawLine: string): ProviderStreamEvent[] => {
       const line = rawLine.trim();
       if (!line.startsWith('data:')) return [];
