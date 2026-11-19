@@ -33,7 +33,27 @@
         <p v-if="tool.artifactId" class="nh-tool__meta">
           {{ t('tool.artifactId') }}: {{ tool.artifactId }}
         </p>
+        <PluginSlot
+          location="toolcall.body"
+          :context="{
+            location: 'toolcall.body',
+            sessionId,
+            messageId,
+            runId,
+            toolCallId: tool.id
+          }"
+        />
       </div>
+      <PluginSlot
+        location="toolcall.footer"
+        :context="{
+          location: 'toolcall.footer',
+          sessionId,
+          messageId,
+          runId,
+          toolCallId: tool.id
+        }"
+      />
     </NCollapseItem>
   </NCollapse>
 </template>
@@ -48,10 +68,23 @@ import { NButton, NCollapse, NCollapseItem, NTag } from 'naive-ui';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import type { ChatToolCall } from '../types';
+import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 
-const props = withDefaults(defineProps<{ tool: ChatToolCall; flush?: boolean }>(), {
-  flush: false
-});
+const props = withDefaults(
+  defineProps<{
+    tool: ChatToolCall;
+    flush?: boolean;
+    sessionId?: string | undefined;
+    messageId?: string | undefined;
+    runId?: string | undefined;
+  }>(),
+  {
+    flush: false,
+    sessionId: undefined,
+    messageId: undefined,
+    runId: undefined
+  }
+);
 
 const emit = defineEmits<{ 'authorize-root': [] }>();
 

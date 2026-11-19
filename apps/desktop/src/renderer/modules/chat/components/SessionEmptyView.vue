@@ -11,6 +11,8 @@
         </div>
       </div>
 
+      <PluginSlot location="empty-state" :context="{ location: 'empty-state', sessionId }" />
+
       <ComposerBox
         class="nh-session-empty__composer"
         hero
@@ -47,6 +49,7 @@ import type { MessageFileReference } from '@shared/events';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import ComposerBox from './ComposerBox.vue';
+import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 
 defineProps<{
   disabledReason?: string | undefined;

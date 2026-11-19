@@ -408,6 +408,11 @@ describe('projectEvents', () => {
     expect(projection.messages[2]).toMatchObject({ role: 'system' });
     expect(projection.approvals[0]?.status).toBe('approved');
     expect(projection.usage).toEqual({ inputTokens: 10, outputTokens: 5, cost: 0.1 });
+    expect(projection.messages.find((message) => message.id === 'assistant-1')?.usage).toEqual({
+      inputTokens: 10,
+      outputTokens: 5,
+      cost: 0.1
+    });
     expect(projection.status).toBe('completed');
     expect(projection.running).toBe(false);
   });

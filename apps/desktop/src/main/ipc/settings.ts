@@ -13,6 +13,7 @@ import {
   type CacheInfo,
   type NotificationBadgeStyle
 } from '@shared/ipc/contracts';
+import { pluginSkinSelectionSchema, type PluginSkinSelection } from '@shared/plugin';
 import { fail, ok, type Result } from '@shared/ipc/result';
 import {
   applyAutoLaunch,
@@ -28,6 +29,7 @@ import {
   loadNotificationBadge,
   saveNotificationBadge
 } from '../services/settings/notification-settings';
+import { loadSkinSelection, saveSkinSelection } from '../services/settings/skin-settings';
 import { clearCache, getCacheInfo } from '../services/cache/cache-service';
 import { getAppDataPaths } from '../services/storage/paths';
 import { hasActiveRuns } from '../services/agent/run-registry';
@@ -122,6 +124,37 @@ export const registerSettingsIpc = (): void => {
         return fail(
           'SETTINGS_WRITE_FAILED',
           error instanceof Error ? error.message : '保存通知设置失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.settingsGetSkin,
+    async (): Promise<Result<PluginSkinSelection | null>> => {
+      try {
+        return ok(await loadSkinSelection());
+      } catch (error) {
+        return fail(
+          'SETTINGS_READ_FAILED',
+          error instanceof Error ? error.message : '读取皮肤设置失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.settingsSetSkin,
+    async (_event, rawSelection: unknown): Promise<Result<PluginSkinSelection | null>> => {
+      if (rawSelection !== null && !pluginSkinSelectionSchema.safeParse(rawSelection).success) {
+        return fail('SETTINGS_INVALID_INPUT', '皮肤参数不合法');
+      }
+      try {
+        return ok(await saveSkinSelection(rawSelection as PluginSkinSelection | null));
+      } catch (error) {
+        return fail(
+          'SETTINGS_WRITE_FAILED',
+          error instanceof Error ? error.message : '保存皮肤设置失败'
         );
       }
     }

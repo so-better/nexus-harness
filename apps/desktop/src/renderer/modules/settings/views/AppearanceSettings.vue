@@ -26,6 +26,17 @@
 
       <p class="nh-appearance__hint">{{ t('settings.themeHint') }}</p>
     </div>
+
+    <div v-if="skinOptions.length" class="nh-appearance__group nh-appearance__skin-group">
+      <p class="nh-appearance__group-title">{{ t('settings.skin') }}</p>
+      <NSelect
+        :value="selectedSkinValue"
+        :options="skinOptions"
+        :placeholder="t('settings.skinNone')"
+        @update:value="changeSkin"
+      />
+      <p class="nh-appearance__hint">{{ t('settings.skinHint') }}</p>
+    </div>
   </section>
 </template>
 
@@ -35,14 +46,30 @@
  */
 
 import { computed, onMounted, ref } from 'vue';
-import { useMessage } from 'naive-ui';
+import { NSelect, useMessage, type SelectOption } from 'naive-ui';
 import type { ThemeSource } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
+import { usePluginRuntimeStore } from '@/plugin-runtime/runtime.store';
 import { getThemeInfo, setThemeSource } from '../api/settings.api';
 
 const message = useMessage();
+const pluginRuntime = usePluginRuntimeStore();
 const themeSource = ref<ThemeSource>('system');
+
+const skinOptions = computed<SelectOption[]>(() => [
+  { label: t('settings.skinNone'), value: '' },
+  ...pluginRuntime.skins.map((skin) => ({
+    label: `${skin.title} · ${skin.pluginName}`,
+    value: `${skin.pluginId}:${skin.id}`
+  }))
+]);
+
+const selectedSkinValue = computed(() =>
+  pluginRuntime.selectedSkin
+    ? `${pluginRuntime.selectedSkin.pluginId}:${pluginRuntime.selectedSkin.skinId}`
+    : ''
+);
 
 const options = computed<
   Array<{ value: ThemeSource; label: string; icon: 'monitor' | 'sun' | 'moon' }>
@@ -66,6 +93,11 @@ const load = async (): Promise<void> => {
 /**
  * 切换主题来源；失败时恢复原选择。
  */
+const changeSkin = async (value: string): Promise<void> => {
+  const [pluginId, skinId] = value.split(':');
+  await pluginRuntime.selectSkin(pluginId && skinId ? { pluginId, skinId } : null);
+};
+
 const changeTheme = async (value: ThemeSource): Promise<void> => {
   if (themeSource.value === value) return;
   const previous = themeSource.value;
@@ -91,6 +123,10 @@ onMounted(load);
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.nh-appearance__skin-group {
+  margin-top: 24px;
 }
 
 .nh-appearance__group-title {

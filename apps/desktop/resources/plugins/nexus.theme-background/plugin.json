@@ -1,0 +1,20 @@
+{
+  "id": "nexus.theme-background",
+  "name": "晨雾背景",
+  "version": "1.1.0",
+  "description": "用语义色绘制更明显的晨雾渐变背景。",
+  "engines": {
+    "nexus": "^0.1.0"
+  },
+  "renderer": "dist/renderer.mjs",
+  "activationEvents": [],
+  "permissions": ["ui.skin"],
+  "contributes": {
+    "skins": [
+      {
+        "id": "paper",
+        "title": "晨雾"
+      }
+    ]
+  }
+}

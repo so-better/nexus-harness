@@ -2,6 +2,7 @@
  * 渲染进程主题初始化：同步主题、CSS 变量与 Naive UI 调色板。
  */
 
+import { nexus } from './nexus-bridge';
 import { ref } from 'vue';
 import type { ThemeInfo, ThemeSource } from '@shared/ipc/contracts';
 import { applyPalette, getPalette } from './theme-palette';
@@ -34,7 +35,7 @@ const applyTheme = (info: ThemeInfo): void => {
  */
 export const initTheme = async (): Promise<() => void> => {
   try {
-    const theme = window.nexus?.theme;
+    const theme = nexus?.theme;
     if (!theme) return () => undefined;
 
     const unsubscribe = theme.onChange(applyTheme);

@@ -261,6 +261,19 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       usage.inputTokens += payload.inputTokens;
       usage.outputTokens += payload.outputTokens;
       usage.cost += payload.cost ?? 0;
+      const target = [...messages]
+        .reverse()
+        .find(
+          (message) =>
+            message.role === 'assistant' && (!event.runId || message.runId === event.runId)
+        );
+      if (target) {
+        const messageUsage = target.usage ?? emptyUsage();
+        messageUsage.inputTokens += payload.inputTokens;
+        messageUsage.outputTokens += payload.outputTokens;
+        messageUsage.cost += payload.cost ?? 0;
+        target.usage = messageUsage;
+      }
       continue;
     }
 

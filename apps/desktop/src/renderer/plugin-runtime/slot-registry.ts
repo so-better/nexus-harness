@@ -3,62 +3,34 @@
  */
 
 import type { Unsubscribe } from '@shared/ipc/contracts';
+import type { PluginSlotLocation } from '@shared/plugin';
+import { PLUGIN_SLOT_LOCATIONS } from '@shared/plugin';
 import type { UsageSummary } from '@shared/usage';
 
-export const SLOT_LOCATIONS = [
-  'titlebar.actions',
-  'sidebar.header',
-  'sidebar.footer',
-  'inspector.panel',
-  'statusbar.left',
-  'statusbar.right',
-  'composer.toolbar',
-  'composer.above',
-  'composer.footer',
-  'empty-state',
-  'session.header.actions',
-  'session.tab.badge',
-  'session.item.actions',
-  'message.assistant.header',
-  'message.assistant.footer',
-  'message.assistant.actions',
-  'message.user.footer',
-  'message.user.actions',
-  'toolcall.body',
-  'toolcall.footer',
-  'approval.details',
-  'filetree.header',
-  'filetree.row',
-  'filetree.actions',
-  'editor.toolbar',
-  'terminal.toolbar',
-  'filecard.actions',
-  'filecard.footer',
-  'settings.section',
-  'extensions.detail'
-] as const;
+export const SLOT_LOCATIONS = PLUGIN_SLOT_LOCATIONS;
 
-export type SlotLocation = (typeof SLOT_LOCATIONS)[number];
+export type SlotLocation = PluginSlotLocation;
 
 /**
  * 宿主注入给插槽的只读上下文。
  */
 export interface SlotContext {
   location: SlotLocation;
-  sessionId?: string;
-  runId?: string;
-  messageId?: string;
-  role?: 'user' | 'assistant';
-  toolCallId?: string;
-  approvalId?: string;
-  fileId?: string;
-  usage?: UsageSummary;
-  model?: string;
+  sessionId?: string | undefined;
+  runId?: string | undefined;
+  messageId?: string | undefined;
+  role?: 'user' | 'assistant' | undefined;
+  toolCallId?: string | undefined;
+  approvalId?: string | undefined;
+  fileId?: string | undefined;
+  usage?: UsageSummary | undefined;
+  model?: string | undefined;
 }
 
 export type SlotMount = (element: HTMLElement, context: SlotContext) => Unsubscribe;
 
 export interface SlotContribution {
+  pluginId: string;
   id: string;
   location: SlotLocation;
   mount: SlotMount;
@@ -74,7 +46,7 @@ export class SlotRegistry {
    * 注册插槽贡献，返回注销函数。
    */
   register(contribution: SlotContribution): Unsubscribe {
-    const key = `${contribution.location}:${contribution.id}`;
+    const key = `${contribution.pluginId}:${contribution.location}:${contribution.id}`;
     if (this.contributions.has(key)) throw new Error(`插槽已注册：${key}`);
     this.contributions.set(key, contribution);
 
@@ -97,3 +69,8 @@ export class SlotRegistry {
     this.contributions.clear();
   }
 }
+
+/**
+ * 宿主全局插槽注册表。
+ */
+export const slotRegistry = new SlotRegistry();

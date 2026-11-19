@@ -2,9 +2,34 @@
   <footer class="nh-statusbar">
     <div class="nh-statusbar__meta">
       <span class="nh-statusbar__version">v{{ version }}</span>
+      <PluginSlot location="statusbar.left" :context="{ location: 'statusbar.left', sessionId }" />
+      <NButton
+        v-for="item in pluginItems.left"
+        :key="item.id"
+        text
+        size="tiny"
+        :title="item.title ?? item.text"
+        @click="item.onClick?.()"
+      >
+        {{ item.text }}
+      </NButton>
     </div>
 
     <div class="nh-statusbar__actions">
+      <PluginSlot
+        location="statusbar.right"
+        :context="{ location: 'statusbar.right', sessionId }"
+      />
+      <NButton
+        v-for="item in pluginItems.right"
+        :key="item.id"
+        text
+        size="tiny"
+        :title="item.title ?? item.text"
+        @click="item.onClick?.()"
+      >
+        {{ item.text }}
+      </NButton>
       <NDropdown trigger="click" placement="top-end" :options="themeOptions" @select="selectTheme">
         <NButton text size="tiny" :aria-label="t('app.theme')" :title="t('app.theme')">
           <template #icon>
@@ -25,6 +50,11 @@
         {{ t('terminal.title') }}
       </NButton>
 
+      <NButton text size="tiny" @click="emit('open-extensions')">
+        <template #icon><AppIcon name="spark" :size="14" /></template>
+        {{ t('plugins.open') }}
+      </NButton>
+
       <NButton text size="tiny" @click="emit('open-settings')">
         <template #icon>
           <AppIcon name="settings" :size="14" />
@@ -40,21 +70,42 @@
  * 状态栏：版本、主题下拉菜单与设置入口。
  */
 
-import { computed, h } from 'vue';
+import { computed, h, onMounted, watch } from 'vue';
 import { NButton, NDropdown, type DropdownOption } from 'naive-ui';
 import type { ThemeSource } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
+import { usePluginRuntimeStore } from '@/plugin-runtime/runtime.store';
+import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 
 const props = defineProps<{
   themeSource: ThemeSource;
   version: string;
   terminalOpen: boolean;
+  sessionId?: string | undefined;
 }>();
+
+const pluginRuntime = usePluginRuntimeStore();
+const pluginItems = computed(() => ({
+  left: pluginRuntime.statusItems.filter((item) => item.align === 'left'),
+  right: pluginRuntime.statusItems.filter((item) => item.align === 'right')
+}));
+
+onMounted(() => {
+  pluginRuntime.activateStatusbar().catch(() => undefined);
+});
+
+watch(
+  () => pluginRuntime.plugins,
+  () => {
+    pluginRuntime.activateStatusbar().catch(() => undefined);
+  }
+);
 
 const emit = defineEmits<{
   'update-theme': [source: ThemeSource];
   'open-settings': [];
+  'open-extensions': [];
   'toggle-terminal': [];
 }>();
 

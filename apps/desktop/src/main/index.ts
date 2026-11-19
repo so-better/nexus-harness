@@ -2,10 +2,11 @@
  * Electron 主进程入口：单实例、窗口生命周期与 IPC 注册。
  */
 
-import { app, BrowserWindow, nativeTheme } from 'electron';
+import { app, BrowserWindow, nativeTheme, protocol } from 'electron';
+import { readFile } from 'node:fs/promises';
+import { extname, join } from 'node:path';
 import { createNexusEvent } from '@nexus/core';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { createMainWindow } from './app/create-window';
 import { registerIpcHandlers } from './ipc';
 import {
@@ -29,8 +30,46 @@ import { SessionService } from './services/session/session-service';
 import { syncBuiltinPlugins } from './services/plugins/builtin-plugin-service';
 import { initializeAutoLaunch } from './services/settings/startup-settings';
 import { terminalService } from './services/terminal/terminal-service';
+import { PluginHost } from './services/plugins/plugin-host';
+import { getPluginHost, setPluginHost } from './services/plugins/plugin-host-instance';
 
 app.setName('Nexus');
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'nexus-plugin',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      corsEnabled: true
+    }
+  }
+]);
+
+const pluginMime = (path: string): string => {
+  switch (extname(path).toLowerCase()) {
+    case '.js':
+    case '.mjs':
+      return 'text/javascript';
+    case '.css':
+      return 'text/css';
+    case '.json':
+      return 'application/json';
+    case '.png':
+      return 'image/png';
+    case '.svg':
+      return 'image/svg+xml';
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.woff2':
+      return 'font/woff2';
+    default:
+      return 'application/octet-stream';
+  }
+};
 
 /**
  * 统一初始化主窗口的焦点与终端生命周期监听。
@@ -61,10 +100,12 @@ if (!hasSingleInstanceLock) {
     .whenReady()
     .then(async () => {
       await ensureAppDataDirectories();
-      await syncBuiltinPlugins({
-        sourceDir: getBuiltinPluginsDirectory(),
-        destinationDir: getAppDataPaths().plugins
-      });
+      const builtinIds = new Set(
+        await syncBuiltinPlugins({
+          sourceDir: getBuiltinPluginsDirectory(),
+          destinationDir: getAppDataPaths().plugins
+        })
+      );
       nativeTheme.themeSource = await loadThemeSource();
       setNotificationLanguage(await loadLanguage());
       setNotificationBadgeStyle(await loadNotificationBadge());
@@ -74,6 +115,28 @@ if (!hasSingleInstanceLock) {
       const runStore = new RunStore(db);
       const eventStore = new EventStore(db);
       const sessions = new SessionService(db, eventStore);
+      const pluginHost = new PluginHost({
+        db,
+        directory: getAppDataPaths().plugins,
+        builtinIds
+      });
+      setPluginHost(pluginHost);
+      await pluginHost.scan();
+      protocol.handle('nexus-plugin', async (request) => {
+        const url = new URL(request.url);
+        const pluginId = url.hostname;
+        const relativePath = decodeURIComponent(url.pathname.replace(/^\//, ''));
+        const filePath = await pluginHost.getRendererFile(pluginId, relativePath);
+        if (!filePath) return new Response('Plugin file not found', { status: 404 });
+        const content = await readFile(filePath);
+        return new Response(new Uint8Array(content), {
+          headers: {
+            'content-type': pluginMime(filePath),
+            'access-control-allow-origin': '*',
+            'cross-origin-resource-policy': 'cross-origin'
+          }
+        });
+      });
       for (const run of runStore.markInterrupted()) {
         sessions.setStatus(run.session_id, 'interrupted');
         eventStore.append(
@@ -108,6 +171,11 @@ if (!hasSingleInstanceLock) {
     });
 
   app.on('will-quit', () => {
+    getPluginHost()
+      ?.dispose()
+      .catch((error: unknown) => {
+        console.error('插件宿主关闭失败', error);
+      });
     terminalService.disposeAll();
     closeDatabase();
   });

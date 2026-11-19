@@ -169,6 +169,26 @@ const migrate = (db: DatabaseSync): void => {
     `);
     db.exec('PRAGMA user_version = 8');
   }
+
+  if (version < 9) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS plugins (
+        id TEXT PRIMARY KEY,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        error TEXT,
+        source TEXT NOT NULL DEFAULT 'user',
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS plugin_storage (
+        plugin_id TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        PRIMARY KEY (plugin_id, key)
+      );
+    `);
+    db.exec('PRAGMA user_version = 9');
+  }
 };
 
 /**

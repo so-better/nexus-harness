@@ -9,6 +9,7 @@
         :highlighted="message.id === highlightedId"
         :ask-users="askForMessage(message.id)"
         :approvals="approvals"
+        :session-id="sessionId"
         :is-last-assistant="message.id === lastAssistantId"
         :actions-disabled="actionsDisabled"
         @content-growth="handleContentGrowth"

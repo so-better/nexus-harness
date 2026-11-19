@@ -46,6 +46,7 @@ export interface ChatMessageView {
   superseded?: boolean;
   hidden?: boolean;
   runId?: string;
+  usage?: ChatUsage;
   files?: OutputFile[];
   references?: MessageFileReference[];
 }

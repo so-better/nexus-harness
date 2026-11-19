@@ -33,6 +33,13 @@
       </div>
     </header>
 
+    <div class="nh-sidebar__plugin-header">
+      <PluginSlot
+        location="sidebar.header"
+        :context="{ location: 'sidebar.header', sessionId: activeId }"
+      />
+    </div>
+
     <div v-if="searchMode" class="nh-sidebar__search">
       <NInput
         ref="searchInput"
@@ -126,6 +133,12 @@
         {{ t('session.clearAllConfirm') }}
       </NPopconfirm>
     </footer>
+    <div v-if="!searchMode" class="nh-sidebar__plugin-footer">
+      <PluginSlot
+        location="sidebar.footer"
+        :context="{ location: 'sidebar.footer', sessionId: activeId }"
+      />
+    </div>
   </aside>
 </template>
 
@@ -142,6 +155,7 @@ import AppIcon from '@/components/AppIcon.vue';
 import { searchSessions } from '../api/session.api';
 import SessionListItem from './SessionListItem.vue';
 import SessionSearchResultItem from './SessionSearchResultItem.vue';
+import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 
 interface SessionGroup {
   key: 'pinned' | 'today' | 'yesterday' | 'earlier';
@@ -363,6 +377,17 @@ const groups = computed<SessionGroup[]>(() => {
   flex: none;
   align-items: center;
   gap: 4px;
+}
+
+.nh-sidebar__plugin-header,
+.nh-sidebar__plugin-footer {
+  display: flex;
+  max-height: min(160px, 28vh);
+  flex-wrap: wrap;
+  flex: none;
+  gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .nh-sidebar__icon-button {

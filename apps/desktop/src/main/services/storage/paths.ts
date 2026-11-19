@@ -12,7 +12,7 @@ import { join } from 'node:path';
 export const getBuiltinPluginsDirectory = (): string =>
   app.isPackaged
     ? join(process.resourcesPath, 'plugins')
-    : join(app.getAppPath(), 'resources', 'plugins');
+    : join(__dirname, '../../resources/plugins');
 
 export interface AppDataPaths {
   root: string;

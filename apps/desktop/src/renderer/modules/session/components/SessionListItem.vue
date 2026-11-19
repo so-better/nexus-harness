@@ -52,6 +52,10 @@
     </div>
 
     <div v-if="!renaming" class="nh-session-item__actions" @click.stop>
+      <PluginSlot
+        location="session.item.actions"
+        :context="{ location: 'session.item.actions', sessionId: session.id }"
+      />
       <NPopconfirm
         v-model:show="deleteConfirmVisible"
         trigger="manual"
@@ -106,6 +110,7 @@ import type { SessionSummary } from '@shared/ipc/contracts';
 import { locale, t } from '@/app/i18n';
 import { sessionStatusLabel, sessionStatusTone } from '@/app/session-status';
 import AppIcon from '@/components/AppIcon.vue';
+import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 
 const props = defineProps<{
   session: SessionSummary;

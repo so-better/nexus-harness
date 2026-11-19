@@ -2,6 +2,7 @@
  * 输出文件 API：另存为。
  */
 
+import { nexus } from '@/app/nexus-bridge';
 import type { FileSaveAsResult } from '@shared/ipc/contracts';
 import { unwrap } from '@/app/ipc';
 
@@ -11,4 +12,4 @@ import { unwrap } from '@/app/ipc';
 export const saveOutputFileAs = async (
   sessionId: string,
   fileId: string
-): Promise<FileSaveAsResult> => unwrap(await window.nexus.files.saveAs({ sessionId, fileId }));
+): Promise<FileSaveAsResult> => unwrap(await nexus.files.saveAs({ sessionId, fileId }));

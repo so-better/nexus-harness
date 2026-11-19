@@ -1,5 +1,6 @@
 <template>
-  <div class="nh-layout">
+  <div class="nh-layout" :class="{ 'nh-layout--skin': pluginRuntime.activeSkin }">
+    <PluginSkinLayer />
     <div class="nh-layout__body">
       <SessionSidebar
         :sessions="sessions.sessions"
@@ -51,10 +52,14 @@
       :theme-source="themeSource"
       :version="version"
       :terminal-open="terminal.open"
+      :session-id="activeId ?? undefined"
+      @open-extensions="extensionsOpen = true"
       @toggle-terminal="terminal.togglePanel"
       @update-theme="setTheme"
       @open-settings="settingsOpen = true"
     />
+
+    <ExtensionsModal :show="extensionsOpen" @update:show="extensionsOpen = $event" />
 
     <SettingsModal
       :show="settingsOpen"
@@ -92,6 +97,9 @@ import { useSessionStore } from '@/modules/session/stores/session.store';
 import { getLanguage } from '@/modules/settings/api/settings.api';
 import SettingsModal from '@/modules/settings/views/SettingsModal.vue';
 import { useTerminalStore } from '@/modules/terminal/stores/terminal.store';
+import ExtensionsModal from '@/plugin-runtime/components/ExtensionsModal.vue';
+import PluginSkinLayer from '@/plugin-runtime/components/PluginSkinLayer.vue';
+import { usePluginRuntimeStore } from '@/plugin-runtime/runtime.store';
 import AppStatusbar from './AppStatusbar.vue';
 import { useAppMeta } from './use-app-meta';
 import { useSessionStatusSync } from './use-session-status';
@@ -99,6 +107,8 @@ import { useSessionStatusSync } from './use-session-status';
 const sessions = useSessionStore();
 const chat = useChatStore();
 const terminal = useTerminalStore();
+const pluginRuntime = usePluginRuntimeStore();
+const extensionsOpen = ref(false);
 const TerminalPanel = defineAsyncComponent(
   () => import('@/modules/terminal/components/TerminalPanel.vue')
 );
@@ -132,6 +142,8 @@ const disabledReason = computed(() => {
   return undefined;
 });
 useSessionStatusSync(sessions, projection, activeId);
+
+watch(activeId, (id) => pluginRuntime.setActiveSession(id), { immediate: true });
 
 /**
  * 切换会话时读取历史，并优先使用会话保存的 Provider。
@@ -207,10 +219,7 @@ const removeSession = async (id: string): Promise<void> => {
 /**
  * 重命名会话。
  */
-const exportSession = async (
-  id: string,
-  format: 'markdown' | 'html' | 'pdf'
-): Promise<void> => {
+const exportSession = async (id: string, format: 'markdown' | 'html' | 'pdf'): Promise<void> => {
   try {
     const result = await exportSessionApi(id, format);
     if (result.saved) message.success(t('session.exported'));
@@ -393,6 +402,7 @@ const stop = async (): Promise<void> => {
 
 onMounted(async () => {
   terminal.init();
+  await pluginRuntime.init();
   unsubscribeSessionChanges = subscribeSessionChanges((session) => sessions.applyUpdate(session));
   unsubscribeSessionActivate = onSessionActivate((sessionId) => sessions.select(sessionId));
   try {
@@ -414,10 +424,27 @@ onBeforeUnmount(() => {
   unsubscribeSessionActivate?.();
   unsubscribeSessionActivate = undefined;
   chat.dispose();
+  pluginRuntime.dispose().catch(() => undefined);
 });
 </script>
 
 <style scoped lang="less">
+.nh-layout.nh-layout--skin {
+  background: transparent;
+}
+
+.nh-layout--skin :deep(.nh-sidebar),
+.nh-layout--skin :deep(.nh-chat),
+.nh-layout--skin :deep(.nh-statusbar) {
+  background-color: color-mix(in srgb, var(--nh-color-bg-base) 72%, transparent);
+}
+
+.nh-layout__body,
+.nh-layout :deep(.nh-statusbar) {
+  position: relative;
+  z-index: 1;
+}
+
 .nh-layout {
   display: grid;
   height: 100%;

@@ -2,6 +2,7 @@
  * 工作区 API：在会话 roots 内检索文件引用。
  */
 
+import { nexus } from '@/app/nexus-bridge';
 import type { WorkspaceFileReference } from '@shared/ipc/contracts';
 import { unwrap } from '@/app/ipc';
 
@@ -12,4 +13,4 @@ export const searchWorkspaceFiles = async (
   sessionId: string,
   query: string
 ): Promise<WorkspaceFileReference[]> =>
-  unwrap(await window.nexus.workspace.searchFiles({ sessionId, query, limit: 20 }));
+  unwrap(await nexus.workspace.searchFiles({ sessionId, query, limit: 20 }));

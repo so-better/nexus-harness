@@ -329,17 +329,10 @@ nexus-harness/
 │           ├─ styles/           # tokens、主题、mixins
 │           └─ types/            # 全局类型声明
 ├─ packages/
-│  ├─ shared/                    # zod 契约、跨端类型、常量、IPC 通道
+│  ├─ shared/                    # zod 契约、跨端类型、插件 API 类型、常量、IPC 通道
 │  ├─ core/                      # agent 循环、事件流、工具注册表、权限模型
 │  ├─ providers/                 # 统一 LLM 抽象（纯 TS，不依赖 Electron/Vue）
 │  └─ tools/                     # fs / shell / grep / fetch / MCP
-└─ examples/
-   ├─ plugins/
-   │  ├─ _template/              # 插件模板：plugin.d.ts + 最小 manifest
-   │  ├─ token-usage/            # 消息尾部 token 展示样板
-   │  └─ theme-background/       # 全局背景皮肤样板
-   ├─ skills/<skill-id>/         # Skill 开发样板
-   └─ mcp/<server-id>/           # MCP 配置样板
 ```
 
 ### 3.3 分层与依赖方向
@@ -392,7 +385,7 @@ MCP Server 不是独立能力层，而是工具来源：配置位于 `<userData>
 - **非核心功能优先插件化**：不改变核心安全、数据与调度契约的附加能力，应使用内置插件交付，而不是直接堆进 `core` 或主界面。
 - **先设计、再决定是否内置**：新功能先按插件贡献点、事件钩子与宿主 API 评估；能插件化的一律插件化，只有核心契约能力才进入宿主。
 - 内置插件是默认产品能力的一部分，但只改变分发方式，不获得额外权限；与用户安装的插件走同一套加载、权限与容错流程。
-- 技能、插件、MCP 全部从 `<userData>` 扫描，目录存在即注册；仓库只提供 `examples/` 样板，不参与运行时加载。
+- 技能、插件、MCP 全部从 `<userData>` 扫描，目录存在即注册；仓库只内置 `apps/desktop/resources/plugins/`，Skill 与 MCP 不提供仓库内样板。
 - 目录变化时重新扫描；无效条目记录错误并跳过，不影响启动。
 
 技能目录结构：
@@ -799,7 +792,7 @@ requires: [read, write, execute]
 规则：
 
 - Skill 不携带额外权限，脚本只能通过 `run_command` 执行并经过审批。
-- Skill 变更必须同步更新说明与版本号；`examples/skills` 提供最小验证用例。
+- Skill 变更必须同步更新说明与版本号，并补对应测试。
 
 ### 4.5 插件体系
 
@@ -835,11 +828,12 @@ requires: [read, write, execute]
 
 - `main` 入口由主进程用 `require` 加载；`renderer` 入口通过宿主注册的 `nexus-plugin://` 协议动态 `import`。
 - 仓库内置插件放在 `apps/desktop/resources/plugins/<id>/`；打包后进入应用 `resources/plugins`。启动时同步到 `<userData>/plugins`，内置副本由应用覆盖，启用状态仍由用户数据库控制。
-- 两侧入口统一导出 `activate(ctx)`，可选导出 `deactivate()`。插件作者可复制 `examples/plugins/_template/plugin.d.ts` 获得类型提示，该文件只提供类型，不引入运行时依赖。
+- 两侧入口统一导出 `activate(ctx)`，可选导出 `deactivate()`。插件作者可复制 `packages/shared/src/plugin-api.d.ts` 获得类型提示，该文件只提供类型，不引入运行时依赖。
+- 主进程入口等同于受信本地代码，运行在宿主主进程；扩展页显示“主进程代码”标记，只有用户启用后才加载。
 - 入口路径经 `realpath` 校验，必须位于插件目录内，禁止路径穿越。
 - 渲染进程插件自包含：可以自带 UI 框架，宿主只提供隔离容器、语义 token 与 `ctx`。
 - 宿主为插件视图、消息插槽与输入区插槽提供 Shadow DOM 容器，避免样式污染；主题通过 CSS 变量继承。
-- 全局皮肤（背景图、遮罩、强调色）由 manifest 声明，宿主渲染背景层；插件不得直接注入全局 CSS。
+- 全局皮肤由 manifest 声明贡献点，插件 renderer 入口通过 `ctx.skins.register` 在宿主提供的隔离层内绘制；插件不得直接注入全局 CSS。
 - 插件不得写入自身目录，持久化统一使用 `ctx.storage`。
 - 宿主监听 `<userData>/plugins`，新增、删除、修改后做防抖处理，再卸载或重载对应插件。
 
@@ -882,7 +876,7 @@ requires: [read, write, execute]
 | `commands` | 命令面板与快捷键绑定 |
 | `menus` | 上下文菜单、工具栏 |
 | `settings` | 插件设置项 |
-| `skins` | 全局皮肤：背景图、遮罩与强调色 |
+| `skins` | 全局皮肤：插件代码绘制的背景、遮罩与强调色 |
 | `tools` | 向 Agent 注册工具（不开放） |
 | `themes` | 后续开放，需单独评审 |
 
@@ -890,14 +884,11 @@ requires: [read, write, execute]
 
 | 区域 | 插槽 | 用途 |
 | --- | --- | --- |
-| 全局 | `titlebar.actions` | 标题栏操作按钮 |
 | 全局 | `sidebar.header` / `sidebar.footer` | 侧栏顶部/底部 |
-| 全局 | `inspector.panel` | 右侧检查器 |
 | 全局 | `statusbar.left` / `statusbar.right` | 状态栏左右区域 |
 | 输入区 | `composer.toolbar` / `composer.above` / `composer.footer` | 工具条、输入框上方提示、下方用量 |
 | 空状态 | `empty-state` | 首次进入或无会话 |
 | 会话 | `session.header.actions` | 会话头操作 |
-| 会话 | `session.tab.badge` | 会话标签角标（token/成本） |
 | 会话 | `session.item.actions` | 会话列表项操作 |
 | 消息 | `message.assistant.header` / `.footer` / `.actions` | AI 消息头、尾部、操作 |
 | 消息 | `message.user.footer` / `.actions` | 用户消息尾、操作 |
@@ -905,8 +896,6 @@ requires: [read, write, execute]
 | 审批 | `approval.details` | 审批详情附加信息 |
 | 工作区 | `terminal.toolbar` | 终端工具条 |
 | 文件 | `filecard.actions` / `filecard.footer` | 输出文件卡片 |
-| 设置 | `settings.section` | 设置页附加区 |
-| 扩展 | `extensions.detail` | 插件详情附加视图 |
 
 插件只能渲染在宿主给定的容器内，不得改变布局或遮挡宿主操作。
 
@@ -928,12 +917,13 @@ requires: [read, write, execute]
 ctx.commands.register(id: string, handler: () => void | Promise<void>): Disposable;
 ctx.views.register(id: string, mount: (el: HTMLElement, ctx: PluginContext) => () => void): Disposable;
 ctx.slots.register(id: string, mount: (el: HTMLElement, context: SlotContext) => () => void): Disposable;
+ctx.skins.register(id: string, mount: (el: HTMLElement, ctx: PluginContext) => () => void): Disposable;
 ctx.statusBar.add(item: StatusBarItem): Disposable;
 ctx.events.on(event: NexusEventName, handler: (payload: unknown) => void): Disposable;
 ctx.storage.get<T>(key: string): Promise<T | undefined>;
 ctx.storage.set<T>(key: string, value: T): Promise<void>;
 ctx.storage.delete(key: string): Promise<void>;
-ctx.settings.get<T>(key: string): T | undefined;
+ctx.settings: Record<string, string | number | boolean | null>;
 ctx.logger.info(message: string, meta?: unknown): void;
 ctx.notifications.show(message: string, level?: 'info' | 'warning' | 'error'): void;
 ctx.workspace.readFile(path: string): Promise<string>;
@@ -960,12 +950,12 @@ interface SlotContext {
 
 - 每个注册接口返回 `Disposable`，插件被禁用或卸载时必须释放全部资源。
 - `ctx.storage` 与 `ctx.settings` 按插件 id 隔离，禁止跨插件读取。
-- `ctx.views.register` 与 `ctx.slots.register` 的 mount 函数必须返回清理函数；宿主负责容器与生命周期。
+- `ctx.views.register`、`ctx.slots.register` 与 `ctx.skins.register` 的 mount 函数必须返回清理函数；宿主负责容器与生命周期。
 - 消息插槽固定渲染在宿主指定位置，插件不得改变布局、遮挡操作或劫持点击。
 - 插槽顺序、尺寸与间距由宿主决定；插件只负责容器内部内容，不得影响宿主其他区域。
 - 插件插槽只能补充信息，不得替代或隐藏宿主的命令、路径、审批与错误等安全信息。
 - `SlotContext.usage` 为该条消息对应的用量汇总（跨该消息的模型步骤聚合）；缺失时插件可订阅 `usage.recorded` 自行累计。
-- `skins` 由 manifest 声明，宿主校验背景图类型与大小，并在外观设置中供用户选择；插件不得直接注入全局 CSS。
+- `skins` 由 manifest 声明，插件代码自行决定使用图片、canvas、WebGL 或 DOM；宿主在固定隔离层内挂载，皮肤切换、插件停用或热重载时调用清理函数。插件不得直接注入全局 CSS，也不得访问隔离层外的宿主 DOM。
 - 渲染进程插件在 Shadow DOM 容器内挂载，UI 框架由插件自带，不得访问宿主 DOM 或全局状态。
 - 事件 payload 类型由 SDK 导出，禁止插件假设未声明字段存在。
 - 主进程侧事件由宿主按权限转发给渲染进程插件，插件不得自行跨进程通信。
@@ -984,42 +974,45 @@ interface SlotContext {
 - 插件回调抛出的异常由宿主包裹捕获，转为通知与日志。
 - 目录文件变更做防抖处理，先 `deactivate()` 旧实例，再加载新实例。
 - 目录删除时停用插件并清理其贡献点；启用/禁用状态需要持久化。
-- 禁用或卸载插件前必须调用 `deactivate()`，并清理其贡献点与存储索引（存储是否保留由用户选择）。
+- 禁用或卸载插件前必须调用 `deactivate()`，并清理其贡献点与存储索引；卸载用户插件时删除插件目录与本地存储，内置插件只允许禁用。
+- 扩展页支持编辑 `contributes.settings`，设置写入按插件隔离的存储；插件可以卸载用户插件，但不能卸载内置插件。
 
-#### 4.5.7 样板插件
+#### 4.5.7 内置插件参考
 
-`examples/plugins/token-usage` 是插件开发的参考实现，复制到 `<userData>/plugins` 后自动注册，必须持续保持可运行，并演示：
+`apps/desktop/resources/plugins/nexus.token-usage` 是插件开发的参考实现，随应用同步到 `<userData>/plugins`，必须持续保持可运行，并演示：
 
-- 订阅 `usage.recorded` 事件并聚合统计。
-- 通过 `statusBar` 显示当前会话消耗。
-- 通过 `messageSlots` 在每条 AI 回复尾部显示 token 与费用；插件只拿只读 `SlotContext`，不修改宿主布局。
-- 通过 `views` 注册侧栏面板，图表的颜色全部来自语义 token。
-- 使用 `ctx.storage` 持久化累计数据。
+- 通过 `messageSlots` 在会话标题栏和每条 AI 回复尾部分别显示会话与消息 token 用量。
+- 通过只读 `SlotContext.usage` 读取宿主投影的用量，不自行累计跨会话总量。
+- 不修改宿主布局，只在插槽内补充文本。
 - 正确处理启用、禁用、热重载。
 
-`examples/plugins/theme-background` 演示全局背景皮肤：manifest 声明 `skins` 与背景资源，宿主在外观设置中提供选择，插件不直接注入 CSS。
+`apps/desktop/resources/plugins/nexus.theme-background` 是全局皮肤参考实现，演示插件代码用语义色绘制渐变背景；皮肤只声明贡献点，具体视觉完全由插件 renderer 决定。
 
 ```json
 {
   "permissions": ["ui.skin"],
   "contributes": {
-    "skins": [
-      {
-        "id": "paper",
-        "title": "纸张",
-        "background": { "image": "assets/paper.jpg", "opacity": 0.25, "fit": "cover" }
-      }
-    ]
+    "skins": [{ "id": "paper", "title": "纸张" }]
   }
+}
+```
+
+```js
+export function activate(ctx) {
+  return ctx.skins.register('paper', (element) => {
+    const canvas = document.createElement('canvas');
+    element.appendChild(canvas);
+    return () => canvas.remove();
+  });
 }
 ```
 
 #### 4.5.8 开发与安装
 
-- 模板：从 `examples/plugins/_template` 开始，包含 `plugin.d.ts` 与最小入口，无需安装额外包。
-- 开发：复制 `examples/plugins/<id>` 到 `<userData>/plugins/<id>`，修改 manifest 与入口，自行构建到 `dist/`。
-- 安装：用户把已构建的插件目录放到 `<userData>/plugins/<id>`，在扩展页启用即可；不需要 `npm install`，也不需要用户执行构建命令。
-- 宿主启动或目录变化时自动发现；在扩展页启用并确认权限后激活。
+- 类型：从 `packages/shared/src/plugin-api.d.ts` 复制 `PluginContext` 等声明获得类型提示，无需安装额外包。
+- 开发：参考 `apps/desktop/resources/plugins/` 下任一内置插件，在 `<userData>/plugins/<id>` 新建 manifest 与入口，自行构建到 `dist/`。
+- 安装：扩展页提供“导入插件文件夹”，选择包含 `plugin.json` 的目录，校验 manifest 与入口后复制到 `<userData>/plugins/<id>`；也可手动放置目录。不需要 `npm install`，也不需要用户执行构建命令。
+- 宿主启动或目录变化时自动发现；导入后默认禁用，在扩展页确认权限并启用后激活。
 - 调试：渲染进程插件使用 DevTools；主进程日志写入 `<userData>/logs`；目录变更触发热重载。
 - 分发：压缩插件目录，用户解压到 `<userData>/plugins` 即可；在线市场与自动下载后续再设计。
 
@@ -1098,8 +1091,8 @@ interface SlotContext {
 | 符号链接逃逸 | 文件路径 | `realpath` 后重新校验，目标越界需重新授权或拒绝 |
 | 会话授权泄漏 | RootGrant | 按会话隔离，不跨会话继承，撤销后立即失效 |
 | 密钥泄露 | 日志、事件、导出 | 日志脱敏、配置仅保存在本机、事件不记录密钥 |
-| 用户安装插件 | 插件代码 | 加载前校验 manifest 与入口路径、权限清单、能力网关、异常隔离 |
-| 恶意皮肤资源 | 插件 `skins` | 限制图片类型与大小，宿主渲染背景层，不接受任意 CSS |
+| 用户安装插件 | 插件代码 | 加载前校验 manifest 与入口路径、权限清单、能力网关、异常隔离；渲染层插件加载前移除 `window.nexus` |
+| 恶意皮肤代码 | 插件 `skins` | 固定隔离层挂载、禁止访问宿主 DOM、不接受全局 CSS、切换时清理 |
 | 插件目录篡改 | `<userData>/plugins` | 入口 `realpath` 限制、权限网关、事件审计 |
 | MCP 服务不可信 | 外部 MCP Server | 逐服务启用与信任、工具命名空间隔离、默认不自动启动 |
 | 渲染层 XSS | Markdown、插件 UI | 禁用原始 HTML、CSP、输出转义、不向渲染层暴露 Node |
@@ -1624,7 +1617,6 @@ type Result<T> =
 ```bash
 pnpm dev            # 开发
 pnpm build          # 构建
-pnpm build:examples # 构建 examples 下的插件、技能与 MCP 样板
 pnpm typecheck      # 类型检查
 pnpm lint           # ESLint
 pnpm lint:style     # stylelint
@@ -1728,7 +1720,7 @@ CHANGELOG.md         # 版本变更记录
 | SQLite 实现 | 待定 | 优先 `node:sqlite`，M0 验证 Electron 运行时；不可用则 `better-sqlite3` |
 | 默认提供商 | 待定 | 首次启动引导选择，不写死默认模型 |
 | 插件加载 | 目录扫描 | `<userData>/plugins`，启动与目录变化时注册 |
-| 插件 API 类型 | 不单独发包 | 由 `examples/plugins/_template/plugin.d.ts` 提供 |
+| 插件 API 类型 | 不单独发包 | 由 `packages/shared/src/plugin-api.d.ts` 提供 |
 | 内部包发布 | 不发布 npm | `packages/*` 仅通过 `workspace:*` 在仓库内使用 |
 | 插件 UI 渗透 | 标准 slots + skins | 消息尾部、输入区、状态栏、全局背景 |
 | 非核心功能实现 | 内置插件优先 | 使用统计、主题、附加面板与集成交给插件 |
@@ -1833,7 +1825,7 @@ CHANGELOG.md         # 版本变更记录
 - [ ] MCP 连接有缓存、空闲 TTL、失败负缓存、超时与并发上限，工具名已净化。
 - [ ] 插件入口路径限制在插件目录内，扩展能力经宿主权限网关。
 - [ ] 新功能已同步发出领域事件、暴露标准插槽，并经过权限网关。
-- [ ] 插件 slots 在宿主容器内渲染并正确清理；skins 资源经校验且不破坏可读性。
+- [ ] 插件 slots 与皮肤在宿主容器内渲染并正确清理；皮肤代码不访问隔离层外的宿主 DOM 或注入全局 CSS。
 - [ ] 事件钩子只读订阅，不能修改或拦截工具调用与审批；高频事件默认不暴露。
 - [ ] 插件未直接修改宿主 DOM 或注入全局 CSS。
 - [ ] 插件新增能力已声明权限，未绕过宿主 API 直接访问系统资源。
@@ -1908,7 +1900,7 @@ CHANGELOG.md         # 版本变更记录
 | `events:<event>` | 订阅指定领域事件 | 开放 |
 | `ui.panel` | 注册侧栏/主区面板 | 开放 |
 | `ui.slot` | 注册消息尾部/输入区等插槽 | 开放 |
-| `ui.skin` | 贡献全局背景皮肤 | 开放 |
+| `ui.skin` | 贡献全局背景皮肤，并通过代码绘制 | 开放 |
 | `ui.statusbar` | 注册状态栏条目 | 开放 |
 | `ui.command` | 注册命令与快捷键 | 开放 |
 | `ui.notification` | 发送应用内通知 | 开放 |
@@ -1922,6 +1914,7 @@ CHANGELOG.md         # 版本变更记录
 | 文档 | 内容 |
 | --- | --- |
 | `AGENTS.md` | 唯一强制性开发规范与索引 |
+| `PLUGIN_DEVELOPMENT.md` | 插件目录、manifest、API、插槽与事件开发指南 |
 | `README.md` | 产品介绍、安装与快速开始 |
 | `docs/decisions/` | 架构与产品决策记录（ADR） |
 | `docs/` 其他 | 详细设计、协议说明与评测报告 |

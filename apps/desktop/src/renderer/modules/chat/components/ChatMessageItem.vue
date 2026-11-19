@@ -57,6 +57,18 @@
           </div>
         </template>
         <template v-else>
+          <PluginSlot
+            v-if="message.role === 'assistant'"
+            location="message.assistant.header"
+            :context="{
+              location: 'message.assistant.header',
+              sessionId,
+              messageId: message.id,
+              runId: message.runId,
+              role: 'assistant',
+              usage: message.usage
+            }"
+          />
           <AskUserCard
             v-for="ask in resolvedAsks"
             :key="ask.requestId"
@@ -93,13 +105,23 @@
               class="nh-message__tool-entry"
               :data-tool-call-id="tool.id"
             >
-              <ToolCallCard :tool="tool" flush @authorize-root="emit('request-root')" />
+              <ToolCallCard
+                :tool="tool"
+                flush
+                :session-id="sessionId"
+                :message-id="message.id"
+                :run-id="message.runId"
+                @authorize-root="emit('request-root')"
+              />
               <ApprovalCard
                 v-for="approval in approvalForTool(tool)"
                 :key="approval.id"
                 inline
                 :approval="approval"
                 :tool="tool"
+                :session-id="sessionId"
+                :message-id="message.id"
+                :run-id="message.runId"
                 :data-approval-id="approval.id"
                 @approve="emit('approve', approval.id)"
                 @reject="emit('reject', approval.id)"
@@ -107,6 +129,29 @@
             </div>
           </div>
 
+          <PluginSlot
+            v-if="message.role === 'assistant'"
+            location="message.assistant.footer"
+            :context="{
+              location: 'message.assistant.footer',
+              sessionId,
+              messageId: message.id,
+              runId: message.runId,
+              role: 'assistant',
+              usage: message.usage
+            }"
+          />
+          <PluginSlot
+            v-if="message.role === 'user'"
+            location="message.user.footer"
+            :context="{
+              location: 'message.user.footer',
+              sessionId,
+              messageId: message.id,
+              runId: message.runId,
+              role: 'user'
+            }"
+          />
           <AskUserCard
             v-for="ask in otherAsks"
             :key="ask.requestId"
@@ -150,6 +195,29 @@
           </template>
           {{ t('chat.regenerate') }}
         </NButton>
+        <PluginSlot
+          v-if="message.role === 'assistant'"
+          location="message.assistant.actions"
+          :context="{
+            location: 'message.assistant.actions',
+            sessionId,
+            messageId: message.id,
+            runId: message.runId,
+            role: 'assistant',
+            usage: message.usage
+          }"
+        />
+        <PluginSlot
+          v-else-if="message.role === 'user'"
+          location="message.user.actions"
+          :context="{
+            location: 'message.user.actions',
+            sessionId,
+            messageId: message.id,
+            runId: message.runId,
+            role: 'user'
+          }"
+        />
         <span class="nh-message__time">{{ timeLabel }}</span>
       </div>
     </div>
@@ -172,6 +240,7 @@ import ApprovalCard from './ApprovalCard.vue';
 import AskUserCard from './AskUserCard.vue';
 import OutputFileCard from './OutputFileCard.vue';
 import ToolCallCard from './ToolCallCard.vue';
+import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import UserMessageContent from './UserMessageContent.vue';
 import { splitUserMessageReferences } from '../message-references';
 
@@ -182,6 +251,7 @@ const props = withDefaults(
     highlighted?: boolean;
     askUsers?: ChatAskUser[];
     approvals?: ChatApproval[] | undefined;
+    sessionId?: string | undefined;
     isLastAssistant?: boolean;
     actionsDisabled?: boolean;
   }>(),
@@ -190,6 +260,7 @@ const props = withDefaults(
     highlighted: false,
     askUsers: () => [],
     approvals: () => [],
+    sessionId: undefined,
     isLastAssistant: false,
     actionsDisabled: false
   }

@@ -10,24 +10,34 @@
           {{ sessionStatusLabel(session.status) }}
         </NTag>
       </div>
-      <NDropdown
-        trigger="click"
-        placement="bottom-end"
-        :options="exportOptions"
-        @select="selectExport"
-      >
-        <NButton
-          text
-          size="small"
-          :loading="exporting"
-          :disabled="exporting"
-          :title="t('session.export')"
+      <div class="nh-chat__header-actions">
+        <PluginSlot
+          location="session.header.actions"
+          :context="{
+            location: 'session.header.actions',
+            sessionId: session.id,
+            usage: projection.usage
+          }"
+        />
+        <NDropdown
+          trigger="click"
+          placement="bottom-end"
+          :options="exportOptions"
+          @select="selectExport"
         >
-          <template #icon><AppIcon name="export" :size="15" /></template>
-          {{ t('session.export') }}
-          <AppIcon name="chevron-down" :size="12" />
-        </NButton>
-      </NDropdown>
+          <NButton
+            text
+            size="small"
+            :loading="exporting"
+            :disabled="exporting"
+            :title="t('session.export')"
+          >
+            <template #icon><AppIcon name="export" :size="15" /></template>
+            {{ t('session.export') }}
+            <AppIcon name="chevron-down" :size="12" />
+          </NButton>
+        </NDropdown>
+      </div>
     </header>
 
     <SessionEmptyView
@@ -91,6 +101,7 @@
           :models="models"
           :mode="mode"
           :session-id="session?.id"
+          :usage="projection.usage"
           :provider-id="providerId"
           :model-id="modelId"
           @choose-root="emit('choose-root')"
@@ -129,6 +140,7 @@ import AppIcon from '@/components/AppIcon.vue';
 import ComposerBox from '../components/ComposerBox.vue';
 import MessageList from '../components/MessageList.vue';
 import SessionEmptyView from '../components/SessionEmptyView.vue';
+import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import type { ChatProjection } from '../types';
 
 const props = defineProps<{
@@ -234,6 +246,13 @@ watch(
 .nh-chat__title-group {
   display: flex;
   min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.nh-chat__header-actions {
+  display: flex;
+  flex: none;
   align-items: center;
   gap: 8px;
 }

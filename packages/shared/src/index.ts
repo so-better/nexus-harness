@@ -8,3 +8,4 @@ export * from './ipc/contracts';
 export * from './ipc/result';
 export * from './usage';
 export * from './files';
+export * from './plugin';

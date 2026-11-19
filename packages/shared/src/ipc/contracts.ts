@@ -5,6 +5,12 @@
 import { z } from 'zod';
 import { messageFileReferenceSchema, type NexusEvent } from '../events';
 import type { AskUserResolveInput, AskUserResolveResult } from '../ask-user';
+import type {
+  PluginPublic,
+  PluginSettingValue,
+  PluginSkinSelection,
+  PluginWorkspaceEntry
+} from '../plugin';
 import type { Result } from './result';
 
 /**
@@ -145,6 +151,8 @@ export interface NexusBridge {
     setNotificationBadge: (
       style: NotificationBadgeStyle
     ) => Promise<Result<NotificationBadgeStyle>>;
+    getSkin: () => Promise<Result<PluginSkinSelection | null>>;
+    setSkin: (selection: PluginSkinSelection | null) => Promise<Result<PluginSkinSelection | null>>;
     setAutoLaunch: (enabled: boolean) => Promise<Result<boolean>>;
     getLanguage: () => Promise<Result<AppLanguage>>;
     setLanguage: (language: AppLanguage) => Promise<Result<AppLanguage>>;
@@ -195,6 +203,40 @@ export interface NexusBridge {
   };
   approval: {
     resolve: (input: ApprovalResolveInput) => Promise<Result<ApprovalResolveResult>>;
+  };
+  plugin: {
+    list: () => Promise<Result<PluginPublic[]>>;
+    setEnabled: (id: string, enabled: boolean) => Promise<Result<PluginPublic[]>>;
+    reload: () => Promise<Result<PluginPublic[]>>;
+    importFromDirectory: () => Promise<Result<PluginPublic[]>>;
+    uninstall: (id: string) => Promise<Result<PluginPublic[]>>;
+    openDirectory: () => Promise<Result<{ opened: boolean }>>;
+    onChanged: (handler: (plugins: PluginPublic[]) => void) => Unsubscribe;
+    storageGet: (pluginId: string, key: string) => Promise<Result<unknown>>;
+    storageSet: (pluginId: string, key: string, value: unknown) => Promise<Result<{ ok: boolean }>>;
+    storageDelete: (pluginId: string, key: string) => Promise<Result<{ ok: boolean }>>;
+    settingsGet: (pluginId: string) => Promise<Result<Record<string, PluginSettingValue>>>;
+    settingsSet: (
+      pluginId: string,
+      values: Record<string, PluginSettingValue>
+    ) => Promise<Result<Record<string, PluginSettingValue>>>;
+    log: (
+      pluginId: string,
+      level: 'debug' | 'info' | 'warn' | 'error',
+      message: string
+    ) => Promise<Result<{ ok: boolean }>>;
+    notify: (
+      pluginId: string,
+      message: string,
+      level?: 'info' | 'warning' | 'error'
+    ) => Promise<Result<{ ok: boolean }>>;
+    reportError: (pluginId: string, error: string) => Promise<Result<{ ok: boolean }>>;
+    workspaceRead: (pluginId: string, sessionId: string, path: string) => Promise<Result<string>>;
+    workspaceList: (
+      pluginId: string,
+      sessionId: string,
+      path?: string
+    ) => Promise<Result<PluginWorkspaceEntry[]>>;
   };
   terminal: {
     create: (input: TerminalCreateInput) => Promise<Result<TerminalSessionPublic>>;

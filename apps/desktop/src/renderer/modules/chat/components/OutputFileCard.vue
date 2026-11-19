@@ -1,15 +1,35 @@
 <template>
   <div class="nh-output-file">
-    <span class="nh-output-file__icon">
-      <AppIcon name="file" :size="16" />
-    </span>
-    <span class="nh-output-file__copy">
-      <span class="nh-output-file__name">{{ file.name }}</span>
-      <span class="nh-output-file__meta">{{ formatBytes(file.bytes) }} · {{ file.mime }}</span>
-    </span>
-    <NButton text size="tiny" :loading="saving" @click="saveAs">
-      {{ t('file.saveAs') }}
-    </NButton>
+    <div class="nh-output-file__row">
+      <span class="nh-output-file__icon">
+        <AppIcon name="file" :size="16" />
+      </span>
+      <span class="nh-output-file__copy">
+        <span class="nh-output-file__name">{{ file.name }}</span>
+        <span class="nh-output-file__meta">{{ formatBytes(file.bytes) }} · {{ file.mime }}</span>
+      </span>
+      <PluginSlot
+        location="filecard.actions"
+        :context="{
+          location: 'filecard.actions',
+          sessionId: file.sessionId,
+          runId: file.runId,
+          fileId: file.id
+        }"
+      />
+      <NButton text size="tiny" :loading="saving" @click="saveAs">
+        {{ t('file.saveAs') }}
+      </NButton>
+    </div>
+    <PluginSlot
+      location="filecard.footer"
+      :context="{
+        location: 'filecard.footer',
+        sessionId: file.sessionId,
+        runId: file.runId,
+        fileId: file.id
+      }"
+    />
   </div>
 </template>
 
@@ -23,6 +43,7 @@ import { NButton, useMessage } from 'naive-ui';
 import type { OutputFile } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
+import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import { saveOutputFileAs } from '../api/files.api';
 
 const props = defineProps<{ file: OutputFile }>();
@@ -57,12 +78,18 @@ const saveAs = async (): Promise<void> => {
 <style scoped lang="less">
 .nh-output-file {
   display: flex;
-  align-items: center;
-  gap: 9px;
+  flex-direction: column;
+  gap: 6px;
   padding: 8px 10px;
   border: 1px solid var(--nh-color-border);
   border-radius: 10px;
   background: color-mix(in srgb, var(--nh-color-bg-base) 82%, transparent);
+}
+
+.nh-output-file__row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
 
 .nh-output-file__icon {

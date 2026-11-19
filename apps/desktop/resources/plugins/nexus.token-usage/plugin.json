@@ -1,0 +1,24 @@
+{
+  "id": "nexus.token-usage",
+  "name": "Token 用量",
+  "version": "1.2.0",
+  "description": "在会话标题栏和每条 AI 消息尾部分别显示会话与消息 token 用量。",
+  "engines": {
+    "nexus": "^0.1.0"
+  },
+  "renderer": "dist/renderer.mjs",
+  "activationEvents": ["onSlot:usage.inline", "onSlot:usage.session"],
+  "permissions": ["ui.slot"],
+  "contributes": {
+    "messageSlots": [
+      {
+        "id": "usage.inline",
+        "location": "message.assistant.footer"
+      },
+      {
+        "id": "usage.session",
+        "location": "session.header.actions"
+      }
+    ]
+  }
+}

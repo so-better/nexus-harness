@@ -15,6 +15,17 @@
       </template>
 
       <ApprovalDetails v-if="tool" :tool="tool" />
+      <PluginSlot
+        location="approval.details"
+        :context="{
+          location: 'approval.details',
+          sessionId,
+          messageId,
+          runId,
+          approvalId: approval.id,
+          toolCallId: approval.toolCallId
+        }"
+      />
 
       <p class="nh-approval__warning">{{ t('chat.approvalWarning') }}</p>
     </div>
@@ -44,12 +55,16 @@ import { NButton } from 'naive-ui';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import ApprovalDetails from './ApprovalDetails.vue';
+import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import type { ChatApproval, ChatToolCall } from '../types';
 
 defineProps<{
   approval: ChatApproval;
   tool?: ChatToolCall | undefined;
   inline?: boolean;
+  sessionId?: string | undefined;
+  messageId?: string | undefined;
+  runId?: string | undefined;
 }>();
 
 const emit = defineEmits<{ approve: []; reject: [] }>();

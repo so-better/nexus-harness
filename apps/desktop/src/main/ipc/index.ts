@@ -7,6 +7,7 @@ import { registerArtifactIpc } from './artifact';
 import { registerCheckpointIpc } from './checkpoint';
 import { registerFilesIpc } from './files';
 import { registerAppIpc } from './app';
+import { registerPluginIpc } from './plugin';
 import { registerProviderIpc } from './provider';
 import { registerSessionIpc } from './session';
 import { registerSettingsIpc } from './settings';
@@ -24,6 +25,7 @@ export const registerIpcHandlers = (): void => {
   registerFilesIpc();
   registerAppIpc();
   registerProviderIpc();
+  registerPluginIpc();
   registerSessionIpc();
   registerSettingsIpc();
   registerTerminalIpc();

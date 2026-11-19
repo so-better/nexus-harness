@@ -4,20 +4,22 @@
       <NText v-if="disabledReason" depth="3" class="nh-composer__hint">
         {{ disabledReason }}
       </NText>
-      <span v-else class="nh-composer__keys">{{ t('chat.composerHint') }}</span>
+      <span v-else class="nh-composer__keys">
+        {{ t(canReference ? 'chat.composerHint' : 'chat.composerHintNoFiles') }}
+      </span>
     </div>
     <div class="nh-composer__send-group">
-      <AgentModeSelect
-        :mode="mode"
-        :disabled="running"
-        @update-mode="emit('update-mode', $event)"
-      />
+      <AgentModeSelect :mode="mode" :disabled="running" @update-mode="emit('update-mode', $event)" />
       <NButton v-if="running" type="error" secondary @click="emit('stop')">
-        <template #icon><AppIcon name="stop" /></template>
+        <template #icon>
+          <AppIcon name="stop" />
+        </template>
         {{ t('app.stop') }}
       </NButton>
-      <NButton v-else type="primary" quaternary :disabled="disabled || !canSend" attr-type="submit">
-        <template #icon><AppIcon name="send" /></template>
+      <NButton v-else type="primary" secondary :disabled="disabled || !canSend" attr-type="submit">
+        <template #icon>
+          <AppIcon name="send" />
+        </template>
         {{ t('app.send') }}
       </NButton>
     </div>
@@ -41,6 +43,7 @@ defineProps<{
   running: boolean;
   mode: AgentMode;
   canSend: boolean;
+  canReference: boolean;
 }>();
 
 const emit = defineEmits<{ stop: []; 'update-mode': [mode: AgentMode] }>();

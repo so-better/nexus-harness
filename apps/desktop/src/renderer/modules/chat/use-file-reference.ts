@@ -114,7 +114,7 @@ export const useFileReference = (options: FileReferenceOptions) => {
         close();
         return;
       }
-      if (event.key === 'Enter' && !event.isComposing) {
+      if (event.key === 'Enter' && !event.isComposing && !event.shiftKey) {
         event.preventDefault();
         const reference = references.value[activeIndex.value];
         if (reference) {
@@ -143,7 +143,7 @@ export const useFileReference = (options: FileReferenceOptions) => {
         return;
       }
     }
-    if (event.key === 'Enter' && !event.isComposing) {
+    if (event.key === 'Enter' && !event.isComposing && !event.shiftKey) {
       event.preventDefault();
       options.submit();
     } else if (event.key === 'Tab') {

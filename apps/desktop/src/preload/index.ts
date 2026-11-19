@@ -4,6 +4,7 @@
 
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
+import type { PluginPublic } from '@shared/plugin';
 import type {
   NexusBridge,
   SessionSummary,
@@ -54,7 +55,9 @@ const bridge: NexusBridge = {
     setLanguage: (language) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetLanguage, language),
     getNotificationBadge: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetNotificationBadge),
     setNotificationBadge: (style) =>
-      ipcRenderer.invoke(IPC_CHANNELS.settingsSetNotificationBadge, style)
+      ipcRenderer.invoke(IPC_CHANNELS.settingsSetNotificationBadge, style),
+    getSkin: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetSkin),
+    setSkin: (selection) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetSkin, selection)
   },
   cache: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.cacheGetInfo),
@@ -83,6 +86,39 @@ const bridge: NexusBridge = {
   },
   approval: {
     resolve: (input) => ipcRenderer.invoke(IPC_CHANNELS.approvalResolve, input)
+  },
+  plugin: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.pluginList),
+    setEnabled: (id, enabled) => ipcRenderer.invoke(IPC_CHANNELS.pluginSetEnabled, { id, enabled }),
+    reload: () => ipcRenderer.invoke(IPC_CHANNELS.pluginReload),
+    importFromDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.pluginImport),
+    uninstall: (id) => ipcRenderer.invoke(IPC_CHANNELS.pluginUninstall, id),
+    openDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.pluginOpenDirectory),
+    onChanged: (handler) => {
+      const listener = (_event: IpcRendererEvent, plugins: PluginPublic[]): void =>
+        handler(plugins);
+      ipcRenderer.on(IPC_CHANNELS.pluginChanged, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.pluginChanged, listener);
+    },
+    storageGet: (pluginId, key) =>
+      ipcRenderer.invoke(IPC_CHANNELS.pluginStorageGet, { pluginId, key }),
+    storageSet: (pluginId, key, value) =>
+      ipcRenderer.invoke(IPC_CHANNELS.pluginStorageSet, { pluginId, key, value }),
+    storageDelete: (pluginId, key) =>
+      ipcRenderer.invoke(IPC_CHANNELS.pluginStorageDelete, { pluginId, key }),
+    settingsGet: (pluginId) => ipcRenderer.invoke(IPC_CHANNELS.pluginSettingsGet, pluginId),
+    settingsSet: (pluginId, values) =>
+      ipcRenderer.invoke(IPC_CHANNELS.pluginSettingsSet, { pluginId, values }),
+    log: (pluginId, level, message) =>
+      ipcRenderer.invoke(IPC_CHANNELS.pluginLog, { pluginId, level, message }),
+    notify: (pluginId, message, level) =>
+      ipcRenderer.invoke(IPC_CHANNELS.pluginNotify, { pluginId, message, level }),
+    reportError: (pluginId, error) =>
+      ipcRenderer.invoke(IPC_CHANNELS.pluginReportError, { pluginId, error }),
+    workspaceRead: (pluginId, sessionId, path) =>
+      ipcRenderer.invoke(IPC_CHANNELS.pluginWorkspaceRead, { pluginId, sessionId, path }),
+    workspaceList: (pluginId, sessionId, path) =>
+      ipcRenderer.invoke(IPC_CHANNELS.pluginWorkspaceList, { pluginId, sessionId, path })
   },
   terminal: {
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.terminalCreate, input),
@@ -146,4 +182,15 @@ const bridge: NexusBridge = {
   }
 };
 
-contextBridge.exposeInMainWorld('nexus', bridge);
+let bridgeTaken = false;
+
+/**
+ * 一次性桥接：应用启动时取走，之后插件即使访问 window 也只能拿到 undefined。
+ */
+const takeNexusBridge = (): NexusBridge | undefined => {
+  if (bridgeTaken) return undefined;
+  bridgeTaken = true;
+  return bridge;
+};
+
+contextBridge.exposeInMainWorld('takeNexusBridge', takeNexusBridge);

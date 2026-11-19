@@ -6,15 +6,22 @@
         @choose-root="emit('choose-root')"
         @remove-root="emit('remove-root', $event)"
       />
-      <ComposerModelPicker
-        :providers="providers"
-        :models="models"
-        :provider-id="providerId"
-        :model-id="modelId"
-        @update-provider="emit('update-provider', $event)"
-        @update-model="emit('update-model', $event)"
-        @open-settings="emit('open-settings')"
-      />
+      <div class="nh-composer__toolbar-right">
+        <PluginSlot
+          v-if="sessionId"
+          location="composer.toolbar"
+          :context="{ location: 'composer.toolbar', sessionId, usage }"
+        />
+        <ComposerModelPicker
+          :providers="providers"
+          :models="models"
+          :provider-id="providerId"
+          :model-id="modelId"
+          @update-provider="emit('update-provider', $event)"
+          @update-model="emit('update-model', $event)"
+          @open-settings="emit('open-settings')"
+        />
+      </div>
     </div>
     <ComposerFileReference
       v-if="referenceOpen"
@@ -22,6 +29,11 @@
       :active-index="activeIndex"
       :searching="searching"
       @select="selectReference"
+    />
+    <PluginSlot
+      v-if="sessionId"
+      location="composer.above"
+      :context="{ location: 'composer.above', sessionId, usage }"
     />
     <NInput
       ref="inputRef"
@@ -35,12 +47,18 @@
       @blur="closeReferences"
     />
     <ComposerFileChips :files="selectedReferences" @remove="removeReference" />
+    <PluginSlot
+      v-if="sessionId"
+      location="composer.footer"
+      :context="{ location: 'composer.footer', sessionId, usage }"
+    />
     <ComposerActions
       :disabled="disabled"
       :disabled-reason="disabledReason"
       :running="running"
       :mode="mode"
       :can-send="Boolean(draft.trim() || selectedReferences.length)"
+      :can-reference="roots.length > 0"
       @stop="emit('stop')"
       @update-mode="emit('update-mode', $event)"
     />
@@ -64,6 +82,8 @@ import ComposerFileChips from './ComposerFileChips.vue';
 import ComposerFileReference from './ComposerFileReference.vue';
 import ComposerModelPicker from './ComposerModelPicker.vue';
 import ComposerRootPicker from './ComposerRootPicker.vue';
+import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
+import type { ChatUsage } from '../types';
 
 const props = defineProps<{
   disabled: boolean;
@@ -74,6 +94,7 @@ const props = defineProps<{
   models: ProviderModel[];
   mode: AgentMode;
   sessionId?: string | undefined;
+  usage?: ChatUsage | undefined;
   providerId?: string | undefined;
   modelId?: string | undefined;
   hero?: boolean;
@@ -188,5 +209,12 @@ const {
   gap: 8px;
   padding: 0 0 6px;
   border-bottom: 1px solid var(--nh-color-border);
+}
+
+.nh-composer__toolbar-right {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
 }
 </style>

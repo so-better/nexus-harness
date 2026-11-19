@@ -30,6 +30,10 @@
             </template>
             {{ t('terminal.search') }}
           </NTooltip>
+          <PluginSlot
+            location="terminal.toolbar"
+            :context="{ location: 'terminal.toolbar', sessionId }"
+          />
           <NTooltip placement="bottom" :show-arrow="false">
             <template #trigger>
               <NButton
@@ -232,6 +236,7 @@ import { useMessage, NButton, NInput, NPopconfirm, NTooltip, type InputInst } fr
 import type { TerminalSessionPublic } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
+import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import { useTerminalStore } from '../stores/terminal.store';
 import { terminalCssVariables, terminalThemeOverrides } from '../terminal-theme';
 import TerminalTab from './TerminalTab.vue';
