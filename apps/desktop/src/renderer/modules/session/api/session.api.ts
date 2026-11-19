@@ -6,6 +6,7 @@ import type { NexusEvent } from '@shared/events';
 import type {
   AgentMode,
   SessionCreateInput,
+  SessionExportResult,
   SessionRenameInput,
   SessionRoot,
   SessionSearchResult,
@@ -101,3 +102,20 @@ export const searchSessions = async (query: string): Promise<SessionSearchResult
  */
 export const subscribeSessionChanges = (handler: (session: SessionSummary) => void): (() => void) =>
   window.nexus.session.onChanged(handler);
+
+export const onSessionActivate = (handler: (sessionId: string) => void): (() => void) =>
+  window.nexus.session.onActivate(handler);
+
+/**
+ * 导出会话为指定格式。
+ */
+export const exportSession = async (
+  sessionId: string,
+  format: 'markdown' | 'html' | 'pdf'
+): Promise<SessionExportResult> => unwrap(await window.nexus.session.export({ sessionId, format }));
+
+/**
+ * 读取通知点击后待激活的会话。
+ */
+export const consumePendingSession = async (): Promise<string | null> =>
+  unwrap(await window.nexus.app.consumePendingSession());

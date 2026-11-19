@@ -132,6 +132,7 @@ export interface NexusBridge {
     getInfo: () => Promise<Result<AppInfo>>;
     openExternal: (url: string) => Promise<Result<{ opened: boolean }>>;
     openPath: (path: string) => Promise<Result<{ opened: boolean }>>;
+    consumePendingSession: () => Promise<Result<string | null>>;
   };
   theme: {
     getInfo: () => Promise<Result<ThemeInfo>>;
@@ -140,6 +141,10 @@ export interface NexusBridge {
   };
   settings: {
     getAutoLaunch: () => Promise<Result<boolean>>;
+    getNotificationBadge: () => Promise<Result<NotificationBadgeStyle>>;
+    setNotificationBadge: (
+      style: NotificationBadgeStyle
+    ) => Promise<Result<NotificationBadgeStyle>>;
     setAutoLaunch: (enabled: boolean) => Promise<Result<boolean>>;
     getLanguage: () => Promise<Result<AppLanguage>>;
     setLanguage: (language: AppLanguage) => Promise<Result<AppLanguage>>;
@@ -170,6 +175,8 @@ export interface NexusBridge {
     remove: (id: string) => Promise<Result<SessionRemoveResult>>;
     clearAll: () => Promise<Result<SessionClearAllResult>>;
     search: (query: string) => Promise<Result<SessionSearchResult[]>>;
+    export: (input: SessionExportInput) => Promise<Result<SessionExportResult>>;
+    onActivate: (handler: (sessionId: string) => void) => Unsubscribe;
   };
   checkpoint: {
     diff: (input: CheckpointDiffInput) => Promise<Result<CheckpointDiffResult>>;
@@ -363,6 +370,23 @@ export const sessionStatusSchema = z.enum([
 
 export const agentModeSchema = z.enum(['plan', 'build']);
 
+/**
+ * 会话导出格式与结果。
+ */
+export const sessionExportFormatSchema = z.enum(['markdown', 'html', 'pdf']);
+export const sessionExportInputSchema = z.object({
+  sessionId: z.string().min(1),
+  format: sessionExportFormatSchema
+});
+export const sessionExportResultSchema = z.object({
+  saved: z.boolean(),
+  path: z.string().optional(),
+  fileId: z.string().optional()
+});
+export type SessionExportFormat = z.infer<typeof sessionExportFormatSchema>;
+export type SessionExportInput = z.infer<typeof sessionExportInputSchema>;
+export type SessionExportResult = z.infer<typeof sessionExportResultSchema>;
+
 export const sessionSummarySchema = z.object({
   id: z.string().min(1),
   workspaceId: z.string().optional(),
@@ -525,6 +549,9 @@ export type FileSaveAsResult = z.infer<typeof fileSaveAsResultSchema>;
 export const languageSchema = z.enum(['zh-CN', 'en-US']);
 
 export type AppLanguage = z.infer<typeof languageSchema>;
+
+export const notificationBadgeStyleSchema = z.enum(['dot', 'count']);
+export type NotificationBadgeStyle = z.infer<typeof notificationBadgeStyleSchema>;
 
 export const cacheTargetSchema = z.enum(['files', 'artifacts', 'logs', 'all']);
 

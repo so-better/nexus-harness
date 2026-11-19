@@ -26,6 +26,7 @@ import { EventStore } from '../services/session/event-store';
 import { RunStore } from '../services/session/run-store';
 import { SessionService } from '../services/session/session-service';
 import { generateSessionTitle } from '../services/session/session-title';
+import { notifyAgentEvent } from '../services/notifications/notification-service';
 import { SessionHistoryService } from '../services/session/session-history';
 import {
   getRun,
@@ -239,6 +240,7 @@ export const registerAgentIpc = (): void => {
               const stored = events.append(agentEvent);
               applyTerminalState(stored);
               sendEvent(stored);
+              notifyAgentEvent(stored, sessions.get(stored.sessionId)?.title ?? 'Nexus');
             } catch (error) {
               console.error('Agent 事件持久化失败', error);
               controller.abort();

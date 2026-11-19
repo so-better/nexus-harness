@@ -10,6 +10,24 @@
           {{ sessionStatusLabel(session.status) }}
         </NTag>
       </div>
+      <NDropdown
+        trigger="click"
+        placement="bottom-end"
+        :options="exportOptions"
+        @select="selectExport"
+      >
+        <NButton
+          text
+          size="small"
+          :loading="exporting"
+          :disabled="exporting"
+          :title="t('session.export')"
+        >
+          <template #icon><AppIcon name="export" :size="15" /></template>
+          {{ t('session.export') }}
+          <AppIcon name="chevron-down" :size="12" />
+        </NButton>
+      </NDropdown>
     </header>
 
     <SessionEmptyView
@@ -94,9 +112,10 @@
  */
 
 import { computed, nextTick, watch } from 'vue';
-import { NButton, NTag } from 'naive-ui';
+import { NButton, NDropdown, NTag, type DropdownOption } from 'naive-ui';
 import type {
   AgentMode,
+  SessionExportFormat,
   ProviderModel,
   ProviderPublic,
   SessionRoot,
@@ -125,6 +144,7 @@ const props = defineProps<{
   focusMessageId?: string | undefined;
   focusToken?: number | undefined;
   focusSessionId?: string | undefined;
+  exporting?: boolean | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -142,12 +162,24 @@ const emit = defineEmits<{
   'edit-message': [messageId: string, content: string, references?: MessageFileReference[]];
   'regenerate-message': [messageId: string];
   'request-root': [];
+  export: [format: SessionExportFormat];
 }>();
 
 const isEmpty = computed(() => !props.session || props.projection.messages.length === 0);
 const pendingApprovals = computed(() =>
   props.projection.approvals.filter((approval) => approval.status === 'pending')
 );
+
+const exportOptions: DropdownOption[] = [
+  { key: 'markdown', label: 'Markdown' },
+  { key: 'html', label: 'HTML' },
+  { key: 'pdf', label: 'PDF' }
+];
+
+const selectExport = (key: string | number): void => {
+  if (props.exporting) return;
+  emit('export', key as SessionExportFormat);
+};
 
 /**
  * 跳转到第一条待审批的工具卡片。

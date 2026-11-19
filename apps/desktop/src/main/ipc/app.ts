@@ -3,6 +3,7 @@
  */
 
 import { app, ipcMain, shell } from 'electron';
+import { consumePendingSession } from '../services/notifications/notification-service';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import { appInfoSchema, type AppInfo } from '@shared/ipc/contracts';
 import { ok, type Result } from '@shared/ipc/result';
@@ -34,6 +35,10 @@ export const registerAppIpc = (): void => {
         ? { ok: false, error: { code: 'OPEN_PATH_FAILED', message: error } }
         : ok({ opened: true });
     }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.appConsumePendingSession, (): Result<string | null> =>
+    ok(consumePendingSession())
   );
 
   ipcMain.handle(IPC_CHANNELS.appGetInfo, async (): Promise<Result<AppInfo>> => {

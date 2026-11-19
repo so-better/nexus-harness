@@ -48,4 +48,19 @@ describe('FileService', () => {
 
     expect(await readFile(target, 'utf8')).toBe('hello');
   });
+
+  it('stores exports under the exports directory', async () => {
+    const file = await files.saveExport({
+      sessionId: 'session-1',
+      name: 'session.md',
+      content: '# Export'
+    });
+    const target = join(root, 'export-copy.md');
+    await files.saveAs(file.id, 'session-1', target);
+    expect(await readFile(target, 'utf8')).toBe('# Export');
+    const row = db.prepare('SELECT stored_path FROM files WHERE id = ?').get(file.id) as {
+      stored_path: string;
+    };
+    expect(row.stored_path).toContain('/exports/session-1/');
+  });
 });

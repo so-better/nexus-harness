@@ -94,7 +94,11 @@ export const getLanguage = async (): Promise<AppLanguage> =>
 export const setLanguage = async (language: AppLanguage): Promise<AppLanguage> =>
   unwrap(await window.nexus.settings.setLanguage(language));
 
-import type { TerminalSettings, TerminalShellInfo } from '@shared/ipc/contracts';
+import type {
+  NotificationBadgeStyle,
+  TerminalSettings,
+  TerminalShellInfo
+} from '@shared/ipc/contracts';
 
 /**
  * 读取终端外观与 shell 设置。
@@ -113,3 +117,17 @@ export const selectTerminalShell = async (): Promise<string | undefined> =>
 
 export const setTerminalSettings = async (settings: TerminalSettings): Promise<TerminalSettings> =>
   unwrap(await window.nexus.terminal.setSettings(settings));
+
+/**
+ * 读取通知角标样式。
+ */
+export const getNotificationBadge = async (): Promise<NotificationBadgeStyle> =>
+  unwrap(await window.nexus.settings.getNotificationBadge());
+
+/**
+ * 保存通知角标样式。
+ */
+export const setNotificationBadge = async (
+  style: NotificationBadgeStyle
+): Promise<NotificationBadgeStyle> =>
+  unwrap(await window.nexus.settings.setNotificationBadge(style));

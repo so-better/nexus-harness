@@ -45,6 +45,12 @@ export const eventPayloadSchemas = {
   }),
   'session.pinned': z.object({}),
   'session.removed': z.object({}),
+  'session.exported': z.object({
+    sessionId: z.string(),
+    format: z.enum(['markdown', 'html', 'pdf']),
+    fileId: z.string().optional(),
+    path: z.string().optional()
+  }),
   'session.unpinned': z.object({}),
   'run.started': z.object({
     model: z.string()

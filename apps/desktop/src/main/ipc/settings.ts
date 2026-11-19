@@ -8,8 +8,10 @@ import {
   cacheInfoSchema,
   cacheTargetSchema,
   languageSchema,
+  notificationBadgeStyleSchema,
   type AppLanguage,
-  type CacheInfo
+  type CacheInfo,
+  type NotificationBadgeStyle
 } from '@shared/ipc/contracts';
 import { fail, ok, type Result } from '@shared/ipc/result';
 import {
@@ -18,6 +20,14 @@ import {
   saveAutoLaunch
 } from '../services/settings/startup-settings';
 import { loadLanguage, saveLanguage } from '../services/settings/language-settings';
+import {
+  setNotificationLanguage,
+  setNotificationBadgeStyle
+} from '../services/notifications/notification-service';
+import {
+  loadNotificationBadge,
+  saveNotificationBadge
+} from '../services/settings/notification-settings';
 import { clearCache, getCacheInfo } from '../services/cache/cache-service';
 import { getAppDataPaths } from '../services/storage/paths';
 import { hasActiveRuns } from '../services/agent/run-registry';
@@ -74,11 +84,44 @@ export const registerSettingsIpc = (): void => {
 
       try {
         await saveLanguage(parsed.data);
+        setNotificationLanguage(parsed.data);
         return ok(parsed.data);
       } catch (error) {
         return fail(
           'SETTINGS_WRITE_FAILED',
           error instanceof Error ? error.message : '保存语言失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.settingsGetNotificationBadge,
+    async (): Promise<Result<NotificationBadgeStyle>> => {
+      try {
+        return ok(await loadNotificationBadge());
+      } catch (error) {
+        return fail(
+          'SETTINGS_READ_FAILED',
+          error instanceof Error ? error.message : '读取通知设置失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.settingsSetNotificationBadge,
+    async (_event, rawStyle: unknown): Promise<Result<NotificationBadgeStyle>> => {
+      const parsed = notificationBadgeStyleSchema.safeParse(rawStyle);
+      if (!parsed.success) return fail('SETTINGS_INVALID_INPUT', '通知角标参数不合法');
+      try {
+        const saved = await saveNotificationBadge(parsed.data);
+        setNotificationBadgeStyle(saved);
+        return ok(saved);
+      } catch (error) {
+        return fail(
+          'SETTINGS_WRITE_FAILED',
+          error instanceof Error ? error.message : '保存通知设置失败'
         );
       }
     }

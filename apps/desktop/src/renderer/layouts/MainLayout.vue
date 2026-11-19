@@ -27,6 +27,7 @@
         :focus-message-id="focusMessage?.id"
         :focus-token="focusMessage?.token"
         :focus-session-id="focusMessage?.sessionId"
+        :exporting="exporting"
         @choose-root="chooseRoot"
         @remove-root="removeRoot"
         @request-root="authorizeRootAndRetry"
@@ -41,6 +42,7 @@
         @answer-user="answerUser"
         @edit-message="editMessage"
         @regenerate-message="regenerateMessage"
+        @export="(format) => exportActiveSession(format)"
       />
       <TerminalPanel :session-id="activeId ?? undefined" :shortcut-enabled="!settingsOpen" />
     </div>
@@ -80,7 +82,12 @@ import ChatView from '@/modules/chat/views/ChatView.vue';
 import { projectEvents } from '@/modules/chat/projection';
 import { useChatStore } from '@/modules/chat/stores/chat.store';
 import SessionSidebar from '@/modules/session/components/SessionSidebar.vue';
-import { subscribeSessionChanges } from '@/modules/session/api/session.api';
+import {
+  consumePendingSession,
+  exportSession as exportSessionApi,
+  onSessionActivate,
+  subscribeSessionChanges
+} from '@/modules/session/api/session.api';
 import { useSessionStore } from '@/modules/session/stores/session.store';
 import { getLanguage } from '@/modules/settings/api/settings.api';
 import SettingsModal from '@/modules/settings/views/SettingsModal.vue';
@@ -101,7 +108,9 @@ const { providers, providerId, modelId, models, roots, runningBySession } = stor
 
 const { version, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
 const focusMessage = ref<{ id: string; token: number; sessionId: string }>();
+const exporting = ref(false);
 let unsubscribeSessionChanges: (() => void) | undefined;
+let unsubscribeSessionActivate: (() => void) | undefined;
 let focusSequence = 0;
 
 const activeMode = computed(
@@ -198,6 +207,28 @@ const removeSession = async (id: string): Promise<void> => {
 /**
  * 重命名会话。
  */
+const exportSession = async (
+  id: string,
+  format: 'markdown' | 'html' | 'pdf'
+): Promise<void> => {
+  try {
+    const result = await exportSessionApi(id, format);
+    if (result.saved) message.success(t('session.exported'));
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : t('session.exportFailed'));
+  }
+};
+
+const exportActiveSession = async (format: 'markdown' | 'html' | 'pdf'): Promise<void> => {
+  if (!activeId.value || exporting.value) return;
+  exporting.value = true;
+  try {
+    await exportSession(activeId.value, format);
+  } finally {
+    exporting.value = false;
+  }
+};
+
 const renameSession = async (id: string, title: string): Promise<void> => {
   const renamed = await sessions.rename(id, title);
   if (!renamed) message.error(sessions.error ?? t('session.renameFailed'));
@@ -363,6 +394,7 @@ const stop = async (): Promise<void> => {
 onMounted(async () => {
   terminal.init();
   unsubscribeSessionChanges = subscribeSessionChanges((session) => sessions.applyUpdate(session));
+  unsubscribeSessionActivate = onSessionActivate((sessionId) => sessions.select(sessionId));
   try {
     setLocale(await getLanguage());
   } catch {
@@ -370,6 +402,8 @@ onMounted(async () => {
   }
   await chat.initialize();
   await sessions.load();
+  const pendingSession = await consumePendingSession();
+  if (pendingSession) sessions.select(pendingSession);
   await ensureSession();
   await loadAppMeta();
 });
@@ -377,6 +411,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   unsubscribeSessionChanges?.();
   unsubscribeSessionChanges = undefined;
+  unsubscribeSessionActivate?.();
+  unsubscribeSessionActivate = undefined;
   chat.dispose();
 });
 </script>

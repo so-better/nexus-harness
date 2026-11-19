@@ -19,6 +19,7 @@
     <path v-else-if="name === 'send'" d="m4 11 16-7-7 16-2-7-7-2Z" />
     <path v-else-if="name === 'stop'" d="M7 7h10v10H7z" fill="currentColor" stroke="none" />
     <path v-else-if="name === 'file'" d="M7 3h7l4 4v14H7zM14 3v5h5" />
+    <path v-else-if="name === 'export'" d="M12 15V3M7 8l5-5 5 5M5 15v5h14v-5" />
     <path
       v-else-if="name === 'terminal'"
       d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7 9l3 3-3 3M13 15h4"
@@ -42,6 +43,10 @@
       d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM3 12h18M12 3c2.4 2.5 3.8 5.5 3.8 9S14.4 18.5 12 21c-2.4-2.5-3.8-5.5-3.8-9S9.6 5.5 12 3Z"
     />
     <path v-else-if="name === 'power'" d="M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0" />
+    <path
+      v-else-if="name === 'bell'"
+      d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"
+    />
     <path v-else-if="name === 'alert'" d="M12 3 2 21h20L12 3ZM12 9v5M12 17h.01" />
     <path v-else-if="name === 'close'" d="m6 6 12 12M18 6 6 18" />
     <path v-else-if="name === 'search'" d="M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14ZM16 16l4 4" />
@@ -77,6 +82,7 @@ withDefaults(
       | 'stop'
       | 'spark'
       | 'file'
+      | 'export'
       | 'terminal'
       | 'edit'
       | 'history'
@@ -93,6 +99,7 @@ withDefaults(
       | 'database'
       | 'power'
       | 'alert'
+      | 'bell'
       | 'close'
       | 'pin'
       | 'message'

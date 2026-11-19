@@ -30,6 +30,22 @@
           </div>
           <NSwitch :value="autoLaunch" :loading="loading" @update:value="changeAutoLaunch" />
         </div>
+
+        <div class="nh-general__row nh-general__row--divided">
+          <span class="nh-general__icon">
+            <AppIcon name="bell" :size="16" />
+          </span>
+          <div class="nh-general__copy">
+            <p class="nh-general__title">{{ t('settings.notificationBadge') }}</p>
+            <p class="nh-general__hint">{{ t('settings.notificationBadgeHint') }}</p>
+          </div>
+          <NSelect
+            class="nh-general__language"
+            :value="badgeStyle"
+            :options="badgeOptions"
+            @update:value="changeBadge"
+          />
+        </div>
       </div>
     </div>
 
@@ -58,35 +74,63 @@
 
 import { computed, onMounted, ref } from 'vue';
 import { NSelect, NSwitch, useMessage, type SelectOption } from 'naive-ui';
-import type { AppLanguage } from '@shared/ipc/contracts';
+import type { AppLanguage, NotificationBadgeStyle } from '@shared/ipc/contracts';
 import { locale, setLocale, t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
-import { getAutoLaunch, setAutoLaunch, setLanguage } from '../api/settings.api';
+import {
+  getAutoLaunch,
+  getNotificationBadge,
+  setAutoLaunch,
+  setLanguage,
+  setNotificationBadge
+} from '../api/settings.api';
 
 defineProps<{ version: string }>();
 
 const message = useMessage();
 const autoLaunch = ref(true);
+const badgeStyle = ref<NotificationBadgeStyle>('dot');
 const loading = ref(false);
 const languageOptions = computed<SelectOption[]>(() => [
   { label: t('settings.languageZh'), value: 'zh-CN' },
   { label: t('settings.languageEn'), value: 'en-US' }
 ]);
 
+const badgeOptions = computed<SelectOption[]>(() => [
+  { label: t('settings.notificationBadgeDot'), value: 'dot' },
+  { label: t('settings.notificationBadgeCount'), value: 'count' }
+]);
+
 /**
  * 读取当前开机自启状态。
  */
 const load = async (): Promise<void> => {
-  try {
-    autoLaunch.value = await getAutoLaunch();
-  } catch (reason) {
-    message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
+  const [autoLaunchResult, badgeResult] = await Promise.allSettled([
+    getAutoLaunch(),
+    getNotificationBadge()
+  ]);
+  if (autoLaunchResult.status === 'fulfilled') autoLaunch.value = autoLaunchResult.value;
+  if (badgeResult.status === 'fulfilled') badgeStyle.value = badgeResult.value;
+  if (autoLaunchResult.status === 'rejected' || badgeResult.status === 'rejected') {
+    message.error(t('settings.loadFailed'));
   }
 };
 
 /**
  * 更新开机自启状态并持久化。
  */
+const changeBadge = async (value: NotificationBadgeStyle): Promise<void> => {
+  const previous = badgeStyle.value;
+  badgeStyle.value = value;
+  try {
+    await setNotificationBadge(value);
+    message.success(t('settings.saved'));
+  } catch (reason) {
+    badgeStyle.value = previous;
+    message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
+  }
+};
+
 const changeAutoLaunch = async (value: boolean): Promise<void> => {
   loading.value = true;
   try {

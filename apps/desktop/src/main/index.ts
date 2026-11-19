@@ -15,6 +15,13 @@ import {
 } from './services/storage/paths';
 import { closeDatabase, initDatabase } from './services/storage/database';
 import { loadThemeSource } from './services/settings/theme-settings';
+import { loadLanguage } from './services/settings/language-settings';
+import {
+  clearNotificationBadge,
+  setNotificationBadgeStyle,
+  setNotificationLanguage
+} from './services/notifications/notification-service';
+import { loadNotificationBadge } from './services/settings/notification-settings';
 import { EventStore } from './services/session/event-store';
 import { RunStore } from './services/session/run-store';
 import { expirePendingApprovals } from './services/session/approval-recovery';
@@ -24,6 +31,18 @@ import { initializeAutoLaunch } from './services/settings/startup-settings';
 import { terminalService } from './services/terminal/terminal-service';
 
 app.setName('Nexus');
+
+/**
+ * 统一初始化主窗口的焦点与终端生命周期监听。
+ */
+const setupMainWindow = (window: BrowserWindow): BrowserWindow => {
+  window.on('focus', clearNotificationBadge);
+  const terminalOwnerId = window.webContents.id;
+  window.webContents.once('destroyed', () => {
+    terminalService.closeByOwner(terminalOwnerId);
+  });
+  return window;
+};
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
@@ -47,6 +66,8 @@ if (!hasSingleInstanceLock) {
         destinationDir: getAppDataPaths().plugins
       });
       nativeTheme.themeSource = await loadThemeSource();
+      setNotificationLanguage(await loadLanguage());
+      setNotificationBadgeStyle(await loadNotificationBadge());
       await initializeAutoLaunch();
 
       const db = initDatabase();
@@ -73,15 +94,11 @@ if (!hasSingleInstanceLock) {
       }
 
       registerIpcHandlers();
-      const mainWindow = createMainWindow();
-      const terminalOwnerId = mainWindow.webContents.id;
-      mainWindow.webContents.once('destroyed', () => {
-        terminalService.closeByOwner(terminalOwnerId);
-      });
+      setupMainWindow(createMainWindow());
 
       app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
-          createMainWindow();
+          setupMainWindow(createMainWindow());
         }
       });
     })

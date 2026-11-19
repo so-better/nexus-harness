@@ -2,18 +2,20 @@
  * 会话 IPC：列表、创建、读取、重命名与删除。
  */
 
-import { ipcMain } from 'electron';
+import { BrowserWindow, dialog, ipcMain } from 'electron';
 import type { NexusEvent } from '@shared/events';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import {
   sessionAddRootsInputSchema,
   sessionCreateInputSchema,
   sessionRemoveRootInputSchema,
+  sessionExportInputSchema,
   sessionRenameInputSchema,
   sessionSetModeInputSchema,
   sessionSetModelInputSchema,
   sessionSetPinnedInputSchema,
   type SessionClearAllResult,
+  type SessionExportResult,
   type SessionRemoveResult,
   type SessionRoot,
   type SessionSearchResult,
@@ -21,11 +23,20 @@ import {
 } from '@shared/ipc/contracts';
 import { fail, ok, type Result } from '@shared/ipc/result';
 import { hasRunForSession } from '../services/agent/run-registry';
+import { FileService } from '../services/files/file-service';
+import { createNexusEvent } from '@nexus/core';
 import { EventStore } from '../services/session/event-store';
 import { SessionService } from '../services/session/session-service';
 import { searchSessions } from '../services/session/session-search';
 import { getDatabase } from '../services/storage/database';
+import { buildSessionHtml, buildSessionMarkdown } from '../services/session/export-service';
 import { terminalService } from '../services/terminal/terminal-service';
+
+const exportMime = (format: 'markdown' | 'html' | 'pdf'): string => {
+  if (format === 'markdown') return 'text/markdown';
+  if (format === 'html') return 'text/html';
+  return 'application/pdf';
+};
 
 /**
  * 注册会话相关 IPC；数据库在 app ready 后已初始化。
@@ -34,6 +45,7 @@ export const registerSessionIpc = (): void => {
   const db = getDatabase();
   const events = new EventStore(db);
   const sessions = new SessionService(db, events);
+  const files = new FileService(db);
 
   ipcMain.handle(
     IPC_CHANNELS.sessionEvents,
@@ -254,6 +266,82 @@ export const registerSessionIpc = (): void => {
         return fail('SESSION_NOT_FOUND', `会话不存在：${parsed.data.sessionId}`);
       }
       return ok(sessions.removeRoot(parsed.data.sessionId, parsed.data.rootId));
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.sessionExport,
+    async (event, rawInput: unknown): Promise<Result<SessionExportResult>> => {
+      const parsed = sessionExportInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('SESSION_INVALID_INPUT', '导出参数不合法');
+      const session = sessions.get(parsed.data.sessionId);
+      if (!session) return fail('SESSION_NOT_FOUND', '会话不存在');
+
+      const title = session.title.replace(/[\\/:*?"<>|]/g, '_') || 'session';
+      const extension = parsed.data.format === 'markdown' ? 'md' : parsed.data.format;
+      const window = BrowserWindow.fromWebContents(event.sender);
+      const result = window
+        ? await dialog.showSaveDialog(window, {
+            title: '导出会话',
+            defaultPath: `${title}.${extension}`
+          })
+        : await dialog.showSaveDialog({ title: '导出会话', defaultPath: `${title}.${extension}` });
+      if (result.canceled || !result.filePath) return ok({ saved: false });
+
+      const sessionEvents = events.list(session.id);
+      try {
+        let content: string | Buffer;
+        if (parsed.data.format === 'markdown') {
+          content = buildSessionMarkdown(session, sessionEvents);
+        } else {
+          const html = buildSessionHtml(session, sessionEvents);
+          if (parsed.data.format === 'html') {
+            content = html;
+          } else {
+            const renderer = new BrowserWindow({
+              show: false,
+              width: 1000,
+              height: 800,
+              webPreferences: { sandbox: true, backgroundThrottling: false }
+            });
+            try {
+              await renderer.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+              content = await renderer.webContents.printToPDF({
+                printBackground: true,
+                pageSize: 'A4'
+              });
+            } finally {
+              renderer.destroy();
+            }
+          }
+        }
+        const stored = await files.saveExport({
+          sessionId: session.id,
+          name: `${title}.${extension}`,
+          mime: exportMime(parsed.data.format),
+          content,
+          source: 'generated'
+        });
+        await files.saveAs(stored.id, session.id, result.filePath);
+        events.append(
+          createNexusEvent({
+            sessionId: session.id,
+            seq: 1,
+            type: 'session.exported',
+            payload: {
+              sessionId: session.id,
+              format: parsed.data.format,
+              fileId: stored.id
+            }
+          })
+        );
+        return ok({ saved: true, path: result.filePath, fileId: stored.id });
+      } catch (error) {
+        return fail(
+          'SESSION_EXPORT_FAILED',
+          error instanceof Error ? error.message : '导出会话失败'
+        );
+      }
     }
   );
 

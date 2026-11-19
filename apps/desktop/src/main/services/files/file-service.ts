@@ -96,9 +96,19 @@ export class FileService {
    * 保存生成或下载的文件，返回可被 UI 引用的元数据。
    */
   async save(input: SaveFileInput): Promise<OutputFile> {
+    return this.saveInDirectory(input, join(this.directory, input.sessionId));
+  }
+
+  /**
+   * 保存会话导出文件到 files/exports，保持导出内容与普通输出文件隔离。
+   */
+  async saveExport(input: SaveFileInput): Promise<OutputFile> {
+    return this.saveInDirectory(input, join(this.directory, 'exports', input.sessionId));
+  }
+
+  private async saveInDirectory(input: SaveFileInput, directory: string): Promise<OutputFile> {
     const id = randomUUID();
     const name = safeName(input.name);
-    const directory = join(this.directory, input.sessionId);
     await mkdir(directory, { recursive: true });
     const storedPath = join(directory, `${id}-${name}`);
     const data =

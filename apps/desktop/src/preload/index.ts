@@ -17,7 +17,8 @@ const bridge: NexusBridge = {
   app: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo),
     openExternal: (url) => ipcRenderer.invoke(IPC_CHANNELS.appOpenExternal, url),
-    openPath: (path) => ipcRenderer.invoke(IPC_CHANNELS.appOpenPath, path)
+    openPath: (path) => ipcRenderer.invoke(IPC_CHANNELS.appOpenPath, path),
+    consumePendingSession: () => ipcRenderer.invoke(IPC_CHANNELS.appConsumePendingSession)
   },
   session: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.sessionList),
@@ -38,13 +39,22 @@ const bridge: NexusBridge = {
     removeRoot: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionRemoveRoot, input),
     remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.sessionRemove, id),
     clearAll: () => ipcRenderer.invoke(IPC_CHANNELS.sessionClearAll),
-    search: (query) => ipcRenderer.invoke(IPC_CHANNELS.sessionSearch, query)
+    search: (query) => ipcRenderer.invoke(IPC_CHANNELS.sessionSearch, query),
+    export: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionExport, input),
+    onActivate: (handler) => {
+      const listener = (_event: IpcRendererEvent, id: string): void => handler(id);
+      ipcRenderer.on(IPC_CHANNELS.sessionActivate, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.sessionActivate, listener);
+    }
   },
   settings: {
     getAutoLaunch: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetAutoLaunch),
     setAutoLaunch: (enabled) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetAutoLaunch, enabled),
     getLanguage: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetLanguage),
-    setLanguage: (language) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetLanguage, language)
+    setLanguage: (language) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetLanguage, language),
+    getNotificationBadge: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetNotificationBadge),
+    setNotificationBadge: (style) =>
+      ipcRenderer.invoke(IPC_CHANNELS.settingsSetNotificationBadge, style)
   },
   cache: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.cacheGetInfo),

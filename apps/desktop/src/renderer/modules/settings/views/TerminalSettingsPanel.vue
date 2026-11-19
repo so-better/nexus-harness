@@ -106,6 +106,8 @@ const message = useMessage();
 const usingAuto = ref(true);
 const shellPath = ref('');
 const shellInfo = ref<TerminalShellInfo>();
+let shellDirty = false;
+let shellRevision = 0;
 const draft = reactive<TerminalSettings>({ ...DEFAULT_TERMINAL_SETTINGS });
 
 const load = async (): Promise<void> => {
@@ -123,11 +125,15 @@ const load = async (): Promise<void> => {
 const updateShellPath = (value: string): void => {
   shellPath.value = value;
   usingAuto.value = false;
+  shellDirty = true;
+  shellRevision += 1;
 };
 
 const useAutoShell = (): void => {
   usingAuto.value = true;
   shellPath.value = shellInfo.value?.path ?? '';
+  shellDirty = true;
+  shellRevision += 1;
   persist().catch(() => undefined);
 };
 
@@ -137,6 +143,8 @@ const chooseShell = async (): Promise<void> => {
     if (!path) return;
     usingAuto.value = false;
     shellPath.value = path;
+    shellDirty = true;
+    shellRevision += 1;
     await persist();
   } catch {
     message.error(t('settings.terminalChooseShellFailed'));
@@ -156,16 +164,17 @@ const persist = async (): Promise<void> => {
     saveTimer = undefined;
   }
   const requestId = ++saveSequence;
+  const shellRevisionAtRequest = shellRevision;
   const snapshot: TerminalSettings = { ...draft, shell: currentShell() };
   saveQueue = saveQueue.then(async () => {
     try {
       const saved = await setTerminalSettings(snapshot);
       if (requestId !== saveSequence) return;
-      Object.assign(draft, saved);
       usingAuto.value = !saved.shell;
       const info = await getTerminalShellInfo();
       shellInfo.value = info;
       shellPath.value = saved.shell ?? info.path;
+      if (shellRevisionAtRequest === shellRevision) shellDirty = false;
     } catch (error) {
       if (requestId === saveSequence) {
         message.error(error instanceof Error ? error.message : t('settings.terminalSaveFailed'));
@@ -176,8 +185,12 @@ const persist = async (): Promise<void> => {
 };
 
 const updateNumber = (key: 'fontSize' | 'scrollback', value: number | null): void => {
-  if (typeof value !== 'number') return;
-  draft[key] = value;
+  draft[key] =
+    typeof value === 'number'
+      ? value
+      : key === 'fontSize'
+        ? DEFAULT_TERMINAL_SETTINGS.fontSize
+        : DEFAULT_TERMINAL_SETTINGS.scrollback;
   scheduleSave();
 };
 
@@ -199,8 +212,9 @@ const saveShell = (): void => {
 };
 
 onBeforeUnmount(() => {
-  if (saveTimer !== undefined) {
-    clearTimeout(saveTimer);
+  if (saveTimer !== undefined || shellDirty) {
+    if (saveTimer !== undefined) clearTimeout(saveTimer);
+    saveTimer = undefined;
     persist().catch(() => undefined);
   }
 });

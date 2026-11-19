@@ -314,7 +314,7 @@ nexus-harness/
 │        │  │  ├─ storage/       # 持久化（会话、设置、工作区索引）
 │        │  │  ├─ files/         # AI 输出文件存储与另存为
 │        │  │  ├─ search/        # 跨会话全文索引与查询
-│        │  │  ├─ export/        # 会话导出（Markdown/HTML/PDF/PNG）
+│        │  │  ├─ export/        # 会话导出（Markdown/HTML/PDF）
 │        │  └─ security/         # 沙箱、路径白名单、命令拦截
 │        ├─ preload/             # contextBridge 唯一入口
 │        └─ renderer/
@@ -1188,9 +1188,9 @@ interface SlotContext {
 
 #### 4.10.2 会话导出
 
-- 支持 Markdown、HTML、PDF、PNG 长图四种格式。
+- 支持 Markdown、HTML、PDF 三种格式。
 - 导出内容包含会话元数据、消息、工具调用摘要、审批、diff 与用量；默认不含密钥，长工具输出可折叠或截断。
-- Markdown 为可读文本；HTML 为自包含单文件；PDF 通过 `printToPDF` 生成；PNG 为长图，超长时分段或压缩。
+- Markdown 为可读文本；HTML 为自包含单文件；PDF 通过 `printToPDF` 生成。
 - 导出文件由文件服务写入 `<userData>/files/exports`，用户通过系统文件对话框选择最终保存路径。
 - 导出前展示内容范围与脱敏选项；导出完成后写入 `session.exported` 事件。
 
@@ -1765,7 +1765,7 @@ CHANGELOG.md         # 版本变更记录
 | 会话模型 | 多会话 | 独立上下文，受全局并发限制 |
 | 会话标题 | AI 自动总结 | 基于首条用户消息，用户可重命名 |
 | 会话组织 | 置顶 + 最近 | 支持跨会话搜索 |
-| 会话导出 | Markdown / HTML / PDF / PNG | 脱敏后由用户选择保存路径 |
+| 会话导出 | Markdown / HTML / PDF | 脱敏后由用户选择保存路径 |
 | 跨会话搜索 | SQLite FTS5 | 消息正文；结果附会话标题与定位信息 |
 | 网络访问 | 默认拒绝 | 按 provider / 域名显式放行 |
 | 发布 | 签名 + 自动更新 | stable / beta 双通道 |
@@ -1819,7 +1819,7 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 会话可从事件恢复，未完成 Run 有明确处理。
 - [ ] 多会话切换不中断后台 Run；标题、置顶与最近状态可持久化。
 - [ ] 跨会话搜索索引增量更新，删除会话时清理。
-- [ ] 会话导出 Markdown/HTML/PDF/PNG 不含密钥，保存路径由用户确认。
+- [ ] 会话导出 Markdown/HTML/PDF 不含密钥，保存路径由用户确认。
 - [ ] 消息编辑/重发/重新生成/停止写入事件，旧消息标记 `superseded`。
 - [ ] 写文件与执行命令前展示实际路径、参数、cwd、diff/写入内容和影响范围，拒绝后不执行。
 - [ ] 工作区索引尊重 `.gitignore`，跳过二进制与大文件，文件监听防抖。
