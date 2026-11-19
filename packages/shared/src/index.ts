@@ -9,3 +9,6 @@ export * from './ipc/result';
 export * from './usage';
 export * from './files';
 export * from './plugin';
+export * from './skills';
+export * from './mcp';
+export * from './image';

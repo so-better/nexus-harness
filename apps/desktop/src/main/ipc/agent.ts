@@ -18,6 +18,8 @@ import {
 import { askUserResolveInputSchema, type AskUserResolveResult } from '@shared/ask-user';
 import { fail, ok, type Result } from '@shared/ipc/result';
 import { AgentService, createAgentProvider } from '../services/agent/agent-service';
+import { SkillService } from '../services/skills/skill-service';
+import { getMcpService } from '../services/mcp/mcp-service-instance';
 import { approvalService } from '../services/agent/approval-service';
 import { askUserService } from '../services/agent/ask-user-service';
 import { providerStore } from '../services/provider/provider-store';
@@ -29,6 +31,7 @@ import { generateSessionTitle } from '../services/session/session-title';
 import { getPluginHost } from '../services/plugins/plugin-host-instance';
 import { notifyAgentEvent } from '../services/notifications/notification-service';
 import { SessionHistoryService } from '../services/session/session-history';
+import { loadImageSettings } from '../services/settings/image-settings';
 import {
   getRun,
   hasRunForSession,
@@ -45,7 +48,12 @@ export const registerAgentIpc = (): void => {
   const sessions = new SessionService(db, events);
   const runs = new RunStore(db);
   const history = new SessionHistoryService(events);
-  const agentService = new AgentService({ database: db });
+  const agentService = new AgentService({
+    database: db,
+    skills: new SkillService(),
+    mcp: getMcpService(),
+    imageSettings: loadImageSettings
+  });
 
   const broadcastSession = (session: SessionSummary): void => {
     for (const window of BrowserWindow.getAllWindows()) {
@@ -77,8 +85,12 @@ export const registerAgentIpc = (): void => {
         if (!provider.enabled) {
           return fail('PROVIDER_DISABLED', `Provider 已停用：${parsed.data.providerId}`);
         }
-        if (!provider.models.some((model) => model.id === parsed.data.modelId)) {
-          return fail('PROVIDER_MODEL_NOT_FOUND', `模型不存在：${parsed.data.modelId}`);
+        if (
+          !provider.models.some(
+            (model) => model.id === parsed.data.modelId && model.role !== 'image'
+          )
+        ) {
+          return fail('PROVIDER_MODEL_NOT_FOUND', `对话模型不存在：${parsed.data.modelId}`);
         }
 
         if (parsed.data.editMessageId && parsed.data.regenerateMessageId) {
@@ -86,27 +98,54 @@ export const registerAgentIpc = (): void => {
         }
 
         let runHistory = history.load(session.id);
-        const branchMessageId = parsed.data.editMessageId ?? parsed.data.regenerateMessageId;
+        let branchMessageId = parsed.data.editMessageId ?? parsed.data.regenerateMessageId;
+        let isErrorRetry = false;
         if (branchMessageId) {
           const allEvents = events.list(session.id);
-          const boundary = allEvents.findIndex(
-            (item) =>
-              item.type === 'message.completed' &&
-              (item.payload as { messageId?: string }).messageId === branchMessageId
-          );
-          if (boundary < 0) {
-            return fail('SESSION_MESSAGE_NOT_FOUND', '要修改的消息不存在');
-          }
-          const target = allEvents[boundary];
-          const role =
-            target?.type === 'message.completed'
-              ? (target.payload as { role?: string }).role
-              : undefined;
-          if (parsed.data.editMessageId && role !== 'user') {
-            return fail('SESSION_MESSAGE_INVALID', '只能编辑用户消息');
-          }
-          if (parsed.data.regenerateMessageId && role !== 'assistant') {
-            return fail('SESSION_MESSAGE_INVALID', '只能重新生成助手消息');
+          let boundary = -1;
+          if (parsed.data.regenerateMessageId && !parsed.data.editMessageId) {
+            boundary = allEvents.findIndex(
+              (item) =>
+                item.type === 'message.completed' &&
+                (item.payload as { messageId?: string }).messageId === branchMessageId
+            );
+            const role =
+              boundary >= 0 && allEvents[boundary]?.type === 'message.completed'
+                ? (allEvents[boundary]?.payload as { role?: string }).role
+                : undefined;
+
+            // 错误气泡没有持久化 message.completed；重新生成时回退到最后一条用户消息
+            if (boundary < 0 || role !== 'assistant') {
+              isErrorRetry = true;
+              for (let index = allEvents.length - 1; index >= 0; index -= 1) {
+                const item = allEvents[index];
+                if (item?.type !== 'message.completed') continue;
+                if ((item.payload as { role?: string }).role !== 'user') continue;
+                boundary = index;
+                branchMessageId = (item.payload as { messageId: string }).messageId;
+                break;
+              }
+              if (boundary < 0) {
+                return fail('SESSION_MESSAGE_NOT_FOUND', '找不到可重试的用户消息');
+              }
+            }
+          } else {
+            boundary = allEvents.findIndex(
+              (item) =>
+                item.type === 'message.completed' &&
+                (item.payload as { messageId?: string }).messageId === branchMessageId
+            );
+            if (boundary < 0) {
+              return fail('SESSION_MESSAGE_NOT_FOUND', '要修改的消息不存在');
+            }
+            const target = allEvents[boundary];
+            const role =
+              target?.type === 'message.completed'
+                ? (target.payload as { role?: string }).role
+                : undefined;
+            if (parsed.data.editMessageId && role !== 'user') {
+              return fail('SESSION_MESSAGE_INVALID', '只能编辑用户消息');
+            }
           }
 
           if (parsed.data.editMessageId) {
@@ -133,9 +172,10 @@ export const registerAgentIpc = (): void => {
                 seq: 1,
                 type: 'message.regenerated',
                 payload: {
-                  messageId: branchMessageId,
-                  sourceMessageId:
-                    sourceMessageId?.type === 'message.completed'
+                  messageId: parsed.data.regenerateMessageId ?? branchMessageId,
+                  sourceMessageId: isErrorRetry
+                    ? branchMessageId
+                    : sourceMessageId?.type === 'message.completed'
                       ? (sourceMessageId.payload as { messageId: string }).messageId
                       : branchMessageId
                 }
@@ -143,11 +183,27 @@ export const registerAgentIpc = (): void => {
             );
           }
 
-          const supersededIds = allEvents
-            .slice(boundary)
-            .filter((item) => item.type === 'message.completed')
-            .map((item) => (item.payload as { messageId: string }).messageId);
-          for (const messageId of supersededIds) {
+          const superseded = new Set<string>();
+          const branchEvents = allEvents.slice(isErrorRetry ? boundary + 1 : boundary);
+          for (const item of branchEvents) {
+            if (item.type === 'message.completed') {
+              superseded.add((item.payload as { messageId: string }).messageId);
+            }
+          }
+          if (isErrorRetry) {
+            // 失败 Run 可能只有流式增量或工具卡片，没有 message.completed
+            for (const item of branchEvents) {
+              if (item.type === 'message.delta') {
+                superseded.add((item.payload as { messageId: string }).messageId);
+              } else if (item.type === 'tool.requested' || item.type === 'file.created') {
+                superseded.add(`assistant-${item.id}`);
+              }
+            }
+            if (parsed.data.regenerateMessageId) {
+              superseded.add(parsed.data.regenerateMessageId);
+            }
+          }
+          for (const messageId of superseded) {
             const stored = events.append(
               createNexusEvent({
                 sessionId: session.id,
@@ -276,6 +332,37 @@ export const registerAgentIpc = (): void => {
           }
         };
 
+        let errorMessageSent = false;
+        /**
+         * 失败也写入普通助手消息，保证错误进入事件流、搜索与导出。
+         */
+        const enqueueFailure = (error: { code: string; message: string }): void => {
+          enqueueEvent(
+            createNexusEvent({
+              sessionId: parsed.data.sessionId,
+              runId,
+              seq: 1,
+              type: 'run.failed',
+              payload: { error }
+            })
+          );
+          if (errorMessageSent) return;
+          errorMessageSent = true;
+          enqueueEvent(
+            createNexusEvent({
+              sessionId: parsed.data.sessionId,
+              seq: 1,
+              type: 'message.completed',
+              payload: {
+                messageId: `error-${randomUUID()}`,
+                role: 'assistant',
+                content: [error.message, error.code].filter(Boolean).join('\n\n'),
+                error: true
+              }
+            })
+          );
+        };
+
         const rootPaths = sessions.listRoots(session.id).map((root) => root.path);
         agentService
           .run({ ...parsed.data, rootPaths, mode: session.mode }, provider, {
@@ -295,6 +382,13 @@ export const registerAgentIpc = (): void => {
               ) {
                 terminalEventSent = true;
               }
+              if (agentEvent.type === 'run.failed') {
+                const failure = agentEvent.payload as unknown as {
+                  error: { code: string; message: string };
+                };
+                enqueueFailure(failure.error);
+                return;
+              }
               enqueueEvent(agentEvent);
             }
           })
@@ -303,20 +397,10 @@ export const registerAgentIpc = (): void => {
             console.error('Agent 运行失败', error);
             if (!terminalEventSent) {
               terminalEventSent = true;
-              enqueueEvent(
-                createNexusEvent({
-                  sessionId: parsed.data.sessionId,
-                  runId,
-                  seq: 1,
-                  type: 'run.failed',
-                  payload: {
-                    error: {
-                      code: 'AGENT_RUN_FAILED',
-                      message: error instanceof Error ? error.message : 'Agent 运行失败'
-                    }
-                  }
-                })
-              );
+              enqueueFailure({
+                code: 'AGENT_RUN_FAILED',
+                message: error instanceof Error ? error.message : 'Agent 运行失败'
+              });
             }
           })
           .finally(async () => {

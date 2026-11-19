@@ -35,6 +35,8 @@ interface ProviderSettingsState {
   selectProvider: (id: string) => void;
   newProvider: () => void;
   saveProviderForm: () => Promise<void>;
+  toggleProvider: (id: string, enabled: boolean) => Promise<void>;
+  deleteProviderById: (id: string) => Promise<void>;
   deleteProvider: () => Promise<void>;
 }
 
@@ -50,6 +52,7 @@ export const useProviderSettings = (
   const saving = ref(false);
   const availableModels = ref<string[]>([]);
   const testing = ref(false);
+  const autoFetched = new Set<string>();
 
   const providerForm = ref<ProviderFormState>({
     protocol: 'openai',
@@ -98,6 +101,10 @@ export const useProviderSettings = (
       defaultModelId: provider.defaultModelId
     };
     availableModels.value = provider.models.map((model) => model.id);
+    if (!autoFetched.has(provider.id) && provider.baseUrl.trim()) {
+      autoFetched.add(provider.id);
+      testConnection(true).catch(() => undefined);
+    }
   };
 
   /**
@@ -157,8 +164,10 @@ export const useProviderSettings = (
   /**
    * 测试当前表单连接；新配置无需先保存。
    */
-  const testConnection = async (): Promise<void> => {
+  const testConnection = async (silent = false): Promise<void> => {
+    if (testing.value) return;
     if (
+      !silent &&
       providerForm.value.protocol !== 'ollama' &&
       !providerForm.value.apiKey.trim() &&
       !selectedId.value
@@ -176,6 +185,7 @@ export const useProviderSettings = (
         ...(selectedId.value ? { id: selectedId.value } : {})
       });
       availableModels.value = result.models;
+      if (silent) return;
       if (result.models.length > 0) {
         message.success(
           `${t('settings.testSuccess')} ${result.models.length} ${t('settings.modelUnit')} (${result.latencyMs}ms)`
@@ -184,9 +194,47 @@ export const useProviderSettings = (
         message.warning(t('settings.testNoModels'));
       }
     } catch (reason) {
-      message.error(reason instanceof Error ? reason.message : t('settings.testFailed'));
+      if (!silent)
+        message.error(reason instanceof Error ? reason.message : t('settings.testFailed'));
     } finally {
       testing.value = false;
+    }
+  };
+
+  /**
+   * 在列表中直接启用或停用一个 Provider。
+   */
+  const toggleProvider = async (id: string, enabled: boolean): Promise<void> => {
+    const provider = providers.value.find((item) => item.id === id);
+    if (!provider) return;
+    try {
+      await saveProvider({
+        id: provider.id,
+        protocol: provider.protocol,
+        name: provider.name,
+        baseUrl: provider.baseUrl,
+        enabled,
+        models: provider.models,
+        defaultModelId: provider.defaultModelId
+      });
+      await load();
+    } catch (reason) {
+      message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
+    }
+  };
+
+  /**
+   * 在列表中直接删除指定 Provider。
+   */
+  const deleteProviderById = async (id: string): Promise<void> => {
+    try {
+      await removeProvider(id);
+      if (selectedId.value === id) selectedId.value = null;
+      await load();
+      message.success(t('settings.deleted'));
+      onChanged('deleted');
+    } catch (reason) {
+      message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
     }
   };
 
@@ -220,6 +268,8 @@ export const useProviderSettings = (
     selectProvider,
     newProvider,
     saveProviderForm,
+    toggleProvider,
+    deleteProviderById,
     deleteProvider
   };
 };

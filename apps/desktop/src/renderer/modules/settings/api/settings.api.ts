@@ -3,6 +3,7 @@
  */
 
 import { nexus } from '@/app/nexus-bridge';
+import type { ImageSettings } from '@shared/image';
 import type {
   AppInfo,
   CacheInfo,
@@ -44,6 +45,12 @@ export const removeProvider = async (id: string): Promise<void> => {
 /**
  * 读取当前主题来源。
  */
+export const getImageSettings = async (): Promise<ImageSettings | null> =>
+  unwrap(await nexus.settings.getImage());
+
+export const setImageSettings = async (value: ImageSettings): Promise<ImageSettings> =>
+  unwrap(await nexus.settings.setImage(value));
+
 export const getThemeInfo = async (): Promise<ThemeInfo> => unwrap(await nexus.theme.getInfo());
 
 /**

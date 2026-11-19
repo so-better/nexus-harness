@@ -26,7 +26,6 @@ import {
   reportPluginError,
   readPluginWorkspace,
   listPluginWorkspace,
-  openPluginDirectory,
   setPluginEnabled,
   setPluginSettings,
   setPluginStorage,
@@ -550,10 +549,6 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     await applyPlugins(await uninstallPlugin(id));
   };
 
-  const openDirectory = async (): Promise<void> => {
-    await openPluginDirectory();
-  };
-
   const setActiveSession = (sessionId: string | undefined): void => {
     activeSessionId.value = sessionId;
   };
@@ -571,14 +566,18 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     }
   };
 
-  const importFromDirectory = async (): Promise<void> => {
+  const importFromDirectory = async (): Promise<boolean> => {
     error.value = undefined;
     try {
-      await applyPlugins(await importPluginDirectory());
+      const next = await importPluginDirectory();
+      if (!next) return false;
+      await applyPlugins(next);
+      return true;
     } catch (reason) {
       const messageText = reason instanceof Error ? reason.message : String(reason);
       error.value = messageText;
       reportPluginError('plugin-runtime', messageText).catch(() => undefined);
+      return false;
     }
   };
 
@@ -616,7 +615,6 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     setEnabled,
     importFromDirectory,
     uninstall,
-    openDirectory,
     loadSettings,
     saveSettings,
     reportPluginFailure,

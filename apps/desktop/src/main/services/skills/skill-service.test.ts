@@ -1,0 +1,66 @@
+/**
+ * Skill 扫描与按需读取测试。
+ */
+
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { SkillService } from './skill-service';
+
+describe('SkillService', () => {
+  let root = '';
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'nexus-skills-'));
+    await mkdir(join(root, 'fix-tests'), { recursive: true });
+    await writeFile(
+      join(root, 'fix-tests', 'SKILL.md'),
+      '---\nname: fix-failing-tests\ndescription: 修复失败测试\ntags: [测试, lint]\nversion: 1.2.0\nrequires: [read, write]\n---\n先运行测试，再定位失败。\n'
+    );
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('scans metadata without loading full content into search results', async () => {
+    const skills = await new SkillService(root).scan();
+    expect(skills[0]).toMatchObject({ id: 'fix-tests', name: 'fix-failing-tests' });
+    expect(JSON.stringify(await new SkillService(root).search('测试'))).not.toContain('先运行');
+  });
+
+  it('runs a script inside the Skill scripts directory', async () => {
+    await mkdir(join(root, 'fix-tests', 'scripts'), { recursive: true });
+    await writeFile(join(root, 'fix-tests', 'scripts', 'echo.js'), "console.log('skill-ok')");
+    const result = await new SkillService(root).runScript('fix-tests', 'echo.js');
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain('skill-ok');
+  }, 10_000);
+
+  it('imports a directory with SKILL.md and resources', async () => {
+    const source = await mkdtemp(join(tmpdir(), 'nexus-skill-source-'));
+    try {
+      await mkdir(join(source, 'assets'), { recursive: true });
+      await writeFile(
+        join(source, 'SKILL.md'),
+        '---\nname: imported-skill\ndescription: imported\n---\nBody\n'
+      );
+      await writeFile(join(source, 'assets', 'note.txt'), 'asset');
+      const service = new SkillService(root);
+      const list = await service.importDirectory(source);
+      expect(list.some((skill) => skill.id === 'imported-skill')).toBe(true);
+      expect((await service.read('imported-skill'))?.assets).toContain('note.txt');
+      await expect(service.readFile('imported-skill', 'assets/note.txt')).resolves.toBe('asset');
+    } finally {
+      await rm(source, { recursive: true, force: true });
+    }
+  });
+
+  it('reads the body and rejects traversal', async () => {
+    const service = new SkillService(root);
+    const skill = await service.read('fix-tests');
+    expect(skill?.content).toContain('先运行测试');
+    await expect(service.read('../outside')).resolves.toBeUndefined();
+  });
+});

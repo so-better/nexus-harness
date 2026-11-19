@@ -79,6 +79,46 @@
         </div>
       </div>
     </template>
+
+    <div class="nh-models-field__fallback">
+      <NButton
+        text
+        size="small"
+        class="nh-models-field__fallback-toggle"
+        :aria-expanded="showManual"
+        @click="showManual = !showManual"
+      >
+        <span>{{ showManual ? t('settings.manualAddHide') : t('settings.manualAddToggle') }}</span>
+        <AppIcon
+          class="nh-models-field__fallback-chevron"
+          :name="showManual ? 'chevron-up' : 'chevron-down'"
+          :size="14"
+        />
+      </NButton>
+
+      <Transition name="nh-manual">
+        <NFormItem
+          v-if="showManual"
+          class="nh-models-field__manual-item"
+          :show-label="false"
+          :validation-status="manualError ? 'error' : 'success'"
+          :show-feedback="Boolean(manualError)"
+          :feedback="manualError"
+        >
+          <div class="nh-models-field__manual">
+            <NInput
+              v-model:value="manualModelId"
+              size="small"
+              :placeholder="t('settings.pleaseInput')"
+              @keydown.enter.prevent="addManualModel"
+            />
+            <NButton size="small" secondary @click="addManualModel">
+              {{ t('settings.addModel') }}
+            </NButton>
+          </div>
+        </NFormItem>
+      </Transition>
+    </div>
   </div>
 </template>
 
@@ -87,8 +127,8 @@
  * 多模型配置：获取模型后以复选框列表选择，并配置预算与默认模型。
  */
 
-import { computed } from 'vue';
-import { NButton, NCheckbox, NInputNumber, NRadio } from 'naive-ui';
+import { computed, ref, watch } from 'vue';
+import { NButton, NCheckbox, NFormItem, NInput, NInputNumber, NRadio } from 'naive-ui';
 import type { ProviderModel } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
@@ -121,7 +161,39 @@ const rows = computed<ProviderModel[]>(() => {
   );
 });
 
+const manualModelId = ref('');
+const manualError = ref('');
+const showManual = ref(false);
+
+watch(manualModelId, () => {
+  manualError.value = '';
+});
+
 const isSelected = (id: string): boolean => props.models.some((model) => model.id === id);
+
+/**
+ * 允许在模型列表接口不可用时手动添加模型 ID。
+ */
+const addManualModel = (): void => {
+  const id = manualModelId.value.trim();
+  if (!id) {
+    manualError.value = t('settings.manualModelRequired');
+    return;
+  }
+  if (isSelected(id)) {
+    manualError.value = t('settings.modelAlreadyAdded');
+    return;
+  }
+  const model: ProviderModel = {
+    id,
+    role: 'chat',
+    contextWindow: 128_000,
+    maxOutputTokens: 4_096
+  };
+  emit('update:models', [...props.models, model]);
+  if (!props.defaultModelId) emit('update:defaultModelId', id);
+  manualModelId.value = '';
+};
 
 /**
  * 勾选模型时添加默认预算；取消时移除并修正默认模型。
@@ -147,7 +219,7 @@ const toggleModel = (id: string, checked: boolean): void => {
 const updateModel = (
   id: string,
   key: 'contextWindow' | 'maxOutputTokens',
-  value: number | null
+  value: number | string | null
 ): void => {
   if (value === null) return;
   emit(
@@ -163,6 +235,61 @@ const updateModel = (
   width: 100%;
   flex-direction: column;
   gap: 10px;
+}
+
+.nh-models-field__manual {
+  display: flex;
+  width: 100%;
+  gap: 6px;
+}
+
+.nh-models-field__fallback {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nh-models-field__manual :deep(.n-input) {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.nh-models-field__manual :deep(.n-button) {
+  flex: none;
+}
+
+.nh-models-field__manual-item {
+  width: 100%;
+  margin-bottom: 0;
+  padding: 10px;
+  border: 1px solid var(--nh-color-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--nh-color-bg-elevated) 45%, transparent);
+}
+
+.nh-manual-enter-active,
+.nh-manual-leave-active {
+  transition:
+    opacity var(--nh-duration-fast) var(--nh-ease-standard),
+    transform var(--nh-duration-fast) var(--nh-ease-standard);
+}
+
+.nh-manual-enter-from,
+.nh-manual-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nh-models-field__fallback-chevron,
+  .nh-manual-enter-active,
+  .nh-manual-leave-active {
+    transition: none;
+  }
+}
+
+.nh-models-field__manual-item :deep(.n-form-item-blank) {
+  width: 100%;
 }
 
 .nh-models-field__empty {

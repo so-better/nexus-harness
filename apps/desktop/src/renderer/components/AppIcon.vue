@@ -60,6 +60,11 @@
     <path v-else-if="name === 'chevron-up'" d="m6 15 6-6 6 6" />
     <path v-else-if="name === 'arrow-up'" d="M12 19V5M6 11l6-6 6 6" />
     <path v-else-if="name === 'arrow-down'" d="M12 5v14M18 13l-6 6-6-6" />
+    <path v-else-if="name === 'plug'" d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0V7ZM12 16v5" />
+    <path
+      v-else-if="name === 'copy'"
+      d="M8 8h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2ZM4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
+    />
     <path
       v-else-if="name === 'refresh'"
       d="M20 7v5h-5M4 17v-5h5M6.1 9a7 7 0 0 1 11.2-2.6L20 9M4 15l2.7 2.6A7 7 0 0 0 17.9 15"
@@ -109,7 +114,8 @@ withDefaults(
       | 'trash'
       | 'check'
       | 'refresh'
-      | 'copy';
+      | 'copy'
+      | 'plug';
     size?: number;
   }>(),
   { size: 16 }

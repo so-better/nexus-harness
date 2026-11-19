@@ -16,6 +16,7 @@
             class="nh-general__language"
             :value="locale"
             :options="languageOptions"
+            :placeholder="t('settings.pleaseSelect')"
             @update:value="changeLanguage"
           />
         </div>
@@ -43,6 +44,7 @@
             class="nh-general__language"
             :value="badgeStyle"
             :options="badgeOptions"
+            :placeholder="t('settings.pleaseSelect')"
             @update:value="changeBadge"
           />
         </div>

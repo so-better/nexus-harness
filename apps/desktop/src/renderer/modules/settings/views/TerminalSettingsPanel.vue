@@ -16,7 +16,7 @@
             <NInput
               :value="shellPath"
               clearable
-              :placeholder="shellInfo?.path ?? t('settings.terminalShellAuto')"
+              :placeholder="t('settings.pleaseInput')"
               @update:value="updateShellPath"
               @blur="saveShell"
               @keydown.enter.prevent="saveShell"

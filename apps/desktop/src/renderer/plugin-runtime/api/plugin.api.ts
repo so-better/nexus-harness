@@ -17,7 +17,7 @@ export const listPlugins = async (): Promise<PluginPublic[]> => unwrap(await nex
 export const setPluginEnabled = async (id: string, enabled: boolean): Promise<PluginPublic[]> =>
   unwrap(await nexus.plugin.setEnabled(id, enabled));
 
-export const importPluginDirectory = async (): Promise<PluginPublic[]> =>
+export const importPluginDirectory = async (): Promise<PluginPublic[] | null> =>
   unwrap(await nexus.plugin.importFromDirectory());
 
 export const reloadPlugins = async (): Promise<PluginPublic[]> =>
@@ -25,10 +25,6 @@ export const reloadPlugins = async (): Promise<PluginPublic[]> =>
 
 export const uninstallPlugin = async (id: string): Promise<PluginPublic[]> =>
   unwrap(await nexus.plugin.uninstall(id));
-
-export const openPluginDirectory = async (): Promise<void> => {
-  unwrap(await nexus.plugin.openDirectory());
-};
 
 export const subscribePluginChanges = (handler: (plugins: PluginPublic[]) => void): (() => void) =>
   nexus.plugin.onChanged(handler);

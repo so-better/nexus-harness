@@ -7,7 +7,8 @@
       "@nexus/core": ["../../packages/core/src/index.ts"],
       "@shared/*": ["../../packages/shared/src/*"],
       "@nexus/providers": ["../../packages/providers/src/index.ts"],
-      "@nexus/tools": ["../../packages/tools/src/index.ts"]
+      "@nexus/toolkit": ["../../packages/toolkit/src/index.ts"],
+      "@nexus/runtime-utils": ["../../packages/runtime-utils/src/index.ts"]
     },
     "composite": true
   },
@@ -18,12 +19,14 @@
     "../../packages/shared/src/**/*.ts",
     "../../packages/core/src/**/*.ts",
     "../../packages/providers/src/**/*.ts",
-    "../../packages/tools/src/**/*.ts"
+    "../../packages/toolkit/src/**/*.ts",
+    "../../packages/runtime-utils/src/**/*.ts"
   ],
   "exclude": [
     "../../packages/core/src/**/*.test.ts",
     "../../packages/shared/src/**/*.test.ts",
     "../../packages/providers/src/**/*.test.ts",
-    "../../packages/tools/src/**/*.test.ts"
+    "../../packages/toolkit/src/**/*.test.ts",
+    "../../packages/runtime-utils/src/**/*.test.ts"
   ]
 }

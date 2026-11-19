@@ -10,7 +10,7 @@ import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import * as pty from 'node-pty';
 import type { TerminalEvent, TerminalSessionPublic } from '@shared/ipc/contracts';
-import { buildShellInvocation, createShellEnvironment } from '@nexus/tools';
+import { buildShellInvocation, createShellEnvironment } from '@nexus/runtime-utils';
 
 const MAX_OUTPUT_BYTES = 200_000;
 const DEFAULT_TIMEOUT_MS = 30_000;

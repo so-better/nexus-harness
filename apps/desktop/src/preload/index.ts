@@ -57,6 +57,8 @@ const bridge: NexusBridge = {
     setNotificationBadge: (style) =>
       ipcRenderer.invoke(IPC_CHANNELS.settingsSetNotificationBadge, style),
     getSkin: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetSkin),
+    getImage: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetImage),
+    setImage: (value) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetImage, value),
     setSkin: (selection) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetSkin, selection)
   },
   cache: {
@@ -93,7 +95,6 @@ const bridge: NexusBridge = {
     reload: () => ipcRenderer.invoke(IPC_CHANNELS.pluginReload),
     importFromDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.pluginImport),
     uninstall: (id) => ipcRenderer.invoke(IPC_CHANNELS.pluginUninstall, id),
-    openDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.pluginOpenDirectory),
     onChanged: (handler) => {
       const listener = (_event: IpcRendererEvent, plugins: PluginPublic[]): void =>
         handler(plugins);
@@ -119,6 +120,17 @@ const bridge: NexusBridge = {
       ipcRenderer.invoke(IPC_CHANNELS.pluginWorkspaceRead, { pluginId, sessionId, path }),
     workspaceList: (pluginId, sessionId, path) =>
       ipcRenderer.invoke(IPC_CHANNELS.pluginWorkspaceList, { pluginId, sessionId, path })
+  },
+  mcp: {
+    load: () => ipcRenderer.invoke(IPC_CHANNELS.mcpRead),
+    save: (text) => ipcRenderer.invoke(IPC_CHANNELS.mcpSave, text),
+    test: (text) => ipcRenderer.invoke(IPC_CHANNELS.mcpTest, text)
+  },
+  skills: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.skillsList),
+    read: (name) => ipcRenderer.invoke(IPC_CHANNELS.skillsRead, name),
+    importDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.skillsImport),
+    delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.skillsDelete, id)
   },
   terminal: {
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.terminalCreate, input),

@@ -90,6 +90,10 @@ export class SessionHistoryService {
           continue;
         }
         skipFollowingTools = false;
+        if (payload.role === 'assistant' && payload.error) {
+          lastAssistant = undefined;
+          continue;
+        }
         if (payload.role === 'user') {
           const images = loadHistoryImages(payload.images);
           messages.push({

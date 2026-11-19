@@ -14,6 +14,11 @@
         <ProviderSettingsPanel @changed="emit('changed')" />
       </NTabPane>
 
+      <NTabPane name="image" :tab="t('settings.image')">
+        <p class="nh-settings__hint">{{ t('settings.imageHint') }}</p>
+        <ImageSettingsPanel />
+      </NTabPane>
+
       <NTabPane name="general" :tab="t('settings.general')">
         <GeneralSettings :version="version" />
       </NTabPane>
@@ -45,6 +50,7 @@ import CacheSettings from './CacheSettings.vue';
 import GeneralSettings from './GeneralSettings.vue';
 import ProviderSettingsPanel from './ProviderSettingsPanel.vue';
 import TerminalSettingsPanel from './TerminalSettingsPanel.vue';
+import ImageSettingsPanel from './ImageSettingsPanel.vue';
 
 defineProps<{
   show: boolean;

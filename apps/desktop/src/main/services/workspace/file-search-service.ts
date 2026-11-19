@@ -6,7 +6,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { basename, join, relative, sep } from 'node:path';
 import type { WorkspaceFileReference } from '@shared/ipc/contracts';
 import { isImageFile } from '@shared/files';
-import { isSensitivePath } from '@nexus/tools';
+import { isSensitivePath } from '@nexus/runtime-utils';
 
 export type { WorkspaceFileReference } from '@shared/ipc/contracts';
 

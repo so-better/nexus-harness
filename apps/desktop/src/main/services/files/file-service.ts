@@ -60,6 +60,12 @@ const mimeForName = (name: string): string => {
       return 'image/webp';
     case '.pdf':
       return 'application/pdf';
+    case '.docx':
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    case '.xlsx':
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    case '.pptx':
+      return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
     default:
       return 'text/plain';
   }

@@ -32,7 +32,7 @@
       <NSelect
         :value="selectedSkinValue"
         :options="skinOptions"
-        :placeholder="t('settings.skinNone')"
+        :placeholder="t('settings.pleaseSelect')"
         @update:value="changeSkin"
       />
       <p class="nh-appearance__hint">{{ t('settings.skinHint') }}</p>

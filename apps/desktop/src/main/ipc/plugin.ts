@@ -2,10 +2,10 @@
  * 插件 IPC：列表、启停、重载、存储、设置与日志。
  */
 
-import { BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
+import { BrowserWindow, dialog, ipcMain, Notification } from 'electron';
 import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
-import { isSensitivePath } from '@nexus/tools';
+import { isSensitivePath } from '@nexus/runtime-utils';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import type { PluginPublic, PluginWorkspaceEntry } from '@shared/plugin';
 import { fail, ok, type Result } from '@shared/ipc/result';
@@ -45,26 +45,42 @@ export const registerPluginIpc = (): void => {
     return ok(await host.reload());
   });
 
-  ipcMain.handle(IPC_CHANNELS.pluginImport, async (event): Promise<Result<PluginPublic[]>> => {
-    const window = BrowserWindow.fromWebContents(event.sender);
-    const options = {
-      title: '导入插件文件夹',
-      properties: ['openDirectory'] as Array<'openDirectory'>
-    };
-    const selected = window
-      ? await dialog.showOpenDialog(window, options)
-      : await dialog.showOpenDialog(options);
-    if (selected.canceled || !selected.filePaths[0]) return ok(host.list());
-    try {
-      await importPluginDirectory({
-        sourceDir: selected.filePaths[0],
-        pluginsDir: getAppDataPaths().plugins
-      });
+  ipcMain.handle(
+    IPC_CHANNELS.pluginImport,
+    async (event): Promise<Result<PluginPublic[] | null>> => {
+      const window = BrowserWindow.fromWebContents(event.sender);
+      const options = {
+        title: '导入插件文件夹',
+        properties: ['openDirectory', 'multiSelections'] as Array<
+          'openDirectory' | 'multiSelections'
+        >
+      };
+      const selected = window
+        ? await dialog.showOpenDialog(window, options)
+        : await dialog.showOpenDialog(options);
+      if (selected.canceled || !selected.filePaths[0]) return ok(null);
+      let firstError: unknown;
+      let imported = 0;
+      for (const sourceDir of selected.filePaths) {
+        try {
+          await importPluginDirectory({
+            sourceDir,
+            pluginsDir: getAppDataPaths().plugins
+          });
+          imported += 1;
+        } catch (error) {
+          firstError ??= error;
+        }
+      }
+      if (imported === 0 && firstError) {
+        return fail(
+          'PLUGIN_IMPORT_FAILED',
+          firstError instanceof Error ? firstError.message : '导入插件失败'
+        );
+      }
       return ok(await host.reload());
-    } catch (error) {
-      return fail('PLUGIN_IMPORT_FAILED', error instanceof Error ? error.message : '导入插件失败');
     }
-  });
+  );
 
   const sessionRoot = async (sessionId: string): Promise<string | undefined> => {
     const row = getDatabase()
@@ -264,15 +280,6 @@ export const registerPluginIpc = (): void => {
           error instanceof Error ? error.message : '卸载插件失败'
         );
       }
-    }
-  );
-
-  ipcMain.handle(
-    IPC_CHANNELS.pluginOpenDirectory,
-    async (): Promise<Result<{ opened: boolean }>> => {
-      const error = await shell.openPath(getAppDataPaths().plugins);
-      if (error) return fail('PLUGIN_OPEN_DIRECTORY_FAILED', error);
-      return ok({ opened: true });
     }
   );
 

@@ -75,6 +75,7 @@ export const eventPayloadSchemas = {
     messageId: z.string(),
     role: z.enum(['user', 'assistant']),
     content: z.string(),
+    error: z.boolean().optional(),
     images: z.array(z.object({ path: z.string(), mime: z.string() })).optional(),
     references: z.array(messageFileReferenceSchema).max(64).optional()
   }),
@@ -177,6 +178,10 @@ export const eventPayloadSchemas = {
   'settings.updated': z.object({
     key: z.string(),
     scope: z.enum(['app', 'workspace', 'session'])
+  }),
+  'skill.activated': z.object({
+    skillId: z.string(),
+    trigger: z.enum(['search', 'explicit'])
   })
 } as const;
 

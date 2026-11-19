@@ -24,8 +24,10 @@ export const useProviderSelection = (onError: (message: string) => void): Provid
   const providerId = ref<string | undefined>();
   const modelId = ref<string | undefined>();
 
-  const models = computed(
-    () => providers.value.find((provider) => provider.id === providerId.value)?.models ?? []
+  const models = computed(() =>
+    (providers.value.find((provider) => provider.id === providerId.value)?.models ?? []).filter(
+      (model) => model.role !== 'image'
+    )
   );
 
   /**
@@ -36,11 +38,12 @@ export const useProviderSelection = (onError: (message: string) => void): Provid
       modelId.value = undefined;
       return;
     }
-    const current = provider.models.find((model) => model.id === modelId.value);
+    const chatModels = provider.models.filter((model) => model.role !== 'image');
+    const current = chatModels.find((model) => model.id === modelId.value);
     modelId.value =
       current?.id ??
-      provider.models.find((model) => model.id === provider.defaultModelId)?.id ??
-      provider.models[0]?.id;
+      chatModels.find((model) => model.id === provider.defaultModelId)?.id ??
+      chatModels[0]?.id;
   };
 
   /**

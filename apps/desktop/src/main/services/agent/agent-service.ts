@@ -22,16 +22,23 @@ import {
   type ChatProvider,
   type ProviderToolCall
 } from '@nexus/providers';
-import {
-  createFileToolset,
-  detectDangerousCommand,
-  isSensitivePath,
-  runCommandInputSchema
-} from '@nexus/tools';
+import { createFileToolset, runCommandInputSchema } from '@nexus/toolkit';
+import type { PptDeck } from '@nexus/toolkit';
+import { detectDangerousCommand, isSensitivePath } from '@nexus/runtime-utils';
 import { appendFileReferences, imageMimeForName } from '@shared/files';
+import {
+  createExcelBuffer,
+  createPdfBuffer,
+  createPptBuffer,
+  createWordBuffer,
+  generateImages
+} from '@nexus/toolkit';
 import { ArtifactService } from '../artifacts/artifact-service';
 import { FileService } from '../files/file-service';
 import { CheckpointService } from '../checkpoint/checkpoint-service';
+import type { SkillService } from '../skills/skill-service';
+import type { McpService } from '../mcp/mcp-service';
+import type { ImageSettings } from '@shared/image';
 import {
   AgentContextService,
   TOOL_OUTPUT_ARTIFACT_CHAR_LIMIT,
@@ -59,6 +66,9 @@ export interface AgentServiceOptions {
   createProvider?: ProviderFactory;
   artifactBaseDir?: string;
   database?: DatabaseSync;
+  skills?: SkillService;
+  mcp?: McpService;
+  imageSettings?: () => Promise<ImageSettings | null>;
 }
 
 export interface AgentRunHooks {
@@ -90,9 +100,15 @@ const getCreateDirsArgument = (input: unknown): boolean =>
   'createDirs' in input &&
   (input as { createDirs?: unknown }).createDirs === true;
 
+const fontPlatform = (): string =>
+  process.platform === 'darwin' ? 'mac' : process.platform === 'win32' ? 'windows' : 'linux';
+
+const ensureExtension = (name: string, extension: string): string =>
+  name.toLowerCase().endsWith(extension) ? name : `${name}${extension}`;
+
 interface SaveFileInput {
   name: string;
-  content: string;
+  content: string | Uint8Array;
   mime?: string;
 }
 
@@ -103,29 +119,284 @@ const parseSaveFileInput = (input: unknown): SaveFileInput | undefined => {
   if (!input || typeof input !== 'object') return undefined;
   const record = input as Record<string, unknown>;
   if (typeof record['name'] !== 'string' || !record['name'].trim()) return undefined;
-  if (typeof record['content'] !== 'string' || record['content'].length > 5_000_000)
-    return undefined;
+  if (typeof record['content'] !== 'string') return undefined;
+  const encoding = record['encoding'] === 'base64' ? 'base64' : 'utf8';
+  if (record['content'].length > (encoding === 'base64' ? 30_000_000 : 5_000_000)) return undefined;
   if (record['mime'] !== undefined && typeof record['mime'] !== 'string') return undefined;
+
+  let content: string | Uint8Array = record['content'];
+  if (encoding === 'base64') {
+    const normalized = record['content'].replace(/\s+/g, '');
+    const data = Buffer.from(normalized, 'base64');
+    if (data.toString('base64').replace(/=+$/, '') !== normalized.replace(/=+$/, '')) {
+      return undefined;
+    }
+    if (data.byteLength > 20_000_000) return undefined;
+    content = data;
+  }
+
   return {
     name: record['name'].trim(),
-    content: record['content'],
+    content,
     ...(typeof record['mime'] === 'string' && record['mime'] ? { mime: record['mime'] } : {})
   };
 };
 
 const saveFileToolDefinition: AgentToolDefinition = {
   name: 'save_file',
-  description: '把生成的文本文件保存到 Nexus 输出文件目录，返回可另存为的 fileId。',
+  description:
+    '把文本或 Base64 二进制内容保存到 Nexus 输出文件目录，返回可另存为的 fileId。文本格式直接传内容；二进制格式使用 encoding=base64。',
   permission: 'write',
   requiresApproval: false,
   inputSchema: {
     type: 'object',
     properties: {
-      name: { type: 'string', description: '文件名，包含扩展名，例如 report.md' },
-      content: { type: 'string', description: '文件文本内容' },
+      name: { type: 'string', description: '带扩展名的文件名，例如 report.md、image.png' },
+      content: { type: 'string', description: '文件内容；二进制内容需配合 encoding=base64' },
+      encoding: { type: 'string', enum: ['utf8', 'base64'], description: '内容编码，默认 utf8' },
       mime: { type: 'string', description: '可选 MIME 类型' }
     },
     required: ['name', 'content']
+  }
+};
+
+const saveWordToolDefinition: AgentToolDefinition = {
+  name: 'save_word',
+  description: '生成 Word .docx 文件并保存到输出文件目录；content 使用 Markdown。',
+  permission: 'write',
+  requiresApproval: false,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: '文件名，默认 output.docx' },
+      title: { type: 'string' },
+      content: { type: 'string', description: 'Markdown 正文' }
+    },
+    required: ['content']
+  }
+};
+
+const saveExcelToolDefinition: AgentToolDefinition = {
+  name: 'save_excel',
+  description: '生成 Excel .xlsx 工作簿并保存到输出文件目录。',
+  permission: 'write',
+  requiresApproval: false,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: '文件名，默认 output.xlsx' },
+      sheets: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            name: { type: 'string' },
+            rows: { type: 'array', items: { type: 'array', items: {} } }
+          },
+          required: ['rows']
+        }
+      }
+    },
+    required: ['sheets']
+  }
+};
+
+const savePptToolDefinition: AgentToolDefinition = {
+  name: 'save_ppt',
+  description:
+    '生成 PowerPoint .pptx 文件并保存到输出文件目录；支持封面、章节、要点、双栏、图文、图表、表格、KPI、引用、时间线、对比、团队、图集和流程版式。',
+  permission: 'write',
+  requiresApproval: false,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: '文件名，默认 output.pptx' },
+      title: { type: 'string', description: '封面标题' },
+      subtitle: { type: 'string' },
+      author: { type: 'string' },
+      theme: { type: 'string', enum: ['blue', 'dark', 'green', 'warm'] },
+      footer: { type: 'string' },
+      logo: { type: 'string', description: 'logo 图片 URL' },
+      showPageNo: { type: 'boolean' },
+      slides: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            layout: {
+              type: 'string',
+              enum: [
+                'section',
+                'bullets',
+                'twoColumn',
+                'imageText',
+                'chart',
+                'table',
+                'kpi',
+                'quote',
+                'timeline',
+                'agenda',
+                'comparison',
+                'team',
+                'gallery',
+                'process',
+                'end'
+              ]
+            },
+            title: { type: 'string' },
+            subtitle: { type: 'string' },
+            items: { type: 'array', items: { type: 'string' } },
+            left: { type: 'array', items: { type: 'string' } },
+            right: { type: 'array', items: { type: 'string' } },
+            text: { type: 'array', items: { type: 'string' } },
+            image: { type: 'string' },
+            imageSide: { type: 'string', enum: ['left', 'right'] },
+            chart: {
+              type: 'object',
+              properties: {
+                type: { type: 'string', enum: ['bar', 'line', 'area', 'pie', 'doughnut', 'radar'] },
+                categories: { type: 'array', items: { type: 'string' } },
+                series: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      values: { type: 'array', items: { type: 'number' } }
+                    },
+                    required: ['name', 'values']
+                  }
+                }
+              },
+              required: ['type', 'categories', 'series']
+            },
+            table: {
+              type: 'object',
+              properties: {
+                headers: { type: 'array', items: { type: 'string' } },
+                rows: {
+                  type: 'array',
+                  items: { type: 'array', items: { type: 'string' } }
+                }
+              },
+              required: ['headers', 'rows']
+            },
+            kpis: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  value: { type: 'string' },
+                  label: { type: 'string' }
+                },
+                required: ['value', 'label']
+              }
+            },
+            quote: {
+              type: 'object',
+              properties: {
+                text: { type: 'string' },
+                author: { type: 'string' }
+              },
+              required: ['text']
+            },
+            steps: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  title: { type: 'string' },
+                  description: { type: 'string' }
+                },
+                required: ['title']
+              }
+            },
+            comparison: {
+              type: 'object',
+              properties: {
+                left: {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string' },
+                    items: { type: 'array', items: { type: 'string' } }
+                  },
+                  required: ['title', 'items']
+                },
+                right: {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string' },
+                    items: { type: 'array', items: { type: 'string' } }
+                  },
+                  required: ['title', 'items']
+                }
+              },
+              required: ['left', 'right']
+            },
+            team: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  role: { type: 'string' },
+                  avatar: { type: 'string' }
+                },
+                required: ['name']
+              }
+            },
+            gallery: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  image: { type: 'string' },
+                  caption: { type: 'string' }
+                },
+                required: ['image']
+              }
+            },
+            notes: { type: 'string' }
+          },
+          required: ['layout', 'title']
+        }
+      }
+    },
+    required: ['slides']
+  }
+};
+
+const savePdfToolDefinition: AgentToolDefinition = {
+  name: 'save_pdf',
+  description: '生成 PDF 文件并保存到输出文件目录；content 使用 Markdown。',
+  permission: 'write',
+  requiresApproval: false,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: '文件名，默认 output.pdf' },
+      content: { type: 'string', description: 'Markdown 正文' },
+      title: { type: 'string' }
+    },
+    required: ['content']
+  }
+};
+
+const generateImageToolDefinition: AgentToolDefinition = {
+  name: 'generate_image',
+  description: '使用设置中配置的图像模型生成图片，结果保存到输出文件目录。',
+  permission: 'network',
+  requiresApproval: true,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      prompt: { type: 'string' },
+      count: { type: 'number', description: '1-4，默认 1' },
+      size: { type: 'string', description: '例如 1024x1024' },
+      model: { type: 'string', description: '可选生图模型名称或模型 ID' },
+      images: { type: 'array', items: { type: 'string' }, description: '可选参考图 URL' }
+    },
+    required: ['prompt']
   }
 };
 
@@ -173,15 +444,77 @@ const askUserToolDefinition: AgentToolDefinition = {
   }
 };
 
+const searchSkillsToolDefinition: AgentToolDefinition = {
+  name: 'search_skills',
+  description: '检索已安装 Skill 的元信息；需要专业任务方法时先调用。',
+  permission: 'read',
+  requiresApproval: false,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: '任务关键词，例如 测试、文档、数据' }
+    },
+    required: ['query']
+  }
+};
+
+const readSkillToolDefinition: AgentToolDefinition = {
+  name: 'read_skill',
+  description: '读取指定 Skill 的完整说明；读取后按其中的步骤执行。',
+  permission: 'read',
+  requiresApproval: false,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Skill 目录名或 frontmatter name' }
+    },
+    required: ['name']
+  }
+};
+
+const readSkillFileToolDefinition: AgentToolDefinition = {
+  name: 'read_skill_file',
+  description: '读取 Skill 的 assets、scripts 或 references 文件。',
+  permission: 'read',
+  requiresApproval: false,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      skill: { type: 'string', description: 'Skill 目录名' },
+      path: { type: 'string', description: '相对 Skill 目录的资源路径' }
+    },
+    required: ['skill', 'path']
+  }
+};
+
+const runSkillScriptToolDefinition: AgentToolDefinition = {
+  name: 'run_skill_script',
+  description: '执行 Skill 的 scripts 目录内脚本；需要用户审批。',
+  permission: 'execute',
+  requiresApproval: true,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      skill: { type: 'string', description: 'Skill 目录名' },
+      path: { type: 'string', description: '相对 scripts 的脚本路径' },
+      args: { type: 'array', items: { type: 'string' } },
+      timeoutMs: { type: 'number' }
+    },
+    required: ['skill', 'path']
+  }
+};
+
 const PLAN_ALLOWED_TOOLS = new Set([
   'read_file',
   'list_dir',
+  'glob',
   'grep',
   'git_status',
   'git_diff',
   'ask_user',
   'search_skills',
-  'read_skill'
+  'read_skill',
+  'read_skill_file'
 ]);
 
 const modeSystemPrompt = (mode: AgentMode): string =>
@@ -237,12 +570,18 @@ export class AgentService {
   private readonly artifactBaseDir: string | undefined;
   private readonly fileBaseDir: string | undefined;
   private readonly database: DatabaseSync | undefined;
+  private readonly skills: SkillService | undefined;
+  private readonly mcp: McpService | undefined;
+  private readonly imageSettings: (() => Promise<ImageSettings | null>) | undefined;
 
   constructor(options: AgentServiceOptions = {}) {
     this.createProvider = options.createProvider ?? createAgentProvider;
     this.artifactBaseDir = options.artifactBaseDir;
     this.fileBaseDir = options.fileBaseDir;
     this.database = options.database;
+    this.skills = options.skills;
+    this.mcp = options.mcp;
+    this.imageSettings = options.imageSettings;
   }
 
   /**
@@ -264,6 +603,9 @@ export class AgentService {
       if (!modelConfig) {
         throw new Error(`PROVIDER_MODEL_NOT_FOUND: ${input.modelId}`);
       }
+      const imageSettings = this.imageSettings ? await this.imageSettings() : null;
+      const imageConfigs = imageSettings?.configs.filter((config) => config.enabled) ?? [];
+      let generatedImageCount = 0;
 
       const mode = input.mode ?? 'build';
       const toolset =
@@ -333,11 +675,157 @@ export class AgentService {
           return { ok: true, output: JSON.stringify({ answers }) };
         }
 
+        if (call.name === 'search_skills') {
+          if (!this.skills) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'SKILLS_UNAVAILABLE', message: 'Skill 服务不可用' }
+            };
+          }
+          const args = call.arguments as { query?: unknown } | undefined;
+          const query = typeof args?.query === 'string' ? args.query : '';
+          const skills = await this.skills.search(query);
+          return { ok: true, output: JSON.stringify({ skills }) };
+        }
+
+        if (call.name === 'read_skill') {
+          if (!this.skills) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'SKILLS_UNAVAILABLE', message: 'Skill 服务不可用' }
+            };
+          }
+          const args = call.arguments as { name?: unknown } | undefined;
+          const name = typeof args?.name === 'string' ? args.name : '';
+          const skill = await this.skills.read(name);
+          if (!skill) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'SKILL_NOT_FOUND', message: `Skill 不存在：${name}` }
+            };
+          }
+          eventBus.publish(
+            createNexusEvent({
+              sessionId: input.sessionId,
+              runId,
+              seq: 1,
+              type: 'skill.activated',
+              payload: { skillId: skill.id, trigger: 'explicit' }
+            })
+          );
+          return { ok: true, output: skill.content };
+        }
+
+        if (call.name === 'read_skill_file') {
+          if (!this.skills) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'SKILLS_UNAVAILABLE', message: 'Skill 服务不可用' }
+            };
+          }
+          const args = call.arguments as { skill?: unknown; path?: unknown } | undefined;
+          const skill = typeof args?.skill === 'string' ? args.skill : '';
+          const path = typeof args?.path === 'string' ? args.path : '';
+          const content = await this.skills.readFile(skill, path);
+          if (content === undefined) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'SKILL_FILE_NOT_FOUND', message: `Skill 文件不存在：${path}` }
+            };
+          }
+          return { ok: true, output: content };
+        }
+
         if (mode === 'plan' && !PLAN_ALLOWED_TOOLS.has(call.name)) {
           return {
             ok: false,
             output: '',
             error: { code: 'TOOL_MODE_DENIED', message: `Plan 模式不可用工具：${call.name}` }
+          };
+        }
+
+        if (call.name === 'run_skill_script') {
+          if (!this.skills) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'SKILLS_UNAVAILABLE', message: 'Skill 服务不可用' }
+            };
+          }
+          const args = call.arguments as
+            { skill?: unknown; path?: unknown; args?: unknown; timeoutMs?: unknown } | undefined;
+          if (typeof args?.skill !== 'string' || typeof args.path !== 'string') {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'SKILL_INVALID_INPUT', message: 'Skill 脚本参数不合法' }
+            };
+          }
+          return this.skills.runScript(
+            args.skill,
+            args.path,
+            Array.isArray(args.args)
+              ? args.args.filter((item): item is string => typeof item === 'string').slice(0, 50)
+              : [],
+            typeof args.timeoutMs === 'number'
+              ? Math.min(120_000, Math.max(1_000, args.timeoutMs))
+              : 60_000
+          );
+        }
+
+        if (call.name.startsWith('mcp_')) {
+          if (!this.mcp) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'MCP_UNAVAILABLE', message: 'MCP 服务不可用' }
+            };
+          }
+          const result = await this.mcp.call(call.name, call.arguments);
+          if (!result.ok || !result.attachments?.length) return result;
+          if (!files) {
+            return {
+              ok: false,
+              output: result.output,
+              error: { code: 'FILE_SERVICE_UNAVAILABLE', message: '文件服务不可用' }
+            };
+          }
+          const saved = [];
+          for (const attachment of result.attachments) {
+            const extension = attachment.mime.split('/')[1]?.replace(/[^a-z0-9]/gi, '') || 'bin';
+            const file = await files.save({
+              sessionId: input.sessionId,
+              runId,
+              name: `${attachment.name}.${extension}`,
+              mime: attachment.mime,
+              content: attachment.data,
+              source: 'generated'
+            });
+            eventBus.publish(
+              createNexusEvent({
+                sessionId: input.sessionId,
+                runId,
+                seq: 1,
+                type: 'file.created',
+                payload: {
+                  fileId: file.id,
+                  name: file.name,
+                  mime: file.mime,
+                  bytes: file.bytes,
+                  source: file.source
+                }
+              })
+            );
+            saved.push(file);
+          }
+          return {
+            ok: true,
+            output: JSON.stringify({ content: result.output, files: saved })
           };
         }
         if (call.name === 'save_file') {
@@ -391,6 +879,229 @@ export class AgentService {
             };
           }
         }
+        if (
+          call.name === 'save_word' ||
+          call.name === 'save_excel' ||
+          call.name === 'save_ppt' ||
+          call.name === 'save_pdf'
+        ) {
+          if (!files) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'FILE_SERVICE_UNAVAILABLE', message: '文件服务不可用' }
+            };
+          }
+          const args = call.arguments as Record<string, unknown>;
+          try {
+            let buffer: Buffer;
+            let name = typeof args['name'] === 'string' ? args['name'] : '';
+            if (call.name === 'save_word') {
+              if (typeof args['content'] !== 'string') throw new Error('content 必须是字符串');
+              name = ensureExtension(name || 'output', '.docx');
+              buffer = await createWordBuffer({
+                content: args['content'].slice(0, 5_000_000),
+                ...(typeof args['title'] === 'string' ? { title: args['title'] } : {}),
+                platform: fontPlatform()
+              });
+            } else if (call.name === 'save_excel') {
+              const sheets = Array.isArray(args['sheets']) ? args['sheets'] : [];
+              if (!sheets.length) throw new Error('sheets 不能为空');
+              name = ensureExtension(name || 'output', '.xlsx');
+              buffer = await createExcelBuffer({
+                sheets: sheets.slice(0, 10).map((sheet: unknown, index: number) => {
+                  const record =
+                    sheet && typeof sheet === 'object'
+                      ? (sheet as { name?: unknown; rows?: unknown })
+                      : {};
+                  const rows = Array.isArray(record.rows) ? record.rows : [];
+                  return {
+                    name:
+                      typeof record.name === 'string' && record.name
+                        ? record.name
+                        : `Sheet${index + 1}`,
+                    rows: rows
+                      .slice(0, 500)
+                      .map((row) =>
+                        Array.isArray(row)
+                          ? row
+                              .slice(0, 100)
+                              .map((cell) =>
+                                cell === null ||
+                                typeof cell === 'string' ||
+                                typeof cell === 'number' ||
+                                typeof cell === 'boolean'
+                                  ? cell
+                                  : null
+                              )
+                          : []
+                      )
+                  };
+                }),
+                platform: fontPlatform()
+              });
+            } else if (call.name === 'save_ppt') {
+              const slides = Array.isArray(args['slides']) ? args['slides'] : [];
+              if (!slides.length) throw new Error('slides 不能为空');
+              name = ensureExtension(name || 'output', '.pptx');
+              buffer = await createPptBuffer({
+                ...(args as unknown as PptDeck),
+                slides: slides.slice(0, 100) as PptDeck['slides'],
+                platform: fontPlatform()
+              });
+            } else {
+              if (typeof args['content'] !== 'string') throw new Error('content 必须是字符串');
+              name = ensureExtension(name || 'output', '.pdf');
+              buffer = await createPdfBuffer(
+                args['content'].slice(0, 5_000_000),
+                typeof args['title'] === 'string' ? args['title'] : undefined
+              );
+            }
+            const file = await files.save({
+              sessionId: input.sessionId,
+              runId,
+              name,
+              content: buffer,
+              source: 'generated'
+            });
+            eventBus.publish(
+              createNexusEvent({
+                sessionId: input.sessionId,
+                runId,
+                seq: 1,
+                type: 'file.created',
+                payload: {
+                  fileId: file.id,
+                  name: file.name,
+                  mime: file.mime,
+                  bytes: file.bytes,
+                  source: file.source
+                }
+              })
+            );
+            return { ok: true, output: JSON.stringify(file) };
+          } catch (error) {
+            return {
+              ok: false,
+              output: '',
+              error: {
+                code: 'FILE_GENERATION_FAILED',
+                message: error instanceof Error ? error.message : '生成文件失败'
+              }
+            };
+          }
+        }
+
+        if (call.name === 'generate_image') {
+          if (imageConfigs.length === 0) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'IMAGE_MODEL_NOT_CONFIGURED', message: '未配置图像模型' }
+            };
+          }
+          if (!files) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'FILE_SERVICE_UNAVAILABLE', message: '文件服务不可用' }
+            };
+          }
+          const args = call.arguments as
+            { prompt?: unknown; count?: unknown; size?: unknown; model?: unknown } | undefined;
+          if (typeof args?.prompt !== 'string' || !args.prompt.trim()) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'IMAGE_INVALID_INPUT', message: '图片提示词不能为空' }
+            };
+          }
+          try {
+            const count =
+              typeof args.count === 'number' ? Math.min(4, Math.max(1, Math.round(args.count))) : 1;
+            if (generatedImageCount + count > 8) {
+              return {
+                ok: false,
+                output: '',
+                error: { code: 'IMAGE_BUDGET_EXCEEDED', message: '单次 Run 最多生成 8 张图片' }
+              };
+            }
+            const requestedModel = typeof args.model === 'string' ? args.model.trim() : '';
+            const imageConfig = requestedModel
+              ? imageConfigs.find(
+                  (config) =>
+                    config.id === requestedModel ||
+                    config.name === requestedModel ||
+                    config.model === requestedModel
+                )
+              : imageConfigs[0];
+            if (!imageConfig) {
+              return {
+                ok: false,
+                output: '',
+                error: {
+                  code: 'IMAGE_MODEL_NOT_FOUND',
+                  message: `未找到指定的图像模型：${requestedModel}`
+                }
+              };
+            }
+            const size = typeof args.size === 'string' ? args.size : undefined;
+            const referenceImages = Array.isArray((args as { images?: unknown }).images)
+              ? ((args as { images?: unknown[] }).images ?? [])
+                  .filter((item): item is string => typeof item === 'string')
+                  .slice(0, 4)
+              : [];
+            const images = await generateImages({
+              template: imageConfig.template,
+              ...(imageConfig.apiKey ? { apiKey: imageConfig.apiKey } : {}),
+              model: imageConfig.model,
+              prompt: args.prompt.slice(0, 4_000),
+              count,
+              ...(size ? { size } : {}),
+              ...(referenceImages.length ? { images: referenceImages } : {})
+            });
+            generatedImageCount += images.length;
+            const saved = [];
+            for (const [index, image] of images.entries()) {
+              const extension = image.mime === 'image/jpeg' ? 'jpg' : 'png';
+              const file = await files.save({
+                sessionId: input.sessionId,
+                runId,
+                name: `image-${index + 1}.${extension}`,
+                mime: image.mime,
+                content: image.buffer,
+                source: 'generated'
+              });
+              eventBus.publish(
+                createNexusEvent({
+                  sessionId: input.sessionId,
+                  runId,
+                  seq: 1,
+                  type: 'file.created',
+                  payload: {
+                    fileId: file.id,
+                    name: file.name,
+                    mime: file.mime,
+                    bytes: file.bytes,
+                    source: file.source
+                  }
+                })
+              );
+              saved.push(file);
+            }
+            return { ok: true, output: JSON.stringify({ images: saved, prompt: args.prompt }) };
+          } catch (error) {
+            return {
+              ok: false,
+              output: '',
+              error: {
+                code: 'IMAGE_GENERATION_FAILED',
+                message: error instanceof Error ? error.message : '图像生成失败'
+              }
+            };
+          }
+        }
+
         if (!toolset || !checkpointRoot) {
           return {
             ok: false,
@@ -577,9 +1288,28 @@ export class AgentService {
       const loadedImages = input.imagePaths?.length
         ? await loadImages(input.imagePaths, input.rootPaths)
         : [];
+      let agentPrompt = input.prompt;
+      let skillContext = '';
+      const explicitSkill = input.prompt.trim().match(/^\/([a-zA-Z0-9._-]+)(?:\s+([\s\S]*))?$/);
+      if (explicitSkill && this.skills) {
+        const skill = await this.skills.read(explicitSkill[1]!);
+        if (skill) {
+          eventBus.publish(
+            createNexusEvent({
+              sessionId: input.sessionId,
+              runId,
+              seq: 1,
+              type: 'skill.activated',
+              payload: { skillId: skill.id, trigger: 'explicit' }
+            })
+          );
+          agentPrompt = explicitSkill[2]?.trim() || `按照 Skill「${skill.name}」执行任务。`;
+          skillContext = `\n\n<skill name="${skill.name}">\n${skill.content.slice(0, 40_000)}\n</skill>`;
+        }
+      }
       const userMessage: ChatMessage = {
         role: 'user',
-        content: appendFileReferences(input.prompt, input.references),
+        content: `${appendFileReferences(agentPrompt, input.references)}${skillContext}`,
         ...(loadedImages.length ? { images: loadedImages.map((item) => item.image) } : {})
       };
       if (shouldAddUserMessage) {
@@ -600,10 +1330,30 @@ export class AgentService {
         );
       }
 
+      const mcpTools = this.mcp && mode !== 'plan' ? await this.mcp.listTools() : [];
+      const imageNames = imageConfigs.map((config) => `${config.name}（${config.model}）`);
+      const imageToolDefinition: AgentToolDefinition = {
+        ...generateImageToolDefinition,
+        description: `${generateImageToolDefinition.description} 可用生图模型：${imageNames.join('、')}。可用 model 参数指定模型名称或模型 ID；未指定时使用第一个启用的配置。`
+      };
       const allToolDefinitions = [
         ...(toolset?.definitions ?? []),
+        ...mcpTools,
         askUserToolDefinition,
-        saveFileToolDefinition
+        saveFileToolDefinition,
+        saveWordToolDefinition,
+        saveExcelToolDefinition,
+        savePptToolDefinition,
+        savePdfToolDefinition,
+        ...(imageConfigs.length ? [imageToolDefinition] : []),
+        ...(this.skills
+          ? [
+              searchSkillsToolDefinition,
+              readSkillToolDefinition,
+              readSkillFileToolDefinition,
+              runSkillScriptToolDefinition
+            ]
+          : [])
       ];
       const visibleDefinitions =
         mode === 'plan'
@@ -634,7 +1384,7 @@ export class AgentService {
         tools,
         ...(mode === 'plan' ? { blockedTools } : {}),
         permissionGateway: new PermissionGateway(
-          mode === 'plan' ? ['read'] : ['read', 'write', 'execute']
+          mode === 'plan' ? ['read'] : ['read', 'write', 'execute', 'network']
         ),
         executeTool,
         prepareContext: (messages) => context.prepare(messages, tools),

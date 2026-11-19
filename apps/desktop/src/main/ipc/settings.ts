@@ -15,6 +15,7 @@ import {
 } from '@shared/ipc/contracts';
 import { pluginSkinSelectionSchema, type PluginSkinSelection } from '@shared/plugin';
 import { fail, ok, type Result } from '@shared/ipc/result';
+import { imageSettingsSchema, type ImageSettings } from '@shared/image';
 import {
   applyAutoLaunch,
   loadAutoLaunch,
@@ -30,6 +31,7 @@ import {
   saveNotificationBadge
 } from '../services/settings/notification-settings';
 import { loadSkinSelection, saveSkinSelection } from '../services/settings/skin-settings';
+import { loadImageSettings, saveImageSettings } from '../services/settings/image-settings';
 import { clearCache, getCacheInfo } from '../services/cache/cache-service';
 import { getAppDataPaths } from '../services/storage/paths';
 import { hasActiveRuns } from '../services/agent/run-registry';
@@ -124,6 +126,33 @@ export const registerSettingsIpc = (): void => {
         return fail(
           'SETTINGS_WRITE_FAILED',
           error instanceof Error ? error.message : '保存通知设置失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.settingsGetImage, async (): Promise<Result<ImageSettings | null>> => {
+    try {
+      return ok(await loadImageSettings());
+    } catch (error) {
+      return fail(
+        'SETTINGS_READ_FAILED',
+        error instanceof Error ? error.message : '读取图像模型配置失败'
+      );
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.settingsSetImage,
+    async (_event, rawValue: unknown): Promise<Result<ImageSettings>> => {
+      const parsed = imageSettingsSchema.safeParse(rawValue);
+      if (!parsed.success) return fail('SETTINGS_INVALID_INPUT', '图像模型配置不合法');
+      try {
+        return ok(await saveImageSettings(parsed.data));
+      } catch (error) {
+        return fail(
+          'SETTINGS_WRITE_FAILED',
+          error instanceof Error ? error.message : '保存图像模型配置失败'
         );
       }
     }

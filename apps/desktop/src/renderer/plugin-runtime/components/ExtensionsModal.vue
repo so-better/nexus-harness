@@ -1,14 +1,13 @@
 <template>
   <NModal :show="show" preset="card" class="nh-extensions" style="width: min(760px, calc(100vw - 48px))"
     :title="t('plugins.title')" :bordered="false" @update:show="emit('update:show', $event)">
+    <NTabs default-value="plugins" type="line" animated>
+      <NTabPane name="plugins" :tab="t('plugins.tab')">
     <div class="nh-extensions__header">
       <p>{{ t('plugins.hint') }}</p>
       <div class="nh-extensions__header-actions">
-        <NButton type="primary" secondary :loading="importing" @click="importPlugin">
+        <NButton type="primary" :loading="importing" @click="importPlugin">
           {{ t('plugins.import') }}
-        </NButton>
-        <NButton type="success" secondary @click="openDirectory">
-          {{ t('plugins.openDirectory') }}
         </NButton>
         <NButton secondary :loading="runtime.loading" @click="runtime.reload()">
           {{ t('plugins.reload') }}
@@ -22,6 +21,14 @@
     </div>
 
     <PluginExtras :commands="commandList" :views="viewList" />
+      </NTabPane>
+      <NTabPane name="skills" :tab="t('skills.tab')">
+        <ExtensionsSkillsPanel />
+      </NTabPane>
+      <NTabPane name="mcp" :tab="t('mcp.tab')">
+        <ExtensionsMcpPanel />
+      </NTabPane>
+    </NTabs>
   </NModal>
 </template>
 
@@ -31,11 +38,13 @@
  */
 
 import { computed, onMounted, ref, watch } from 'vue';
-import { NButton, NEmpty, NModal, useMessage } from 'naive-ui';
+import { NButton, NEmpty, NModal, NTabPane, NTabs, useMessage } from 'naive-ui';
 import { t } from '@/app/i18n';
 import { usePluginRuntimeStore, type PluginCommand, type PluginView } from '../runtime.store';
 import PluginCard from './PluginCard.vue';
 import PluginExtras from './PluginExtras.vue';
+import ExtensionsSkillsPanel from './ExtensionsSkillsPanel.vue';
+import ExtensionsMcpPanel from './ExtensionsMcpPanel.vue';
 
 const props = defineProps<{ show: boolean }>();
 const emit = defineEmits<{ 'update:show': [show: boolean] }>();
@@ -60,7 +69,8 @@ const viewList = computed<PluginView[]>(() => [...runtime.views.values()]);
 const importPlugin = async (): Promise<void> => {
   importing.value = true;
   try {
-    await runtime.importFromDirectory();
+    const imported = await runtime.importFromDirectory();
+    if (!imported) return;
     if (runtime.error) {
       message.error(runtime.error);
     } else {
@@ -77,14 +87,6 @@ const toggle = async (id: string, enabled: boolean): Promise<void> => {
     await runtime.setEnabled(id, enabled);
   } finally {
     busyId.value = undefined;
-  }
-};
-
-const openDirectory = async (): Promise<void> => {
-  try {
-    await runtime.openDirectory();
-  } catch {
-    message.error(t('plugins.openDirectoryFailed'));
   }
 };
 

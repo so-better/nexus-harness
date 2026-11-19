@@ -12,6 +12,9 @@ import type {
   PluginWorkspaceEntry
 } from '../plugin';
 import type { Result } from './result';
+import type { McpTestResult } from '../mcp';
+import type { ImageSettings } from '../image';
+import type { SkillDetail, SkillSummary } from '../skills';
 
 /**
  * 应用基础信息，用于确认渲染进程与主进程通道可用。
@@ -51,6 +54,8 @@ export const providerProtocolSchema = z.enum(['openai', 'anthropic', 'ollama']);
 export const providerModelSchema = z
   .object({
     id: z.string().min(1),
+    role: z.enum(['chat', 'image']).optional(),
+    endpoint: z.string().url().optional(),
     contextWindow: z.number().int().min(4_096).max(2_000_000),
     maxOutputTokens: z.number().int().min(256).max(131_072)
   })
@@ -152,6 +157,8 @@ export interface NexusBridge {
       style: NotificationBadgeStyle
     ) => Promise<Result<NotificationBadgeStyle>>;
     getSkin: () => Promise<Result<PluginSkinSelection | null>>;
+    getImage: () => Promise<Result<ImageSettings | null>>;
+    setImage: (value: ImageSettings) => Promise<Result<ImageSettings>>;
     setSkin: (selection: PluginSkinSelection | null) => Promise<Result<PluginSkinSelection | null>>;
     setAutoLaunch: (enabled: boolean) => Promise<Result<boolean>>;
     getLanguage: () => Promise<Result<AppLanguage>>;
@@ -208,9 +215,8 @@ export interface NexusBridge {
     list: () => Promise<Result<PluginPublic[]>>;
     setEnabled: (id: string, enabled: boolean) => Promise<Result<PluginPublic[]>>;
     reload: () => Promise<Result<PluginPublic[]>>;
-    importFromDirectory: () => Promise<Result<PluginPublic[]>>;
+    importFromDirectory: () => Promise<Result<PluginPublic[] | null>>;
     uninstall: (id: string) => Promise<Result<PluginPublic[]>>;
-    openDirectory: () => Promise<Result<{ opened: boolean }>>;
     onChanged: (handler: (plugins: PluginPublic[]) => void) => Unsubscribe;
     storageGet: (pluginId: string, key: string) => Promise<Result<unknown>>;
     storageSet: (pluginId: string, key: string, value: unknown) => Promise<Result<{ ok: boolean }>>;
@@ -237,6 +243,17 @@ export interface NexusBridge {
       sessionId: string,
       path?: string
     ) => Promise<Result<PluginWorkspaceEntry[]>>;
+  };
+  mcp: {
+    load: () => Promise<Result<string>>;
+    save: (text: string) => Promise<Result<{ ok: boolean }>>;
+    test: (text: string) => Promise<Result<McpTestResult>>;
+  };
+  skills: {
+    list: () => Promise<Result<SkillSummary[]>>;
+    read: (name: string) => Promise<Result<SkillDetail>>;
+    importDirectory: () => Promise<Result<SkillSummary[] | null>>;
+    delete: (id: string) => Promise<Result<SkillSummary[]>>;
   };
   terminal: {
     create: (input: TerminalCreateInput) => Promise<Result<TerminalSessionPublic>>;

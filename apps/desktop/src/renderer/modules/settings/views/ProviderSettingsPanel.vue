@@ -5,8 +5,11 @@
     <ProviderListView
       v-else-if="!isFormVisible"
       :providers="providers"
+      :busy-id="busyId"
       @create="startNew"
       @edit="editProvider"
+      @toggle="handleToggle"
+      @delete="handleDelete"
     />
 
     <template v-else>
@@ -30,6 +33,7 @@
                 <NSelect
                   :value="providerForm.protocol"
                   :options="protocolOptions"
+                  :placeholder="t('settings.pleaseSelect')"
                   @update:value="(value: ProviderProtocol) => (providerForm.protocol = value)"
                 />
               </NFormItem>
@@ -37,7 +41,7 @@
                 <NInput
                   ref="nameInputRef"
                   :value="providerForm.name"
-                  :placeholder="t('settings.namePlaceholder')"
+                  :placeholder="t('settings.pleaseInput')"
                   @update:value="(value: string) => (providerForm.name = value)"
                 />
               </NFormItem>
@@ -50,34 +54,24 @@
             >
               <NInput
                 :value="providerForm.baseUrl"
-                :placeholder="baseUrlPlaceholder"
+                :placeholder="t('settings.pleaseInput')"
                 @update:value="(value: string) => (providerForm.baseUrl = value)"
               />
             </NFormItem>
 
-            <div class="nh-provider-settings__grid">
-              <NFormItem
-                class="nh-provider-settings__item"
-                :label="t('settings.apiKey')"
-                path="apiKey"
-              >
-                <NInput
-                  :value="providerForm.apiKey"
-                  type="password"
-                  show-password-on="click"
-                  :placeholder="t('settings.apiKeyPlaceholder')"
-                  @update:value="(value: string) => (providerForm.apiKey = value)"
-                />
-              </NFormItem>
-              <NFormItem class="nh-provider-settings__item" :label="t('settings.enabled')">
-                <div class="nh-provider-settings__enabled">
-                  <NSwitch
-                    :value="providerForm.enabled"
-                    @update:value="(value: boolean) => (providerForm.enabled = value)"
-                  />
-                </div>
-              </NFormItem>
-            </div>
+            <NFormItem
+              class="nh-provider-settings__item"
+              :label="t('settings.apiKey')"
+              path="apiKey"
+            >
+              <NInput
+                :value="providerForm.apiKey"
+                type="password"
+                show-password-on="click"
+                :placeholder="t('settings.pleaseInput')"
+                @update:value="(value: string) => (providerForm.apiKey = value)"
+              />
+            </NFormItem>
           </div>
         </div>
 
@@ -97,13 +91,7 @@
         </div>
       </NForm>
 
-      <ProviderSettingsActions
-        :selected="Boolean(selectedId)"
-        :saving="saving"
-        @back="backToList"
-        @save="handleSave"
-        @delete="deleteProvider"
-      />
+      <ProviderSettingsActions :saving="saving" @back="backToList" @save="handleSave" />
     </template>
   </section>
 </template>
@@ -113,15 +101,7 @@
  * 模型服务商设置：列表、连接、多模型、API Key 与模型预算。
  */
 
-import {
-  NForm,
-  NFormItem,
-  NInput,
-  NSelect,
-  NSwitch,
-  type FormInst,
-  type InputInst
-} from 'naive-ui';
+import { NForm, NFormItem, NInput, NSelect, type FormInst, type InputInst } from 'naive-ui';
 import { computed, ref } from 'vue';
 import type { ProviderProtocol } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
@@ -148,7 +128,8 @@ const {
   selectProvider,
   newProvider,
   saveProviderForm,
-  deleteProvider
+  toggleProvider,
+  deleteProviderById
 } = useProviderSettings(() => {
   resetToList();
   emit('changed');
@@ -160,15 +141,26 @@ const protocolOptions = computed(() => [
   { label: 'Anthropic', value: 'anthropic' },
   { label: 'Ollama', value: 'ollama' }
 ]);
-const baseUrlPlaceholder = computed(() =>
-  providerForm.value.protocol === 'ollama'
-    ? 'http://127.0.0.1:11434/v1'
-    : providerForm.value.protocol === 'anthropic'
-      ? 'https://api.anthropic.com'
-      : t('settings.baseUrlPlaceholder')
-);
 const formRef = ref<FormInst | null>(null);
 const nameInputRef = ref<InputInst | null>(null);
+
+const busyId = ref('');
+const handleToggle = async (id: string, enabled: boolean): Promise<void> => {
+  busyId.value = id;
+  try {
+    await toggleProvider(id, enabled);
+  } finally {
+    busyId.value = '';
+  }
+};
+const handleDelete = async (id: string): Promise<void> => {
+  busyId.value = id;
+  try {
+    await deleteProviderById(id);
+  } finally {
+    busyId.value = '';
+  }
+};
 
 const { isFormVisible, startNew, startEdit, backToList, handleSave } = useProviderFormControls({
   selectedId,

@@ -326,7 +326,6 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       finishStreaming(messages);
       finishAskUsers(askUsers);
       finishApprovals(approvals, messages);
-      messages.push(systemMessage(event, `${payload.error.code}: ${payload.error.message}`));
       continue;
     }
 

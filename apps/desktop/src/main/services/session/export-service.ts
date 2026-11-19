@@ -187,17 +187,6 @@ const collectBlocks = (events: readonly NexusEvent[]): ExportBlock[] => {
       });
       continue;
     }
-    if (event.type === 'run.failed') {
-      const payload = event.payload as { error?: { code?: string; message?: string } };
-      blocks.push({
-        role: 'system',
-        label: 'Run 失败',
-        text: redact(
-          truncate(`${payload.error?.code ?? 'RUN_FAILED'}: ${payload.error?.message ?? ''}`)
-        ),
-        ts: event.ts
-      });
-    }
   }
   return blocks;
 };

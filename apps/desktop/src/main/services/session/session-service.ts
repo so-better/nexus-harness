@@ -5,7 +5,7 @@
 import { randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import { createNexusEvent } from '@nexus/core';
-import { assertGrantableRoot } from '@nexus/tools';
+import { assertGrantableRoot } from '@nexus/runtime-utils';
 import type { DatabaseSync } from 'node:sqlite';
 import type {
   AgentMode,

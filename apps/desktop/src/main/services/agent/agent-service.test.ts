@@ -118,7 +118,14 @@ describe('AgentService', () => {
     );
 
     expect(result.finishReason).toBe('stop');
-    expect(requests[0]?.tools?.map((tool) => tool.name)).toEqual(['ask_user', 'save_file']);
+    expect(requests[0]?.tools?.map((tool) => tool.name)).toEqual([
+      'ask_user',
+      'save_file',
+      'save_word',
+      'save_excel',
+      'save_ppt',
+      'save_pdf'
+    ]);
   });
 
   it('makes Plan mode read-only and blocks write tools', async () => {

@@ -28,6 +28,7 @@ import { RunStore } from './services/session/run-store';
 import { expirePendingApprovals } from './services/session/approval-recovery';
 import { SessionService } from './services/session/session-service';
 import { syncBuiltinPlugins } from './services/plugins/builtin-plugin-service';
+import { disposeMcpService } from './services/mcp/mcp-service-instance';
 import { initializeAutoLaunch } from './services/settings/startup-settings';
 import { terminalService } from './services/terminal/terminal-service';
 import { PluginHost } from './services/plugins/plugin-host';
@@ -177,6 +178,9 @@ if (!hasSingleInstanceLock) {
         console.error('插件宿主关闭失败', error);
       });
     terminalService.disposeAll();
+    disposeMcpService().catch((error: unknown) => {
+      console.error('MCP 关闭失败', error);
+    });
     closeDatabase();
   });
 

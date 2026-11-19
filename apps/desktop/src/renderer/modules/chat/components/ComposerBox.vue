@@ -30,6 +30,18 @@
       :searching="searching"
       @select="selectReference"
     />
+    <div v-if="skillOpen && skillItems.length" class="nh-composer__skills">
+      <button
+        v-for="skill in skillItems"
+        :key="skill.id"
+        type="button"
+        class="nh-composer__skill"
+        @mousedown.prevent="chooseSkill(skill.id)"
+      >
+        <span class="nh-composer__skill-name">/{{ skill.id }}</span>
+        <span class="nh-composer__skill-description">{{ skill.description }}</span>
+      </button>
+    </div>
     <PluginSlot
       v-if="sessionId"
       location="composer.above"
@@ -70,7 +82,7 @@
  * 输入区：消息发送、文件引用和模型/工作区选择。
  */
 
-import { computed, ref, toRef } from 'vue';
+import { computed, ref, toRef, watch } from 'vue';
 import { NInput, type InputInst } from 'naive-ui';
 import type { MessageFileReference } from '@shared/events';
 import type { AgentMode, ProviderModel, ProviderPublic, SessionRoot } from '@shared/ipc/contracts';
@@ -84,6 +96,8 @@ import ComposerModelPicker from './ComposerModelPicker.vue';
 import ComposerRootPicker from './ComposerRootPicker.vue';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import type { ChatUsage } from '../types';
+import type { SkillSummary } from '@shared/skills';
+import { listSkills } from '../api/skills.api';
 
 const props = defineProps<{
   disabled: boolean;
@@ -112,8 +126,33 @@ const emit = defineEmits<{
 }>();
 
 const draft = ref('');
+const skillOpen = ref(false);
+const skillItems = ref<SkillSummary[]>([]);
 const inputRef = ref<InputInst | null>(null);
 const placeholder = computed(() => t('chat.composerPlaceholder'));
+
+/**
+ * 输入 / 时展示 Skill；选中后由 Agent 以显式 Skill 方式激活。
+ */
+watch(draft, async (value) => {
+  if (!/^\/[a-zA-Z0-9._-]*$/.test(value)) {
+    skillOpen.value = false;
+    return;
+  }
+  try {
+    skillItems.value = (await listSkills()).slice(0, 8);
+    skillOpen.value = skillItems.value.length > 0;
+  } catch {
+    skillItems.value = [];
+    skillOpen.value = false;
+  }
+});
+
+const chooseSkill = (id: string): void => {
+  draft.value = `/${id} `;
+  skillOpen.value = false;
+  inputRef.value?.focus();
+};
 const { selectedReferences, addReference, removeReference, send } = useComposerReferences({
   draft,
   sessionId: computed(() => props.sessionId),
@@ -216,5 +255,46 @@ const {
   min-width: 0;
   align-items: center;
   gap: 8px;
+}
+
+.nh-composer__skills {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--nh-color-border);
+  border-radius: 9px;
+  background: var(--nh-color-bg-elevated);
+}
+
+.nh-composer__skill {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--nh-color-text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.nh-composer__skill:hover {
+  background: var(--nh-color-bg-hover);
+}
+
+.nh-composer__skill-name {
+  font-family: var(--nh-font-mono);
+  font-size: 12px;
+}
+
+.nh-composer__skill-description {
+  overflow: hidden;
+  color: var(--nh-color-text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

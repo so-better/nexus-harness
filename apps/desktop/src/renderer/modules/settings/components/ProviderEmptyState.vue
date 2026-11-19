@@ -7,7 +7,7 @@
       <p class="nh-provider-empty__title">{{ t('settings.noProviders') }}</p>
       <p class="nh-provider-empty__hint">{{ t('settings.emptyHint') }}</p>
     </div>
-    <NButton type="primary" size="small" @click="emit('create')">
+    <NButton type="primary" secondary @click="emit('create')">
       <template #icon>
         <AppIcon name="plus" :size="14" />
       </template>

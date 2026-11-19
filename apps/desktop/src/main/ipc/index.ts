@@ -8,6 +8,8 @@ import { registerCheckpointIpc } from './checkpoint';
 import { registerFilesIpc } from './files';
 import { registerAppIpc } from './app';
 import { registerPluginIpc } from './plugin';
+import { registerSkillsIpc } from './skills';
+import { registerMcpIpc } from './mcp';
 import { registerProviderIpc } from './provider';
 import { registerSessionIpc } from './session';
 import { registerSettingsIpc } from './settings';
@@ -26,6 +28,8 @@ export const registerIpcHandlers = (): void => {
   registerAppIpc();
   registerProviderIpc();
   registerPluginIpc();
+  registerSkillsIpc();
+  registerMcpIpc();
   registerSessionIpc();
   registerSettingsIpc();
   registerTerminalIpc();

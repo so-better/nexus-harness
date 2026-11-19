@@ -2,7 +2,7 @@
   <div class="nh-provider-list">
     <div class="nh-provider-list__header">
       <span> {{ providers.length }} {{ providerCountLabel }} </span>
-      <NButton secondary size="small" @click="emit('create')">
+      <NButton type="primary" secondary @click="emit('create')">
         <template #icon>
           <AppIcon name="plus" :size="14" />
         </template>
@@ -11,13 +11,16 @@
     </div>
 
     <div class="nh-provider-list__items">
-      <button
+      <div
         v-for="provider in providers"
         :key="provider.id"
-        type="button"
+        role="button"
+        tabindex="0"
         class="nh-provider-item"
         :class="{ 'nh-provider-item--disabled': !provider.enabled }"
         @click="emit('edit', provider.id)"
+        @keydown.enter.prevent="emit('edit', provider.id)"
+        @keydown.space.prevent="emit('edit', provider.id)"
       >
         <span class="nh-provider-item__avatar">{{ initialOf(provider.name) }}</span>
 
@@ -39,17 +42,40 @@
               {{ provider.models.length }} {{ modelCountLabel(provider.models.length) }}
             </span>
             <span v-if="provider.defaultModelId" class="nh-provider-item__default">
-              {{ t('settings.defaultModel') }}
+              <AppIcon name="check" :size="12" />
+              <span>{{ t('settings.defaultModel') }}</span>
               <span class="nh-provider-item__model">{{ provider.defaultModelId }}</span>
             </span>
           </span>
         </span>
 
-        <span class="nh-provider-item__action">
-          <AppIcon name="edit" :size="14" />
-          {{ t('settings.edit') }}
+        <span class="nh-provider-item__actions" @click.stop @keydown.stop>
+          <NSwitch
+            size="small"
+            :value="provider.enabled"
+            :loading="busyId === provider.id"
+            :aria-label="t('settings.enabled')"
+            @update:value="(value: boolean) => emit('toggle', provider.id, value)"
+          />
+          <NButton text type="primary" @click="emit('edit', provider.id)">
+            <template #icon>
+              <AppIcon name="edit" :size="14" />
+            </template>
+            {{ t('settings.edit') }}
+          </NButton>
+          <NPopconfirm @positive-click="emit('delete', provider.id)">
+            <template #trigger>
+              <NButton text type="error" :aria-label="t('settings.deleteProvider')">
+                <template #icon>
+                  <AppIcon name="trash" :size="14" />
+                </template>
+                {{ t('settings.delete') }}
+              </NButton>
+            </template>
+            {{ t('settings.deleteProvider') }}?
+          </NPopconfirm>
         </span>
-      </button>
+      </div>
     </div>
   </div>
 </template>
@@ -60,14 +86,19 @@
  */
 
 import { computed } from 'vue';
-import { NButton } from 'naive-ui';
+import { NButton, NPopconfirm, NSwitch } from 'naive-ui';
 import type { ProviderPublic } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 
-const props = defineProps<{ providers: ProviderPublic[] }>();
+const props = defineProps<{ providers: ProviderPublic[]; busyId: string }>();
 
-const emit = defineEmits<{ create: []; edit: [id: string] }>();
+const emit = defineEmits<{
+  create: [];
+  edit: [id: string];
+  toggle: [id: string, enabled: boolean];
+  delete: [id: string];
+}>();
 
 const providerCountLabel = computed(() =>
   props.providers.length === 1 ? t('settings.providerCountOne') : t('settings.providerCountMany')
@@ -216,10 +247,11 @@ const initialOf = (name: string): string => name.trim().charAt(0).toUpperCase() 
   min-width: 0;
   align-items: center;
   gap: 4px;
-  padding: 2px 6px;
-  border: 1px solid var(--nh-color-border);
-  border-radius: 6px;
-  background: var(--nh-color-bg-elevated);
+  color: var(--nh-color-text-secondary);
+}
+
+.nh-provider-item__default :deep(.nh-icon) {
+  color: var(--nh-color-accent);
 }
 
 .nh-provider-item__model {
@@ -230,12 +262,14 @@ const initialOf = (name: string): string => name.trim().charAt(0).toUpperCase() 
   white-space: nowrap;
 }
 
-.nh-provider-item__action {
+.nh-provider-item__actions {
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 4px;
-  color: var(--nh-color-accent);
+  gap: 10px;
+}
+
+.nh-provider-item__actions :deep(.n-button) {
   font-size: 12px;
 }
 </style>

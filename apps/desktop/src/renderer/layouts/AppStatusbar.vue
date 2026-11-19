@@ -51,7 +51,7 @@
       </NButton>
 
       <NButton text size="tiny" @click="emit('open-extensions')">
-        <template #icon><AppIcon name="spark" :size="14" /></template>
+        <template #icon><AppIcon name="plug" :size="14" /></template>
         {{ t('plugins.open') }}
       </NButton>
 

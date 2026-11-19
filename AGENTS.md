@@ -332,7 +332,8 @@ nexus-harness/
 │  ├─ shared/                    # zod 契约、跨端类型、插件 API 类型、常量、IPC 通道
 │  ├─ core/                      # agent 循环、事件流、工具注册表、权限模型
 │  ├─ providers/                 # 统一 LLM 抽象（纯 TS，不依赖 Electron/Vue）
-│  └─ tools/                     # fs / shell / grep / fetch / MCP
+│  ├─ toolkit/                   # 每个 AI 工具一个目录的实现；内部共享代码不对外导出
+│  └─ runtime-utils/             # 路径、URL 安全、Shell 环境等通用工具
 ```
 
 ### 3.3 分层与依赖方向
@@ -344,12 +345,13 @@ main     ──> shared + packages
 packages ──> shared（packages 之间允许，但禁止反向依赖 apps）
 ```
 
-- `packages/core`、`packages/providers`、`packages/tools` **禁止**依赖 Electron、Vue、DOM。
+- `packages/core`、`packages/providers`、`packages/toolkit`、`packages/runtime-utils` **禁止**依赖 Electron、Vue、DOM。
 - 渲染层**禁止**直接 import `electron`、`node:*`、`fs` 等模块。
 - 跨进程数据必须定义在 `packages/shared`，并用 zod 校验。
 - `packages/*` 只服务本仓库，**不发布 npm**；应用引用统一使用 `workspace:*`，不对外承诺 API 兼容性。
 - 插件无需导入宿主包；宿主在激活时注入 `ctx`。第三方依赖必须自行打包进插件目录，禁止 import `@nexus/core`、`@nexus/shared`、`apps/desktop` 等内部包。
 - `packages/*` 只放纯逻辑与实现；`main/services/*` 负责 Electron 绑定、审批编排、沙箱、配置与持久化。
+- `packages/toolkit/src/tools/<tool>/` 只放 AI 工具；每个目录包含自己的 schema、定义和执行实现，并配有 `index.test.ts`。`packages/toolkit/src/internal/` 放跨工具共享逻辑；`file-toolset.ts` 只做授权 root 绑定与分发，不新增 AI 工具。`document/` 是 `save_*` 的内部实现库，不从 `@nexus/toolkit` 对外导出。
 
 ### 3.4 功能模块内部结构
 
@@ -495,29 +497,13 @@ interface ProviderCapabilities {
 
 #### 模型角色与图像模型
 
-- 模型配置按角色划分：`chat`（对话与工具调用）、`image`（图像生成/编辑）、`embedding`（可选）。对话模型必须有，图像模型可选。
-- 同一提供商可配置多个模型条目；每条包含模型名、上下文窗口与输出预留，Provider 保存 `models` 数组与 `defaultModelId`。
+- 对话模型配置保持 Provider + `models` 结构；图像模型使用独立入口和配置列表，不混入对话 Provider 的模型列表。
 - 会话与 Run 记录实际使用的 `providerId + modelId`；不得在未指定模型时静默使用默认模型。
 - 图像模型未配置时，`generate_image` 工具不注册，Agent 不能生成图片，UI 引导用户去设置。
-- 图像模型接口：
-
-```ts
-/**
- * 图像模型适配器，文本模型通过 generate_image 工具调用
- */
-interface ImageProvider {
-  capabilities: {
-    textToImage: boolean;
-    imageToImage: boolean;
-    maxBatch: number;
-    sizes: string[];
-  };
-  generate(request: ImageRequest): Promise<ImageResult>;
-}
-```
-
-- 支持远程与本地图像服务，如 OpenAI Images、Stability、ComfyUI；结果统一返回 `fileId` 列表、尺寸与用量。
-- 支持适配器与模板式图像服务配置；模板请求与结果解析必须校验 URL、响应大小与超时。
+- 图像模型使用独立模板 JSON：`url`、可选 `headers`、`body`、`result` 与可选 `poll`；不假设固定厂商字段。
+- 请求体模板使用 JSON 占位符 `{{model}}`、`{{prompt}}`、`{{size}}`、`{{image_url}}`、`{{image_urls}}`；无参考图时移除包含图片占位符的字段/数组项。
+- `result.path/paths` 支持点号、数组下标与 `*` 通配符，例如 `data.0.url`、`data.*.b64_json`；编码支持 URL、Base64 与 binary。
+- 同步接口直接解析响应；异步接口通过 `poll.path`、`id_path`、`status_path` 与 `result_path` 轮询，不在代码中猜任务地址；必须校验响应大小、下载超时与图片类型。
 - 图像生成结果以图片内容与文件引用返回；对话模型不支持视觉时由提供商报错，宿主不静默丢弃。
 
 ### 4.2 上下文工程
@@ -607,7 +593,7 @@ interface ImageProvider {
 
 | 字段 | 说明 |
 | --- | --- |
-| `name` | 全局唯一；内置工具 snake_case，MCP 工具使用 `mcp.<serverId>.<toolName>` |
+| `name` | 全局唯一；内置工具 snake_case，MCP 工具使用 `mcp_<serverId>_<toolName>` 并净化到 `[a-zA-Z0-9_-]{1,64}` |
 | `label` | 展示名，用于工具卡片与审批面板 |
 | `description` | 给模型的能力说明 |
 | `inputSchema` | zod 输入契约 |
@@ -634,18 +620,16 @@ interface ImageProvider {
 | `checkpoint` | write | 否（系统内部） |
 | `save_file` | write | 否（写入 `files`） |
 | `save_word` / `save_excel` / `save_ppt` / `save_pdf` | write | 否（写入 `files`） |
-| `fetch` | network | 是（默认关闭） |
-| `search_images` / `search_videos` | network | 是 |
 | `generate_image` | network | 是（计费操作） |
 
-`save_*` 工具写入 `<userData>/files`，不触发工作区写审批，但必须记录 `file.created` 并受大小与类型限制。
+`save_*` 工具写入 `<userData>/files`，不触发工作区写审批，但必须记录 `file.created` 并受大小与类型限制。`save_file` 支持文本与 Base64 二进制内容；`save_word` / `save_pdf` 使用 Markdown，`save_ppt` 支持模板化版式。
 
 本地二进制读取计划在 M3 接入：按 MIME 与扩展名选择专用读取器；图片作为视觉内容发送，可抽取文本的格式转文本，其他二进制只保存文件引用，原始内容不得直接进入上下文。
 
 #### MCP 工具接入
 
-- 启动时扫描 `<userData>/mcp/<server-id>/mcp.json`，校验后按需启动 Server；文件增删改时重新扫描。
-- Server 提供的工具以 `mcp.<serverId>.<toolName>` 命名注册，权限为 `execute`，始终审批。
+- 启动时扫描 `<userData>/mcp/mcp.json`，校验 `mcpServers` 配置后按需启动 Server；文件变化后的下次 Run 会重新读取。
+- Server 提供的工具以 `mcp_<serverId>_<toolName>` 命名注册，名称净化到 `[a-zA-Z0-9_-]{1,64}`，权限为 `execute`，始终审批。
 - 工具注册后参与正常工具选择，Agent 不需要了解 MCP 协议；调用时按普通工具走审批与事件流。
 - 只有已启用、已信任且已连接的 Server 工具会进入工具 schema；未启用或断开时从 schema 移除。
 - 每个 Server 单独启用与信任，默认不自动启动、不自动信任；首次启用必须展示将执行的命令与环境变量。
@@ -701,7 +685,6 @@ interface ImageProvider {
 - 工具生成或下载的文件统一由文件服务写入 `<userData>/files/<sessionId>/`，分配 fileId 并记录元数据。
 - `save_file` 与 `save_word` / `save_excel` / `save_ppt` / `save_pdf` 生成的文件同样走文件服务，返回文件引用。
 - 写入 `files` 目录属于宿主内部存储，不触发工作区写审批，但必须记录 `file.created` 并受大小与类型限制。
-- `fetch` 下载的内容作为文件保存，不把二进制内容直接塞进上下文。
 - 不把 `files` 目录加入工作区白名单；Agent 通过工具返回的文件引用访问，路径解析由宿主完成。
 - 会话流展示文件卡片，只提供另存为；不内联预览或暴露任意路径。
 - 另存为通过系统文件对话框选择目标目录，由用户确认后复制。
@@ -709,9 +692,9 @@ interface ImageProvider {
 
 #### 图像生成
 
-- 文本模型通过 `generate_image` 工具调用配置好的图像模型；用户也可以显式发起。
+- 文本模型通过 `generate_image` 工具调用独立配置的图像模型；用户也可以显式发起。
 - 对话模型不支持工具调用时，用户仍可通过显式命令发起图像生成。
-- 参数包含 prompt、size、count、referenceFileIds（图生图）与 seed；返回 fileId 列表、尺寸与用量。
+- 参数包含 prompt、size、count、referenceFileIds（图生图）与 seed；返回 fileId 列表、尺寸与用量。请求体与结果字段由独立图像配置决定。
 - 结果写入 `<userData>/files`，会话流以图片卡片展示并支持另存为。
 - 生成结果同时作为图片内容返回给对话模型，模型可基于结果继续修改。
 - 未配置图像模型时不注册该工具，返回结构化提示并引导用户到设置。
@@ -1025,7 +1008,7 @@ export function activate(ctx) {
 ├─ nexus.db              # SQLite 主库
 ├─ plugins/<plugin-id>/  # 用户插件目录，启动时扫描
 ├─ skills/<skill-id>/    # 技能目录，启动时扫描
-├─ mcp/<server-id>/      # MCP 配置目录，mcp.json 启动时扫描
+├─ mcp/mcp.json         # 标准 MCP 配置，启动时扫描
 ├─ settings/             # 启动设置（主题等，后续迁移到 settings 表）
 ├─ files/                # AI 输出文件与会话导出，按会话存放
 ├─ artifacts/            # 工具产物与完整日志
@@ -1099,7 +1082,7 @@ export function activate(ctx) {
 | 不可信输出文件 | 下载或生成的文件 | 限制大小与类型、不内联预览、不自动打开或执行 |
 | 图像生成滥用 | `generate_image` | 内容策略、逐次审批、预算与速率限制 |
 | 文件路径泄露 | 文件访问/另存为 | 仅通过 fileId 访问 `<userData>/files`，不暴露任意路径 |
-| SSRF | `fetch`、图像、MCP HTTP | DNS 解析后拒绝私网/回环/元数据地址，限制重定向与响应大小 |
+| SSRF | 图像、MCP HTTP | DNS 解析后拒绝私网/回环/元数据地址，限制重定向与响应大小 |
 | 供应链风险 | 依赖包 | 锁定版本、最小依赖、依赖变更评审 |
 
 信任模型：
@@ -1116,18 +1099,18 @@ export function activate(ctx) {
 ### 4.7.1 网络策略
 
 - 默认拒绝所有出站网络；按 provider、域名、端口显式放行。
-- `fetch`、图像生成、媒体搜索、MCP HTTP 分别配置域名白名单；`localhost` 也需要显式允许。
+- 图像生成与 MCP HTTP 分别配置域名白名单；`localhost` 也需要显式允许。
 - URL 经 DNS 解析后拒绝私网、回环、链路本地与云元数据地址；重定向每跳重新校验并限制次数。
 - 网络响应设置大小与超时上限；大文件流式写入 `files`，不整体载入内存。
 - 用户配置的 Base URL、图像模板与 MCP HTTP 地址同样做 SSRF 校验。
 - 代理与自定义证书在设置中配置；不得绕过系统代理策略。
-- 每次网络工具调用记录目标域名、耗时与结果状态，不记录敏感 header。
+- 每次网络请求记录目标域名、耗时与结果状态，不记录敏感 header。
 
 ### 4.8 设置与配置
 
 - 设置分三个层级，优先级为 **Session > Workspace > App**；读取时逐层合并，写入时记录 scope。
 - 设置分类：通用、模型与提供商、终端、外观、缓存、权限与审批、快捷键、高级；终端设置包含 shell、字号、滚回、选中即复制与 WebGL；字体使用默认等宽字体，默认字号 12px，自动检测的 shell 路径需回显。
-- 模型与提供商：按角色配置对话模型与图像模型；每条包含 Base URL、API Key、模型名、能力声明、上下文窗口、token 价格、`extra_params` 与自定义 headers。
+- 模型与提供商：对话 Provider 保持 Base URL、API Key、模型名、能力声明、上下文窗口、token 价格、`extra_params` 与自定义 headers；图像模型在独立入口配置完整请求 URL、模型、Key、headers、请求体模板与结果路径。
 - 支持连接测试与模型列表刷新；API Key 随本地 Provider 配置保存；不写死默认模型。
 - 图像模型可选；未配置时不注册 `generate_image`，设置页提供引导。
 - 权限与审批：默认审批策略、命令白名单、敏感路径策略、工作区信任管理。
@@ -1221,7 +1204,7 @@ export function activate(ctx) {
 - 每个 Session 有一个当前模式 `plan | build`，默认 `build`；未信任工作区默认 `plan`，确认信任后可切换。
 - Plan 模式只读：允许 `read_file`、`list_dir`、`glob`、`grep`、`ask_user`、`search_skills`、`read_skill`。
 - Plan 模式禁止所有有副作用的本地操作：不写文件、不执行命令、不联网、不启动 MCP、不创建检查点、不修改设置与授权。
-- Plan 模式下 `write_file`、`apply_patch`、`run_command`、`checkpoint`、`fetch`、`generate_image` 与全部 MCP 工具均不可用。
+- Plan 模式下 `write_file`、`apply_patch`、`run_command`、`checkpoint`、`generate_image` 与全部 MCP 工具均不可用。
 - Plan 产出目标、步骤、涉及文件、风险与验收标准；用户确认后切换到 Build 执行。
 - Build 模式按工具权限与审批策略执行全部允许的工具。
 - 模式切换只能由用户操作，Agent 不能自行从 Plan 切到 Build。
@@ -1664,7 +1647,7 @@ pnpm rebuild:native # 为 Electron 重建 node-pty
 | M0 | 规范、monorepo 骨架、electron-vite + Vue、类型化 IPC、深浅主题与动效 token、布局占位、事件总线与扩展点骨架、CI 门禁 |
 | M1 | 单 Agent 闭环：多提供商、流式对话、工具调用、审批、多会话与重命名/置顶、自动标题、消息编辑/重生成/停止、可选工作区与路径授权、事件流持久化、文件输出与另存为、读改跑测验证 |
 | M2 | 文件修改审批强化：写文件与执行命令前展示路径、命令、cwd、实际 diff 或写入内容与影响范围；输入框 `@` 文件引用与轻量索引，普通文件插入路径、图片读取并作为视觉内容发送；内置终端面板（xterm + node-pty，多标签、拖拽宽度、关闭确认与右键菜单），AI 命令直接创建终端标签；跨会话搜索；会话导出；后台通知。明确不做文件树、Monaco、文件 IDE、Git 集成、独立变更审阅面板与回滚 UI |
-| M3 | 工具完善、图像生成、Office 生成、媒体搜索、本地二进制文件读取与按类型处理、Skill/MCP 目录扫描与注册 |
+| M3 | 工具完善、图像生成、Office 生成、本地二进制文件读取与按类型处理、Skill/MCP 目录扫描与注册；媒体搜索暂不内置，后续通过 MCP 或 Skill 扩展 |
 | M4 | 插件宿主、目录扫描、Extensions 管理页、`token-usage` 示例 |
 | M5 | 产品化打包：发布流水线、签名、公证、自动更新、崩溃恢复 |
 
@@ -1675,7 +1658,7 @@ pnpm rebuild:native # 为 Electron 重建 node-pty
 | M0 | 应用可启动；深浅主题可切换；IPC 往返成功；事件总线与插槽注册表骨架可用；`typecheck`、`lint` 全绿；渲染层无 Node 访问 |
 | M1 | 完成 3 个任务（代码修复、文档修改、脚本数据处理，可用临时会话）；未授权路径触发授权；多会话切换不中断后台 Run；标题可自动生成、重命名与置顶；消息可编辑重发、重新生成与停止；AI 输出文件可另存；重启后会话与工作区可恢复 |
 | M2 | 文件与命令审批展示真实路径、参数、cwd、diff/写入内容和影响范围；`@` 可在工作区内检索文件并尊重 `.gitignore`，图片按视觉内容发送；内置终端默认使用工作区目录，无工作区时使用根目录；状态栏可打开终端面板，支持多标签、拖拽宽度、搜索、指定目录、拖入文件、关闭运行中终端二次确认；AI 命令在终端标签中执行；跨会话搜索可跳转；会话可导出；后台完成/失败有系统通知 |
-| M3 | 工具覆盖既定清单；图像模型可配置并生成图片；Office 文件与媒体搜索可用；本地二进制文件可按类型读取、转文本或按文件引用处理，不把原始二进制塞入上下文；`<userData>/mcp` 可自动扫描接入；`<userData>/skills` 可自动注册并通过 `/skill` 调用 |
+| M3 | 工具覆盖既定清单；图像模型可配置并生成图片；Office 文件可用；本地二进制文件可按类型读取、转文本或按文件引用处理，不把原始二进制塞入上下文；`<userData>/mcp` 可自动扫描接入；`<userData>/skills` 可自动注册并通过 `/skill` 调用 |
 | M4 | 将示例插件放入 `<userData>/plugins` 后自动注册；可启用/禁用；越权调用被拒绝；热重载不残留副作用 |
 | M5 | dmg 与 nsis 可安装；签名与公证通过；自动更新可用；崩溃恢复不丢事件；性能达标 |
 
@@ -1736,10 +1719,10 @@ CHANGELOG.md         # 版本变更记录
 | 路径授权 | 会话级 | 未授权路径弹窗，敏感目录始终拒绝 |
 | 检查点 | 逐文件快照 | 不依赖 git，工作区与临时会话通用 |
 | AI 输出文件 | `<userData>/files` | 永久保留，手动清理；仅通过 fileId 另存为 |
-| Office/媒体工具 | 核心工具 | `save_*` 与图片/视频搜索内置 |
+| Office 工具 | 核心工具 | `save_*` 内置；媒体搜索不内置，后续通过 MCP 或 Skill 扩展 |
 | Prompt 策略 | 静态前缀 + 动态追加 | 动态上下文追加到用户消息，保护 prompt cache |
 | Prompt 行为 | 内置约束 | 反幻觉、工具诚实、链接真实性、文件生成自检 |
-| 图像生成 | 工具化 | 独立 `image` 模型配置，文本模型通过 `generate_image` 调用 |
+| 图像生成 | 工具化 | 独立图像模板（URL + body + result + 可选 poll），文本模型通过 `generate_image` 调用 |
 | 上下文压缩 | 自动 | 超过输入预算 70% 触发，写入 `context.compacted` |
 | 工具并发 | 只读可并行 | 写与执行工具串行 |
 | Agent 模式 | Plan / Build | Plan 只读，Build 执行；切换需用户操作 |
@@ -1761,7 +1744,7 @@ CHANGELOG.md         # 版本变更记录
 | 跨会话搜索 | SQLite FTS5 | 消息正文；结果附会话标题与定位信息 |
 | 网络访问 | 默认拒绝 | 按 provider / 域名显式放行 |
 | 发布 | 签名 + 自动更新 | stable / beta 双通道 |
-| 网络工具 | 默认关闭 | 后续再评估是否开放 `fetch` |
+| 网络工具 | 不内置 | 后续通过 MCP 或 Skill 扩展 |
 | MCP 接入时机 | M3 | 先支持本地 stdio Server |
 | 高风险插件权限 | 需单独评审 | `workspace:write`、`tools:register`、`network` 默认关闭 |
 | 自动更新渠道 | M5 | stable / beta 双通道 |

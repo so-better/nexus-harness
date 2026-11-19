@@ -91,11 +91,30 @@ const emit = defineEmits<{ 'authorize-root': [] }>();
 const toolIcon = computed<
   'file' | 'edit' | 'terminal' | 'globe' | 'spark' | 'settings' | 'history'
 >(() => {
-  if (['read_file', 'list_dir', 'glob', 'grep'].includes(props.tool.name)) return 'file';
+  if (
+    [
+      'read_file',
+      'list_dir',
+      'glob',
+      'grep',
+      'save_file',
+      'save_word',
+      'save_excel',
+      'save_ppt',
+      'save_pdf'
+    ].includes(props.tool.name)
+  )
+    return 'file';
   if (['write_file', 'apply_patch'].includes(props.tool.name)) return 'edit';
   if (props.tool.name === 'run_command') return 'terminal';
-  if (props.tool.name === 'fetch' || props.tool.name.startsWith('search_')) return 'globe';
-  if (props.tool.name === 'generate_image') return 'spark';
+  if (
+    props.tool.name === 'fetch' ||
+    props.tool.name.startsWith('search_') ||
+    props.tool.name === 'generate_image'
+  )
+    return 'globe';
+  if (props.tool.name.startsWith('search_skill') || props.tool.name === 'read_skill')
+    return 'spark';
   if (props.tool.name === 'checkpoint') return 'history';
   return 'settings';
 });

@@ -416,4 +416,40 @@ describe('projectEvents', () => {
     expect(projection.status).toBe('completed');
     expect(projection.running).toBe(false);
   });
+
+  it('projects run failures as an assistant error bubble', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'run.started',
+        payload: { model: 'mock-model' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'run.failed',
+        payload: { error: { code: 'PROVIDER_UNAUTHORIZED', message: '认证失败' } }
+      }),
+      event({
+        sessionId: 'session-1',
+        seq: 3,
+        type: 'message.completed',
+        payload: {
+          messageId: 'error-1',
+          role: 'assistant',
+          content: '认证失败\n\nPROVIDER_UNAUTHORIZED',
+          error: true
+        }
+      })
+    ]);
+
+    expect(projection.status).toBe('failed');
+    expect(projection.messages[0]).toMatchObject({
+      role: 'assistant',
+      content: '认证失败\n\nPROVIDER_UNAUTHORIZED'
+    });
+  });
 });

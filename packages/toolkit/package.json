@@ -1,0 +1,31 @@
+{
+  "name": "@nexus/toolkit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "^14.2.0",
+    "@types/node": "^26.6.6",
+    "@types/pdfkit": "^0.17.7",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@nexus/runtime-utils": "workspace:*",
+    "@nexus/shared": "workspace:*",
+    "docx": "^9.16.0",
+    "exceljs": "^4.4.0",
+    "jszip": "^3.10.2",
+    "markdown-it": "^15.0.2",
+    "mammoth": "^1.13.0",
+    "pdf-parse": "^2.4.5",
+    "pdfkit": "^0.20.2",
+    "pptxgenjs": "^4.0.1",
+    "xlsx": "^0.18.5",
+    "zod": "^4.6.7"
+  }
+}
