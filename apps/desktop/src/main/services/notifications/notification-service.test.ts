@@ -29,6 +29,7 @@ vi.mock('electron', () => {
   return {
     app: { dock: { setBadge: vi.fn() }, emit: state.emit },
     BrowserWindow: {
+      getFocusedWindow: () => (state.focused ? { isFocused: () => true } : null),
       getAllWindows: () =>
         state.hasWindow
           ? [

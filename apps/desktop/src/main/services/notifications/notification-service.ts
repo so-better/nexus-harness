@@ -60,9 +60,14 @@ export const setNotificationBadgeStyle = (style: NotificationBadgeStyle): void =
 
 const setBadge = (value: string): void => {
   try {
-    app?.dock?.setBadge(value);
+    if (app?.dock) {
+      app.dock.setBadge(value);
+      return;
+    }
+    const count = value ? Number.parseInt(value, 10) || 1 : 0;
+    app?.setBadgeCount?.(count);
   } catch {
-    // 非 macOS 或测试环境不支持 Dock badge
+    // 平台不支持系统角标时忽略
   }
 };
 
@@ -83,7 +88,7 @@ export const consumePendingSession = (): string | null => {
 };
 
 const focusSession = (sessionId: string): void => {
-  const window = BrowserWindow?.getAllWindows?.()[0];
+  const window = BrowserWindow?.getFocusedWindow?.() ?? BrowserWindow?.getAllWindows?.()[0];
   if (!window) {
     pendingSessionId = sessionId;
     app?.emit?.('activate');
@@ -123,8 +128,7 @@ const notificationText = (
  */
 export const notifyAgentEvent = (event: NexusEvent, sessionTitle: string): void => {
   try {
-    const window = BrowserWindow?.getAllWindows?.()[0];
-    if (window?.isFocused()) return;
+    if (BrowserWindow?.getFocusedWindow?.()) return;
     if (!Notification?.isSupported?.()) return;
     const text = notificationText(event, sessionTitle);
     if (!text) return;

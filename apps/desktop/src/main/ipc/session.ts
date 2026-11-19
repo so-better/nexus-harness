@@ -3,6 +3,9 @@
  */
 
 import { BrowserWindow, dialog, ipcMain } from 'electron';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { NexusEvent } from '@shared/events';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import {
@@ -280,6 +283,21 @@ export const registerSessionIpc = (): void => {
       const title = session.title.replace(/[\\/:*?"<>|]/g, '_') || 'session';
       const extension = parsed.data.format === 'markdown' ? 'md' : parsed.data.format;
       const window = BrowserWindow.fromWebContents(event.sender);
+      const confirmationOptions = {
+        type: 'info' as const,
+        title: '导出会话',
+        message: '确认导出范围',
+        detail:
+          '导出将包含消息、工具调用、审批、用量和检查点；常见密钥会自动脱敏，单个超长输出会被截断。',
+        buttons: ['继续导出', '取消'],
+        defaultId: 0,
+        cancelId: 1
+      };
+      const confirmation = window
+        ? await dialog.showMessageBox(window, confirmationOptions)
+        : await dialog.showMessageBox(confirmationOptions);
+      if (confirmation.response !== 0) return ok({ saved: false });
+
       const result = window
         ? await dialog.showSaveDialog(window, {
             title: '导出会话',
@@ -304,14 +322,18 @@ export const registerSessionIpc = (): void => {
               height: 800,
               webPreferences: { sandbox: true, backgroundThrottling: false }
             });
+            const temporaryDirectory = await mkdtemp(join(tmpdir(), 'nexus-export-'));
+            const temporaryHtml = join(temporaryDirectory, 'session.html');
             try {
-              await renderer.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+              await writeFile(temporaryHtml, html, 'utf8');
+              await renderer.loadFile(temporaryHtml);
               content = await renderer.webContents.printToPDF({
                 printBackground: true,
                 pageSize: 'A4'
               });
             } finally {
               renderer.destroy();
+              await rm(temporaryDirectory, { recursive: true, force: true });
             }
           }
         }
