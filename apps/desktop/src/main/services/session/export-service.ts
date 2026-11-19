@@ -63,6 +63,7 @@ const collectBlocks = (events: readonly NexusEvent[]): ExportBlock[] => {
         messageId?: string;
         role?: string;
         content?: string;
+        reasoning?: string;
         references?: Array<{ path?: string }>;
         images?: Array<{ path?: string }>;
       };
@@ -84,6 +85,14 @@ const collectBlocks = (events: readonly NexusEvent[]): ExportBlock[] => {
           text: redact(truncate(text)),
           ts: event.ts
         });
+        if (payload.role === 'assistant' && payload.reasoning?.trim()) {
+          blocks.push({
+            role: 'assistant',
+            label: '思考过程',
+            text: redact(truncate(payload.reasoning)),
+            ts: event.ts
+          });
+        }
       }
       continue;
     }

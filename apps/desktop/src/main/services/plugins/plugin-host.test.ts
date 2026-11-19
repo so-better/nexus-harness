@@ -95,4 +95,59 @@ describe('PluginHost', () => {
     expect(host.list().find((plugin) => plugin.id === 'nexus.user')).toBeUndefined();
     await expect(host.uninstall('nexus.builtin')).rejects.toThrow('内置插件不能卸载');
   });
+
+  it('denies undeclared main-process storage permission', async () => {
+    await writeFile(
+      join(pluginsDir, 'nexus.user', 'plugin.json'),
+      JSON.stringify({
+        id: 'nexus.user',
+        name: 'nexus.user',
+        version: '1.0.0',
+        engines: { nexus: '^0.1.0' },
+        main: 'dist/main.cjs',
+        permissions: [],
+        contributes: {}
+      })
+    );
+    await mkdir(join(pluginsDir, 'nexus.user', 'dist'), { recursive: true });
+    await writeFile(
+      join(pluginsDir, 'nexus.user', 'dist', 'main.cjs'),
+      "exports.activate = (ctx) => { ctx.storage.set('x', 1); };"
+    );
+
+    await host.scan();
+    await host.setEnabled('nexus.user', true);
+
+    const plugin = host.list().find((item) => item.id === 'nexus.user');
+    expect(plugin?.enabled).toBe(false);
+    expect(plugin?.error).toContain('缺少 storage 权限');
+  });
+
+  it('cleans up main-process plugin state when disabled', async () => {
+    const state = globalThis as { __nexusPluginCleanups?: number };
+    state.__nexusPluginCleanups = 0;
+    await writeFile(
+      join(pluginsDir, 'nexus.user', 'plugin.json'),
+      JSON.stringify({
+        id: 'nexus.user',
+        name: 'nexus.user',
+        version: '1.0.0',
+        engines: { nexus: '^0.1.0' },
+        main: 'dist/main.cjs',
+        permissions: [],
+        contributes: {}
+      })
+    );
+    await mkdir(join(pluginsDir, 'nexus.user', 'dist'), { recursive: true });
+    await writeFile(
+      join(pluginsDir, 'nexus.user', 'dist', 'main.cjs'),
+      'exports.activate = () => {}; exports.deactivate = () => { globalThis.__nexusPluginCleanups += 1; };'
+    );
+
+    await host.scan();
+    await host.setEnabled('nexus.user', true);
+    await host.setEnabled('nexus.user', false);
+
+    expect(state.__nexusPluginCleanups).toBe(1);
+  });
 });

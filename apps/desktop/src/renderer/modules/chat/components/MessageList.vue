@@ -12,6 +12,8 @@
         :session-id="sessionId"
         :is-last-assistant="message.id === lastAssistantId"
         :actions-disabled="actionsDisabled"
+        :workspace-auth="workspaceAuth ?? null"
+        :workspace-auth-tool-exists="workspaceAuthToolExists"
         @content-growth="handleContentGrowth"
         @answer-user="(requestId, answers) => emit('answer-user', requestId, answers)"
         @approve="emit('approve', $event)"
@@ -21,6 +23,8 @@
         "
         @regenerate-message="emit('regenerate-message', message.id)"
         @request-root="emit('request-root')"
+        @allow-workspace="emit('allow-workspace')"
+        @reject-workspace="emit('reject-workspace')"
       />
     </div>
   </div>
@@ -35,6 +39,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import type { AskUserAnswer } from '@shared/ask-user';
 import type { MessageFileReference } from '@shared/events';
 import { indexAskUsersByMessage } from '../ask-user-index';
+import type { WorkspaceAuthorizationRequest } from '@shared/ipc/contracts';
 import type { ChatApproval, ChatAskUser, ChatMessageView } from '../types';
 import ChatMessageItem from './ChatMessageItem.vue';
 
@@ -45,6 +50,8 @@ const emit = defineEmits<{
   'edit-message': [messageId: string, content: string, references?: MessageFileReference[]];
   'regenerate-message': [messageId: string];
   'request-root': [];
+  'allow-workspace': [];
+  'reject-workspace': [];
 }>();
 
 const props = defineProps<{
@@ -56,9 +63,18 @@ const props = defineProps<{
   askUsers?: ChatAskUser[] | undefined;
   approvals?: ChatApproval[] | undefined;
   actionsDisabled?: boolean | undefined;
+  workspaceAuth?: WorkspaceAuthorizationRequest | null | undefined;
 }>();
 
 const viewport = ref<HTMLElement | null>(null);
+
+const workspaceAuthToolExists = computed(() => {
+  const toolCallId = props.workspaceAuth?.toolCallId;
+  return Boolean(
+    toolCallId &&
+    props.messages.some((message) => message.toolCalls.some((tool) => tool.id === toolCallId))
+  );
+});
 
 const lastAssistantId = computed(
   () => [...props.messages].reverse().find((message) => message.role === 'assistant')?.id

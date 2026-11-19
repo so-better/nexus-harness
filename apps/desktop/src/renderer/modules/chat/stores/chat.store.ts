@@ -12,6 +12,7 @@ import type { AskUserAnswer } from '@shared/ask-user';
 import {
   answerAskUser as answerAskUserApi,
   cancelAgent,
+  cancelAgentSession,
   chooseRoot,
   loadEvents,
   resolveApproval,
@@ -164,10 +165,14 @@ export const useChatStore = defineStore('chat', () => {
    * 停止当前会话的 Run。
    */
   const stop = async (sessionId: string): Promise<void> => {
-    const runId = runIds[sessionId];
-    if (!runId) return;
     try {
-      await cancelAgent(runId);
+      const runId = runIds[sessionId];
+      if (!runId) {
+        await cancelAgentSession(sessionId);
+        return;
+      }
+      const result = await cancelAgent(runId);
+      if (!result.cancelled) await cancelAgentSession(sessionId);
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);
     }

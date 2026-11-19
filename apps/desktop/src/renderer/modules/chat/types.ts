@@ -40,6 +40,7 @@ export interface ChatMessageView {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  reasoning?: string;
   toolCalls: ChatToolCall[];
   createdAt: number;
   streaming?: boolean;

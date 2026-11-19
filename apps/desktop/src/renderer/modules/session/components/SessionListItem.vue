@@ -222,9 +222,9 @@ const relativeTime = computed(() => {
   align-items: center;
   gap: 10px;
   padding: 11px 12px;
-  border: 1px solid color-mix(in srgb, var(--nh-color-border) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--nh-border-subtle) 82%, transparent);
   border-radius: 10px;
-  background: var(--nh-color-bg-base);
+  background: var(--nh-surface-base);
   color: var(--nh-color-text-primary);
   cursor: pointer;
   text-align: left;
@@ -234,12 +234,12 @@ const relativeTime = computed(() => {
 }
 
 .nh-session-item:hover {
-  border-color: color-mix(in srgb, var(--nh-color-accent) 26%, var(--nh-color-border));
+  border-color: color-mix(in srgb, var(--nh-color-accent) 26%, var(--nh-border-subtle));
 }
 
 .nh-session-item--active {
-  border-color: color-mix(in srgb, var(--nh-color-accent) 50%, var(--nh-color-border));
-  background: color-mix(in srgb, var(--nh-color-accent) 16%, var(--nh-color-bg-base));
+  border-color: color-mix(in srgb, var(--nh-color-accent) 50%, var(--nh-border-subtle));
+  background: color-mix(in srgb, var(--nh-color-accent) 16%, var(--nh-surface-base));
   box-shadow: var(--nh-highlight);
 }
 

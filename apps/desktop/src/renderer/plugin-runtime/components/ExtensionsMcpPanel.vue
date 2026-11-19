@@ -3,8 +3,10 @@
     <div class="nh-extension-panel__header">
       <p>{{ t('mcp.hint') }}</p>
       <div class="nh-extension-panel__actions">
-        <NButton type="primary" :loading="saving" @click="save">{{ t('mcp.save') }}</NButton>
-        <NButton type="primary" secondary :loading="testing" @click="test">
+        <NButton type="primary" secondary :loading="saving" @click="save">{{
+          t('mcp.save')
+        }}</NButton>
+        <NButton type="primary" tertiary :loading="testing" @click="test">
           {{ t('mcp.test') }}
         </NButton>
         <NButton secondary :loading="loading" @click="load">{{ t('mcp.refresh') }}</NButton>
@@ -142,7 +144,7 @@ onMounted(load);
   flex-direction: column;
   gap: 4px;
   padding: 8px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 8px;
   background: var(--nh-color-bg-elevated);
 }

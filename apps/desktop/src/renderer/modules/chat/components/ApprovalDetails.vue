@@ -6,7 +6,7 @@
     </div>
     <div v-if="command" class="nh-approval__field">
       <span class="nh-approval__label">{{ t('chat.approvalCommand') }}</span>
-      <pre class="nh-approval__pre">{{ command }}</pre>
+      <pre class="nh-approval__pre nh-approval__pre--command">{{ command }}</pre>
       <span v-if="cwd" class="nh-approval__hint">{{ t('chat.approvalCwd') }}: {{ cwd }}</span>
     </div>
     <div v-if="oldText !== undefined || newText !== undefined" class="nh-approval__field">
@@ -86,14 +86,23 @@ const inputPreview = computed(() => {
   overflow: auto;
   margin: 0;
   padding: 7px 9px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 7px;
-  background: var(--nh-color-bg-elevated);
+  background: var(--nh-surface-elevated);
   font-family: var(--nh-font-mono);
   font-size: 11px;
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.nh-approval__pre--command {
+  padding: 12px 14px;
+  border-color: color-mix(in srgb, var(--nh-color-code-text) 12%, transparent);
+  background: var(--nh-color-code-bg);
+  color: var(--nh-color-code-text);
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .nh-approval__diff {
@@ -103,12 +112,12 @@ const inputPreview = computed(() => {
 }
 
 .nh-approval__pre--removed {
-  border-color: color-mix(in srgb, var(--nh-color-danger) 24%, var(--nh-color-border));
+  border-color: color-mix(in srgb, var(--nh-color-danger) 24%, var(--nh-border-subtle));
   color: var(--nh-color-danger);
 }
 
 .nh-approval__pre--added {
-  border-color: color-mix(in srgb, var(--nh-color-success) 24%, var(--nh-color-border));
+  border-color: color-mix(in srgb, var(--nh-color-success) 24%, var(--nh-border-subtle));
   color: var(--nh-color-success);
 }
 </style>

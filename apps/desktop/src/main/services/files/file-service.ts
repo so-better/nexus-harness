@@ -3,10 +3,10 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { copyFile, mkdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, extname, join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import type { OutputFile } from '@shared/ipc/contracts';
+import type { FileReadResult, OutputFile } from '@shared/ipc/contracts';
 import { getAppDataPaths } from '../storage/paths';
 
 interface FileRow {
@@ -171,5 +171,22 @@ export class FileService {
   getMeta(fileId: string, sessionId: string): OutputFile | undefined {
     const row = this.get(fileId, sessionId);
     return row ? toOutputFile(row) : undefined;
+  }
+
+  /**
+   * 读取输出文件内容；仅供渲染层预览，路径完全由主进程解析。
+   */
+  async read(fileId: string, sessionId: string, maxBytes = 20_000_000): Promise<FileReadResult> {
+    const row = this.get(fileId, sessionId);
+    if (!row) throw new Error('文件不存在');
+    if (Number(row.bytes) > maxBytes) throw new Error('文件超过预览大小上限');
+    const data = await readFile(row.stored_path);
+    return {
+      fileId: row.id,
+      name: row.name,
+      mime: row.mime,
+      bytes: Number(row.bytes),
+      base64: data.toString('base64')
+    };
   }
 }

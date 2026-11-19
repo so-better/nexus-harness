@@ -3,7 +3,9 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { BrowserWindow, ipcMain } from 'electron';
+import { stat } from 'node:fs/promises';
+import { dirname, isAbsolute, join } from 'node:path';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import { createNexusEvent } from '@nexus/core';
 import type { NexusEvent } from '@shared/events';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
@@ -22,6 +24,7 @@ import { SkillService } from '../services/skills/skill-service';
 import { getMcpService } from '../services/mcp/mcp-service-instance';
 import { approvalService } from '../services/agent/approval-service';
 import { askUserService } from '../services/agent/ask-user-service';
+import { workspaceAuthService } from '../services/agent/workspace-auth-service';
 import { providerStore } from '../services/provider/provider-store';
 import { getDatabase } from '../services/storage/database';
 import { EventStore } from '../services/session/event-store';
@@ -32,15 +35,54 @@ import { getPluginHost } from '../services/plugins/plugin-host-instance';
 import { notifyAgentEvent } from '../services/notifications/notification-service';
 import { SessionHistoryService } from '../services/session/session-history';
 import { loadImageSettings } from '../services/settings/image-settings';
+import { loadSearchSettings } from '../services/settings/search-settings';
 import {
   getRun,
+  getRunForSession,
   hasRunForSession,
   registerRun,
-  unregisterRun
+  unregisterRun,
+  type ActiveRun
 } from '../services/agent/run-registry';
 
 /**
- * 注册 agent:run 与 agent:cancel；事件只回传给发起窗口。
+ * 从工具参数提取用户实际请求的路径，避免无工作区时只能授权 Desktop。
+ * 文件名会转换为所在目录；相对路径以用户主目录为基准。
+ */
+const workspacePathFromCall = async (name: string, input: unknown): Promise<string | undefined> => {
+  const record = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+  const raw = name === 'run_command' ? record['cwd'] : (record['path'] ?? record['cwd']);
+  if (typeof raw !== 'string' || !raw.trim()) return undefined;
+
+  const home = app.getPath('home');
+  const expanded = raw === '~' ? home : raw.startsWith('~/') ? join(home, raw.slice(2)) : raw;
+  if (!isAbsolute(expanded)) return undefined;
+  const candidate = expanded;
+  let current = candidate;
+  for (;;) {
+    try {
+      const info = await stat(current);
+      return info.isDirectory() ? current : dirname(current);
+    } catch {
+      const parent = dirname(current);
+      if (parent === current) return current;
+      current = parent;
+    }
+  }
+};
+
+/**
+ * 统一取消活跃 Run，并同时释放审批、提问与目录授权等待。
+ */
+const cancelActiveRun = (active: ActiveRun): void => {
+  approvalService.cancelRun(active.runId);
+  askUserService.cancelRun(active.runId);
+  workspaceAuthService.cancelRun(active.runId);
+  active.controller.abort();
+};
+
+/**
+ * 注册 agent:run、agent:cancel 与 agent:cancelSession；事件只回传给发起窗口。
  */
 export const registerAgentIpc = (): void => {
   const db = getDatabase();
@@ -52,7 +94,8 @@ export const registerAgentIpc = (): void => {
     database: db,
     skills: new SkillService(),
     mcp: getMcpService(),
-    imageSettings: loadImageSettings
+    imageSettings: loadImageSettings,
+    searchSettings: loadSearchSettings
   });
 
   const broadcastSession = (session: SessionSummary): void => {
@@ -261,9 +304,12 @@ export const registerAgentIpc = (): void => {
         const onSenderDestroyed = (): void => {
           approvalService.cancelRun(runId);
           askUserService.cancelRun(runId);
+          workspaceAuthService.cancelRun(runId);
           controller.abort();
         };
         sender.once('destroyed', onSenderDestroyed);
+        const onAbort = (): void => workspaceAuthService.cancelRun(runId);
+        controller.signal.addEventListener('abort', onAbort, { once: true });
         registerRun({ runId, sessionId: parsed.data.sessionId, senderId, controller });
 
         try {
@@ -374,6 +420,37 @@ export const registerAgentIpc = (): void => {
               return approvalService.request(approvalId, runId, senderId);
             },
             askUser: (requestId, _questions) => askUserService.request(requestId, runId, senderId),
+            requestWorkspace: async (call) => {
+              if (sender.isDestroyed()) return undefined;
+              const requestId = randomUUID();
+              const suggestedPath = await workspacePathFromCall(call.name, call.input);
+              if (!suggestedPath) return undefined;
+              sender.send(IPC_CHANNELS.workspaceAuthorizationRequested, {
+                requestId,
+                sessionId: session.id,
+                suggestedPath,
+                toolName: call.name,
+                ...(call.id ? { toolCallId: call.id } : {})
+              });
+              try {
+                const path = await workspaceAuthService.request(
+                  requestId,
+                  runId,
+                  senderId,
+                  suggestedPath
+                );
+                if (!path) return undefined;
+                const roots = await sessions.addRoots(session.id, [path]);
+                if (!sender.isDestroyed()) {
+                  sender.send(IPC_CHANNELS.sessionRootsChanged, session.id);
+                }
+                return roots.map((root) => root.path);
+              } finally {
+                if (!sender.isDestroyed()) {
+                  sender.send(IPC_CHANNELS.workspaceAuthorizationSettled, { requestId });
+                }
+              }
+            },
             onEvent: (agentEvent) => {
               if (
                 agentEvent.type === 'run.completed' ||
@@ -406,8 +483,10 @@ export const registerAgentIpc = (): void => {
           .finally(async () => {
             await eventChain;
             sender.removeListener('destroyed', onSenderDestroyed);
+            controller.signal.removeEventListener('abort', onAbort);
             approvalService.cancelRun(runId);
             askUserService.cancelRun(runId);
+            workspaceAuthService.cancelRun(runId);
             unregisterRun(runId);
           });
 
@@ -435,10 +514,24 @@ export const registerAgentIpc = (): void => {
         return fail('AGENT_CANCEL_DENIED', '不能取消其他窗口发起的 Run');
       }
 
-      approvalService.cancelRun(rawRunId);
-      askUserService.cancelRun(rawRunId);
-      active.controller.abort();
+      cancelActiveRun(active);
       return ok({ runId: rawRunId, cancelled: true });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.agentCancelSession,
+    async (event, rawSessionId: unknown): Promise<Result<AgentCancelResult>> => {
+      if (typeof rawSessionId !== 'string' || !rawSessionId) {
+        return fail('AGENT_INVALID_INPUT', '会话 ID 不合法');
+      }
+      const active = getRunForSession(rawSessionId);
+      if (!active) return fail('AGENT_NOT_RUNNING', '会话没有运行中的 Run');
+      if (active.senderId !== event.sender.id) {
+        return fail('AGENT_CANCEL_DENIED', '不能取消其他窗口发起的 Run');
+      }
+      cancelActiveRun(active);
+      return ok({ runId: active.runId, cancelled: true });
     }
   );
 

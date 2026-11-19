@@ -35,7 +35,6 @@
     <NInput
       v-if="!question.options?.length || question.allowOther"
       class="nh-ask-question__input"
-      size="small"
       :value="text"
       :disabled="disabled"
       :placeholder="t('chat.askUserOther')"
@@ -107,9 +106,9 @@ const isSelected = (optionId: string): boolean => props.selectedIds.includes(opt
   align-items: flex-start;
   gap: 8px;
   padding: 8px 10px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 8px;
-  background: var(--nh-color-bg-base);
+  background: var(--nh-surface-base);
   color: var(--nh-color-text-primary);
   font: inherit;
   text-align: left;
@@ -124,7 +123,7 @@ const isSelected = (optionId: string): boolean => props.selectedIds.includes(opt
 }
 
 .nh-ask-option--selected {
-  border-color: color-mix(in srgb, var(--nh-color-accent) 45%, var(--nh-color-border));
+  border-color: color-mix(in srgb, var(--nh-color-accent) 45%, var(--nh-border-subtle));
   background: color-mix(in srgb, var(--nh-color-accent) 7%, transparent);
 }
 
@@ -133,7 +132,7 @@ const isSelected = (optionId: string): boolean => props.selectedIds.includes(opt
 }
 
 .nh-ask-option:disabled:hover {
-  background: var(--nh-color-bg-base);
+  background: var(--nh-surface-base);
 }
 
 .nh-ask-option--selected:disabled:hover {
@@ -146,7 +145,7 @@ const isSelected = (optionId: string): boolean => props.selectedIds.includes(opt
   height: 16px;
   flex: none;
   place-items: center;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 50%;
   color: var(--nh-color-bg-base);
 }
@@ -174,6 +173,7 @@ const isSelected = (optionId: string): boolean => props.selectedIds.includes(opt
 }
 
 .nh-ask-question__input {
-  max-width: 420px;
+  width: 100%;
+  max-width: none;
 }
 </style>

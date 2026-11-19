@@ -78,7 +78,7 @@ const emit = defineEmits<{
 <style scoped lang="less">
 .nh-plugin-card {
   padding: 12px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 9px;
   background: var(--nh-color-bg-elevated);
 }

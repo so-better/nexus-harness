@@ -1,26 +1,39 @@
 <template>
-  <NModal :show="show" preset="card" class="nh-extensions" style="width: min(760px, calc(100vw - 48px))"
-    :title="t('plugins.title')" :bordered="false" @update:show="emit('update:show', $event)">
+  <NModal
+    :show="show"
+    preset="card"
+    class="nh-extensions"
+    style="width: min(760px, calc(100vw - 48px))"
+    :title="t('plugins.title')"
+    :bordered="false"
+    @update:show="emit('update:show', $event)"
+  >
     <NTabs default-value="plugins" type="line" animated>
       <NTabPane name="plugins" :tab="t('plugins.tab')">
-    <div class="nh-extensions__header">
-      <p>{{ t('plugins.hint') }}</p>
-      <div class="nh-extensions__header-actions">
-        <NButton type="primary" :loading="importing" @click="importPlugin">
-          {{ t('plugins.import') }}
-        </NButton>
-        <NButton secondary :loading="runtime.loading" @click="runtime.reload()">
-          {{ t('plugins.reload') }}
-        </NButton>
-      </div>
-    </div>
-    <NEmpty v-if="!runtime.plugins.length" :description="t('plugins.empty')" />
-    <div v-else class="nh-extensions__list">
-      <PluginCard v-for="plugin in runtime.plugins" :key="plugin.id" :plugin="plugin" :busy="busyId === plugin.id"
-        @toggle="toggle" @remove="remove" />
-    </div>
+        <div class="nh-extensions__header">
+          <p>{{ t('plugins.hint') }}</p>
+          <div class="nh-extensions__header-actions">
+            <NButton type="primary" secondary :loading="importing" @click="importPlugin">
+              {{ t('plugins.import') }}
+            </NButton>
+            <NButton secondary :loading="runtime.loading" @click="runtime.reload()">
+              {{ t('plugins.reload') }}
+            </NButton>
+          </div>
+        </div>
+        <NEmpty v-if="!runtime.plugins.length" :description="t('plugins.empty')" />
+        <div v-else class="nh-extensions__list">
+          <PluginCard
+            v-for="plugin in runtime.plugins"
+            :key="plugin.id"
+            :plugin="plugin"
+            :busy="busyId === plugin.id"
+            @toggle="toggle"
+            @remove="remove"
+          />
+        </div>
 
-    <PluginExtras :commands="commandList" :views="viewList" />
+        <PluginExtras :commands="commandList" :views="viewList" />
       </NTabPane>
       <NTabPane name="skills" :tab="t('skills.tab')">
         <ExtensionsSkillsPanel />

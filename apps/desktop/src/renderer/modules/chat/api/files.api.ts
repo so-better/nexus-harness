@@ -3,7 +3,7 @@
  */
 
 import { nexus } from '@/app/nexus-bridge';
-import type { FileSaveAsResult } from '@shared/ipc/contracts';
+import type { FileReadResult, FileSaveAsResult } from '@shared/ipc/contracts';
 import { unwrap } from '@/app/ipc';
 
 /**
@@ -13,3 +13,9 @@ export const saveOutputFileAs = async (
   sessionId: string,
   fileId: string
 ): Promise<FileSaveAsResult> => unwrap(await nexus.files.saveAs({ sessionId, fileId }));
+
+/**
+ * 读取输出文件用于预览。
+ */
+export const readOutputFile = async (sessionId: string, fileId: string): Promise<FileReadResult> =>
+  unwrap(await nexus.files.read({ sessionId, fileId }));

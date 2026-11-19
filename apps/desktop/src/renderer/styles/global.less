@@ -12,6 +12,10 @@
   --nh-space-sm: 8px;
   --nh-space-md: 16px;
   --nh-space-lg: 24px;
+  --nh-surface-base: var(--nh-color-bg-base);
+  --nh-surface-elevated: var(--nh-color-bg-elevated);
+  --nh-border-subtle: var(--nh-color-border);
+  --nh-input-bg: var(--nh-color-bg-base);
   --nh-mask: #000;
   --nh-shadow-card: 0 1px 2px rgb(28 27 25 / 4%), 0 8px 24px rgb(28 27 25 / 5%);
   --nh-shadow-float: 0 2px 8px rgb(28 27 25 / 6%), 0 16px 48px rgb(28 27 25 / 8%);
@@ -93,6 +97,23 @@ pre {
   background: color-mix(in srgb, var(--nh-color-accent) 24%, transparent);
 }
 
+/**
+ * 全局卡片式模态框：用独立表面色和描边与主界面拉开层级。
+ */
+.n-modal.n-card {
+  background: var(--nh-color-bg-modal);
+  box-shadow:
+    var(--nh-shadow-float),
+    inset 0 0 0 1px color-mix(in srgb, var(--nh-border-subtle) 68%, transparent);
+}
+
+.n-popover,
+.n-dropdown-menu {
+  box-shadow: var(--nh-shadow-popover);
+  outline: 1px solid color-mix(in srgb, var(--nh-border-subtle) 55%, transparent);
+  outline-offset: -1px;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -101,7 +122,7 @@ pre {
 ::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 8px;
-  background: var(--nh-color-border);
+  background: var(--nh-border-subtle);
   background-clip: padding-box;
 }
 

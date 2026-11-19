@@ -119,3 +119,9 @@ export const exportSession = async (
  */
 export const consumePendingSession = async (): Promise<string | null> =>
   unwrap(await nexus.app.consumePendingSession());
+
+/**
+ * 订阅会话 root 变化；主进程在工具授权目录后推送。
+ */
+export const onSessionRootsChanged = (handler: (sessionId: string) => void): (() => void) =>
+  nexus.session.onRootsChanged(handler);

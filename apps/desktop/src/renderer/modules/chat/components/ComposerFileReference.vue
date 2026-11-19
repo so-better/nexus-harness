@@ -56,9 +56,9 @@ const rootName = (path: string): string => path.split(/[\\/]/).filter(Boolean).a
   gap: 1px;
   overflow: auto;
   padding: 6px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 10px;
-  background: var(--nh-color-bg-elevated);
+  background: var(--nh-surface-elevated);
   box-shadow: var(--nh-shadow-card);
 }
 

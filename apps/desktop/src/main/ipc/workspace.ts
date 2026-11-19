@@ -6,6 +6,7 @@ import { dialog, ipcMain } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import type { WorkspaceRootSelection, WorkspaceFileReference } from '@shared/ipc/contracts';
 import {
+  workspaceAuthorizationResolveInputSchema,
   workspaceChooseRootInputSchema,
   workspaceFileSearchInputSchema
 } from '@shared/ipc/contracts';
@@ -14,6 +15,7 @@ import { SessionService } from '../services/session/session-service';
 import { getDatabase } from '../services/storage/database';
 import { searchWorkspaceFiles } from '../services/workspace/file-search-service';
 import { fail, ok, type Result } from '@shared/ipc/result';
+import { workspaceAuthService } from '../services/agent/workspace-auth-service';
 
 /**
  * 注册 workspace:chooseRoot；取消时返回空集合而非错误。
@@ -40,6 +42,22 @@ export const registerWorkspaceIpc = (): void => {
           error instanceof Error ? error.message : '搜索文件失败'
         );
       }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.workspaceAuthorizationResolve,
+    async (event, rawInput: unknown): Promise<Result<{ resolved: boolean }>> => {
+      const parsed = workspaceAuthorizationResolveInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('WORKSPACE_INVALID_INPUT', '目录授权参数不合法');
+      const resolved = workspaceAuthService.resolve(
+        parsed.data.requestId,
+        parsed.data.decision,
+        event.sender.id
+      );
+      return resolved
+        ? ok({ resolved: true })
+        : fail('WORKSPACE_AUTHORIZATION_NOT_FOUND', '目录授权请求已失效');
     }
   );
 

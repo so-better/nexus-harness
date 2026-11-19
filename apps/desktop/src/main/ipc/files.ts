@@ -3,7 +3,12 @@
  */
 
 import { dialog, ipcMain } from 'electron';
-import { fileSaveAsInputSchema, type FileSaveAsResult } from '@shared/ipc/contracts';
+import {
+  fileReadInputSchema,
+  fileSaveAsInputSchema,
+  type FileReadResult,
+  type FileSaveAsResult
+} from '@shared/ipc/contracts';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import { fail, ok, type Result } from '@shared/ipc/result';
 import { FileService } from '../services/files/file-service';
@@ -43,6 +48,24 @@ export const registerFilesIpc = (): void => {
         return ok({ fileId: meta.id, saved: true, path: result.filePath });
       } catch (error) {
         return fail('FILE_SAVE_FAILED', error instanceof Error ? error.message : '保存文件失败');
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.filesRead,
+    async (_event, rawInput: unknown): Promise<Result<FileReadResult>> => {
+      const parsed = fileReadInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('FILES_INVALID_INPUT', '文件预览参数不合法');
+      try {
+        return ok(
+          await new FileService(getDatabase()).read(parsed.data.fileId, parsed.data.sessionId)
+        );
+      } catch (error) {
+        return fail(
+          'FILES_READ_FAILED',
+          error instanceof Error ? error.message : '读取输出文件失败'
+        );
       }
     }
   );

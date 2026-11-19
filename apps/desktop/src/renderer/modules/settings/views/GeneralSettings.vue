@@ -52,6 +52,46 @@
     </div>
 
     <div class="nh-general__group">
+      <p class="nh-general__group-title">{{ t('settings.mediaSearch') }}</p>
+
+      <div class="nh-general__panel">
+        <div class="nh-general__row">
+          <span class="nh-general__icon">
+            <AppIcon name="search" :size="16" />
+          </span>
+          <div class="nh-general__copy">
+            <p class="nh-general__title">{{ t('settings.pexelsApiKey') }}</p>
+            <p class="nh-general__hint">{{ t('settings.mediaSearchHint') }}</p>
+            <NPopover trigger="click" placement="bottom-start">
+              <template #trigger>
+                <NButton text type="primary" size="tiny">
+                  {{ t('settings.pexelsHowTo') }}
+                </NButton>
+              </template>
+              <div class="nh-general__help">
+                <p>{{ t('settings.pexelsSteps') }}</p>
+                <NButton size="small" type="primary" @click="openPexels">
+                  {{ t('settings.pexelsOpen') }}
+                </NButton>
+              </div>
+            </NPopover>
+          </div>
+          <div class="nh-general__search">
+            <NInput
+              v-model:value="pexelsApiKey"
+              type="password"
+              show-password-on="click"
+              :placeholder="t('settings.pleaseInput')"
+            />
+            <NButton type="primary" :loading="savingSearch" @click="saveMediaSearch">
+              {{ t('settings.save') }}
+            </NButton>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="nh-general__group">
       <p class="nh-general__group-title">{{ t('settings.about') }}</p>
 
       <div class="nh-general__panel">
@@ -75,13 +115,24 @@
  */
 
 import { computed, onMounted, ref } from 'vue';
-import { NSelect, NSwitch, useMessage, type SelectOption } from 'naive-ui';
+import {
+  NButton,
+  NInput,
+  NPopover,
+  NSelect,
+  NSwitch,
+  useMessage,
+  type SelectOption
+} from 'naive-ui';
 import type { AppLanguage, NotificationBadgeStyle } from '@shared/ipc/contracts';
 import { locale, setLocale, t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import {
   getAutoLaunch,
   getNotificationBadge,
+  getSearchSettings,
+  openExternalLink,
+  setSearchSettings,
   setAutoLaunch,
   setLanguage,
   setNotificationBadge
@@ -92,6 +143,8 @@ defineProps<{ version: string }>();
 const message = useMessage();
 const autoLaunch = ref(true);
 const badgeStyle = ref<NotificationBadgeStyle>('dot');
+const pexelsApiKey = ref('');
+const savingSearch = ref(false);
 const loading = ref(false);
 const languageOptions = computed<SelectOption[]>(() => [
   { label: t('settings.languageZh'), value: 'zh-CN' },
@@ -107,13 +160,20 @@ const badgeOptions = computed<SelectOption[]>(() => [
  * 读取当前开机自启状态。
  */
 const load = async (): Promise<void> => {
-  const [autoLaunchResult, badgeResult] = await Promise.allSettled([
+  const [autoLaunchResult, badgeResult, searchResult] = await Promise.allSettled([
     getAutoLaunch(),
-    getNotificationBadge()
+    getNotificationBadge(),
+    getSearchSettings()
   ]);
   if (autoLaunchResult.status === 'fulfilled') autoLaunch.value = autoLaunchResult.value;
   if (badgeResult.status === 'fulfilled') badgeStyle.value = badgeResult.value;
-  if (autoLaunchResult.status === 'rejected' || badgeResult.status === 'rejected') {
+  if (searchResult.status === 'fulfilled')
+    pexelsApiKey.value = searchResult.value?.pexelsApiKey ?? '';
+  if (
+    autoLaunchResult.status === 'rejected' ||
+    badgeResult.status === 'rejected' ||
+    searchResult.status === 'rejected'
+  ) {
     message.error(t('settings.loadFailed'));
   }
 };
@@ -160,6 +220,34 @@ const changeLanguage = async (value: AppLanguage): Promise<void> => {
   }
 };
 
+/**
+ * 打开 Pexels API 申请页面。
+ */
+const openPexels = async (): Promise<void> => {
+  try {
+    await openExternalLink('https://www.pexels.com/api/');
+  } catch (reason) {
+    message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
+  }
+};
+
+/**
+ * 保存媒体搜索 API Key。
+ */
+const saveMediaSearch = async (): Promise<void> => {
+  savingSearch.value = true;
+  try {
+    await setSearchSettings({
+      ...(pexelsApiKey.value.trim() ? { pexelsApiKey: pexelsApiKey.value.trim() } : {})
+    });
+    message.success(t('settings.saved'));
+  } catch (reason) {
+    message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
+  } finally {
+    savingSearch.value = false;
+  }
+};
+
 onMounted(load);
 </script>
 
@@ -186,7 +274,7 @@ onMounted(load);
 
 .nh-general__panel {
   overflow: hidden;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 12px;
   background: color-mix(in srgb, var(--nh-color-bg-elevated) 55%, transparent);
 }
@@ -199,7 +287,7 @@ onMounted(load);
 }
 
 .nh-general__row--divided {
-  border-top: 1px solid var(--nh-color-border);
+  border-top: 1px solid var(--nh-border-subtle);
 }
 
 .nh-general__icon {
@@ -216,6 +304,24 @@ onMounted(load);
 .nh-general__copy {
   min-width: 0;
   flex: 1;
+}
+
+.nh-general__search {
+  display: flex;
+  width: min(360px, 45vw);
+  flex: none;
+  gap: 8px;
+}
+
+.nh-general__help {
+  max-width: 260px;
+}
+
+.nh-general__help p {
+  margin: 0 0 10px;
+  color: var(--nh-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .nh-general__title,

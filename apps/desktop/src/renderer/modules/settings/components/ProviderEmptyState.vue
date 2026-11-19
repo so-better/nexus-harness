@@ -35,7 +35,7 @@ const emit = defineEmits<{ create: [] }>();
   align-items: center;
   gap: 16px;
   padding: 20px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 12px;
   background: color-mix(in srgb, var(--nh-color-bg-elevated) 70%, transparent);
 }

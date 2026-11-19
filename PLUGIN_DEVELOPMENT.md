@@ -160,7 +160,6 @@ export function deactivate() {
 | `message.user.actions`                 | 用户消息操作区                 | `sessionId`、`messageId`、`runId`、`role`                     |
 | `toolcall.body`                        | 工具调用卡片内容区             | `sessionId`、`messageId`、`runId`、`toolCallId`               |
 | `toolcall.footer`                      | 工具调用卡片底部               | `sessionId`、`messageId`、`runId`、`toolCallId`               |
-| `approval.details`                     | 审批详情区域                   | `sessionId`、`messageId`、`runId`、`approvalId`、`toolCallId` |
 | `terminal.toolbar`                     | 终端搜索与关闭图标之间         | `sessionId`                                                   |
 | `filecard.actions` / `filecard.footer` | 输出文件卡片操作区/底部        | `sessionId`、`runId`、`fileId`                                |
 

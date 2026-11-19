@@ -202,7 +202,7 @@ onMounted(load);
 
 .nh-image-settings__empty {
   padding: 32px 16px;
-  border: 1px dashed var(--nh-color-border);
+  border: 1px dashed var(--nh-border-subtle);
   border-radius: 10px;
   color: var(--nh-color-text-secondary);
   font-size: 12px;
@@ -220,7 +220,7 @@ onMounted(load);
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 10px;
   background: var(--nh-color-bg-base);
   font: inherit;
@@ -232,7 +232,7 @@ onMounted(load);
 }
 
 .nh-image-card:hover {
-  border-color: color-mix(in srgb, var(--nh-color-accent) 50%, var(--nh-color-border));
+  border-color: color-mix(in srgb, var(--nh-color-accent) 50%, var(--nh-border-subtle));
   background: color-mix(in srgb, var(--nh-color-accent) 3%, var(--nh-color-bg-base));
 }
 

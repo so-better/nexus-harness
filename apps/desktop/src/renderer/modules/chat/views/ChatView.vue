@@ -71,6 +71,7 @@
         :ask-users="projection.askUsers"
         :approvals="projection.approvals"
         :actions-disabled="projection.running"
+        :workspace-auth="workspaceAuth"
         @answer-user="(requestId, answers) => emit('answer-user', requestId, answers)"
         @approve="emit('approve', $event)"
         @reject="emit('reject', $event)"
@@ -79,9 +80,21 @@
         "
         @regenerate-message="(messageId) => emit('regenerate-message', messageId)"
         @request-root="emit('request-root')"
+        @allow-workspace="emit('allow-workspace')"
+        @reject-workspace="emit('reject-workspace')"
       />
 
       <div class="nh-chat__bottom">
+        <NButton
+          v-if="workspaceAuth"
+          size="small"
+          secondary
+          class="nh-chat__approval-jump"
+          @click="focusWorkspaceAuth"
+        >
+          <template #icon><AppIcon name="folder" :size="14" /></template>
+          {{ t('workspaceAuth.jump') }}
+        </NButton>
         <NButton
           v-if="pendingApprovals.length"
           size="small"
@@ -130,7 +143,8 @@ import type {
   ProviderModel,
   ProviderPublic,
   SessionRoot,
-  SessionSummary
+  SessionSummary,
+  WorkspaceAuthorizationRequest
 } from '@shared/ipc/contracts';
 import type { AskUserAnswer } from '@shared/ask-user';
 import type { MessageFileReference } from '@shared/events';
@@ -157,6 +171,7 @@ const props = defineProps<{
   focusToken?: number | undefined;
   focusSessionId?: string | undefined;
   exporting?: boolean | undefined;
+  workspaceAuth?: WorkspaceAuthorizationRequest | null | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -174,12 +189,35 @@ const emit = defineEmits<{
   'edit-message': [messageId: string, content: string, references?: MessageFileReference[]];
   'regenerate-message': [messageId: string];
   'request-root': [];
+  'allow-workspace': [];
+  'reject-workspace': [];
   export: [format: SessionExportFormat];
 }>();
 
 const isEmpty = computed(() => !props.session || props.projection.messages.length === 0);
 const pendingApprovals = computed(() =>
   props.projection.approvals.filter((approval) => approval.status === 'pending')
+);
+
+/**
+ * 跳转到当前目录授权卡，避免长会话里用户看不到阻塞操作。
+ */
+const focusWorkspaceAuth = (): void => {
+  const request = props.workspaceAuth;
+  if (!request) return;
+  const node = document.querySelector<HTMLElement>(
+    `[data-workspace-auth-id="${request.requestId}"]`
+  );
+  node?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+};
+
+watch(
+  () => props.workspaceAuth?.requestId,
+  (next, previous) => {
+    if (!next || next === previous) return;
+    nextTick(() => focusWorkspaceAuth());
+  },
+  { immediate: true }
 );
 
 const exportOptions: DropdownOption[] = [
@@ -229,7 +267,7 @@ watch(
   min-height: 0;
   overflow: hidden;
   flex-direction: column;
-  background: var(--nh-color-bg-base);
+  background: var(--nh-surface-base);
 }
 
 .nh-chat__header {
@@ -240,7 +278,7 @@ watch(
   justify-content: space-between;
   gap: 16px;
   padding: 0 32px;
-  border-bottom: 1px solid var(--nh-color-border);
+  border-bottom: 1px solid var(--nh-border-subtle);
 }
 
 .nh-chat__title-group {

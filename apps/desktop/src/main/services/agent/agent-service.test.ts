@@ -84,7 +84,7 @@ describe('AgentService', () => {
     });
   });
 
-  it('runs without a workspace and does not expose local tools', async () => {
+  it('exposes local tools without a workspace for on-demand authorization', async () => {
     const requests: ProviderRequest[] = [];
     const provider: ChatProvider = {
       capabilities: { streaming: true, toolCalling: false, vision: false, reasoning: false },
@@ -119,6 +119,13 @@ describe('AgentService', () => {
 
     expect(result.finishReason).toBe('stop');
     expect(requests[0]?.tools?.map((tool) => tool.name)).toEqual([
+      'read_file',
+      'list_dir',
+      'write_file',
+      'apply_patch',
+      'run_command',
+      'glob',
+      'grep',
       'ask_user',
       'save_file',
       'save_word',
@@ -126,6 +133,50 @@ describe('AgentService', () => {
       'save_ppt',
       'save_pdf'
     ]);
+  });
+
+  it('does not request directory authorization in Plan mode', async () => {
+    const service = new AgentService({
+      createProvider: () =>
+        new MockProvider([
+          {
+            toolCalls: [{ id: 'read-1', name: 'read_file', arguments: { path: '/tmp/plan.txt' } }],
+            finishReason: 'tool_calls'
+          },
+          { text: '需要先选择工作区', finishReason: 'stop' }
+        ])
+    });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+    const events: NexusEvent[] = [];
+    const requestWorkspace = vi.fn();
+
+    await service.run(
+      {
+        sessionId: 'session-1',
+        prompt: '只做规划',
+        rootPaths: [],
+        providerId: providerConfig.id,
+        modelId: 'mock-model',
+        mode: 'plan'
+      },
+      providerConfig,
+      { requestWorkspace, onEvent: (event) => events.push(event) }
+    );
+
+    expect(requestWorkspace).not.toHaveBeenCalled();
+    const failed = events.find(
+      (event): event is NexusEvent<'tool.failed'> => event.type === 'tool.failed'
+    );
+    expect(failed?.payload.error.code).toBe('TOOL_WORKSPACE_REQUIRED');
   });
 
   it('makes Plan mode read-only and blocks write tools', async () => {

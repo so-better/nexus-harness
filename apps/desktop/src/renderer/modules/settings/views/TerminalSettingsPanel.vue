@@ -232,7 +232,7 @@ onMounted(load);
 
 .nh-terminal-settings__section {
   padding: 16px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 10px;
   background: var(--nh-color-bg-elevated);
 }
@@ -299,7 +299,7 @@ onMounted(load);
   gap: 20px;
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid var(--nh-color-border);
+  border-top: 1px solid var(--nh-border-subtle);
 }
 
 .nh-terminal-settings__switch span {

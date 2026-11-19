@@ -1,6 +1,7 @@
 <template>
   <div class="nh-layout" :class="{ 'nh-layout--skin': pluginRuntime.activeSkin }">
     <PluginSkinLayer />
+    <AppTitleBar :title="sessions.activeSession?.title" :platform="platform" />
     <div class="nh-layout__body">
       <SessionSidebar
         :sessions="sessions.sessions"
@@ -29,9 +30,12 @@
         :focus-token="focusMessage?.token"
         :focus-session-id="focusMessage?.sessionId"
         :exporting="exporting"
+        :workspace-auth="workspaceAuthRequest"
         @choose-root="chooseRoot"
         @remove-root="removeRoot"
         @request-root="authorizeRootAndRetry"
+        @allow-workspace="allowWorkspace"
+        @reject-workspace="rejectWorkspace"
         @update-provider="updateProvider"
         @update-model="updateModel"
         @update-mode="changeMode"
@@ -79,11 +83,21 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useMessage } from 'naive-ui';
 import { storeToRefs } from 'pinia';
-import type { AgentMode, ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
+import type {
+  AgentMode,
+  ProviderPublic,
+  SessionSummary,
+  WorkspaceAuthorizationRequest
+} from '@shared/ipc/contracts';
 import type { AskUserAnswer } from '@shared/ask-user';
 import { setLocale, t } from '@/app/i18n';
 import type { MessageFileReference } from '@shared/events';
 import ChatView from '@/modules/chat/views/ChatView.vue';
+import {
+  onWorkspaceAuthorization,
+  onWorkspaceAuthorizationSettled,
+  resolveWorkspaceAuthorization
+} from '@/modules/chat/api/workspace.api';
 import { projectEvents } from '@/modules/chat/projection';
 import { useChatStore } from '@/modules/chat/stores/chat.store';
 import SessionSidebar from '@/modules/session/components/SessionSidebar.vue';
@@ -91,6 +105,7 @@ import {
   consumePendingSession,
   exportSession as exportSessionApi,
   onSessionActivate,
+  onSessionRootsChanged,
   subscribeSessionChanges
 } from '@/modules/session/api/session.api';
 import { useSessionStore } from '@/modules/session/stores/session.store';
@@ -101,6 +116,7 @@ import ExtensionsModal from '@/plugin-runtime/components/ExtensionsModal.vue';
 import PluginSkinLayer from '@/plugin-runtime/components/PluginSkinLayer.vue';
 import { usePluginRuntimeStore } from '@/plugin-runtime/runtime.store';
 import AppStatusbar from './AppStatusbar.vue';
+import AppTitleBar from './AppTitleBar.vue';
 import { useAppMeta } from './use-app-meta';
 import { useSessionStatusSync } from './use-session-status';
 
@@ -116,11 +132,19 @@ const message = useMessage();
 const { sessions: sessionList, activeId } = storeToRefs(sessions);
 const { providers, providerId, modelId, models, roots, runningBySession } = storeToRefs(chat);
 
-const { version, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
+const { version, platform, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
 const focusMessage = ref<{ id: string; token: number; sessionId: string }>();
+const workspaceAuthRequests = ref<Record<string, WorkspaceAuthorizationRequest>>({});
+const workspaceAuthRequest = computed(() => {
+  const sessionId = activeId.value;
+  return sessionId ? (workspaceAuthRequests.value[sessionId] ?? null) : null;
+});
 const exporting = ref(false);
 let unsubscribeSessionChanges: (() => void) | undefined;
 let unsubscribeSessionActivate: (() => void) | undefined;
+let unsubscribeSessionRoots: (() => void) | undefined;
+let unsubscribeWorkspaceAuth: (() => void) | undefined;
+let unsubscribeWorkspaceSettled: (() => void) | undefined;
 let focusSequence = 0;
 
 const activeMode = computed(
@@ -400,11 +424,81 @@ const stop = async (): Promise<void> => {
   if (activeId.value) await chat.stop(activeId.value);
 };
 
+/**
+ * 移除某个会话的授权请求；其他会话的请求保持不变。
+ */
+const clearWorkspaceRequest = (sessionId: string): void => {
+  const next = { ...workspaceAuthRequests.value };
+  delete next[sessionId];
+  workspaceAuthRequests.value = next;
+};
+
+/**
+ * 允许当前授权请求：只使用请求中展示的路径。
+ */
+const allowWorkspace = async (): Promise<void> => {
+  const request = workspaceAuthRequest.value;
+  if (!request) return;
+  try {
+    if (
+      await resolveWorkspaceAuthorization({
+        requestId: request.requestId,
+        decision: 'approved'
+      })
+    ) {
+      clearWorkspaceRequest(request.sessionId);
+    }
+  } catch (reason) {
+    message.error(reason instanceof Error ? reason.message : t('app.rootAddFailed'));
+  }
+};
+
+/**
+ * 拒绝当前授权请求。
+ */
+const rejectWorkspace = async (): Promise<void> => {
+  const request = workspaceAuthRequest.value;
+  if (!request) return;
+  try {
+    if (
+      await resolveWorkspaceAuthorization({
+        requestId: request.requestId,
+        decision: 'rejected'
+      })
+    ) {
+      clearWorkspaceRequest(request.sessionId);
+    }
+  } catch (reason) {
+    message.error(reason instanceof Error ? reason.message : t('app.rootAddFailed'));
+  }
+};
+
 onMounted(async () => {
   terminal.init();
   await pluginRuntime.init();
   unsubscribeSessionChanges = subscribeSessionChanges((session) => sessions.applyUpdate(session));
   unsubscribeSessionActivate = onSessionActivate((sessionId) => sessions.select(sessionId));
+  unsubscribeSessionRoots = onSessionRootsChanged((sessionId) => {
+    if (sessionId === activeId.value) chat.loadRoots(sessionId).catch(() => undefined);
+  });
+  unsubscribeWorkspaceAuth = onWorkspaceAuthorization((request) => {
+    workspaceAuthRequests.value = {
+      ...workspaceAuthRequests.value,
+      [request.sessionId]: request
+    };
+    if (
+      request.sessionId !== activeId.value &&
+      sessionList.value.some((session) => session.id === request.sessionId)
+    ) {
+      sessions.select(request.sessionId);
+    }
+  });
+  unsubscribeWorkspaceSettled = onWorkspaceAuthorizationSettled((settled) => {
+    const entry = Object.entries(workspaceAuthRequests.value).find(
+      ([, request]) => request.requestId === settled.requestId
+    );
+    if (entry) clearWorkspaceRequest(entry[0]);
+  });
   try {
     setLocale(await getLanguage());
   } catch {
@@ -423,6 +517,12 @@ onBeforeUnmount(() => {
   unsubscribeSessionChanges = undefined;
   unsubscribeSessionActivate?.();
   unsubscribeSessionActivate = undefined;
+  unsubscribeSessionRoots?.();
+  unsubscribeSessionRoots = undefined;
+  unsubscribeWorkspaceAuth?.();
+  unsubscribeWorkspaceAuth = undefined;
+  unsubscribeWorkspaceSettled?.();
+  unsubscribeWorkspaceSettled = undefined;
   chat.dispose();
   pluginRuntime.dispose().catch(() => undefined);
 });
@@ -430,13 +530,12 @@ onBeforeUnmount(() => {
 
 <style scoped lang="less">
 .nh-layout.nh-layout--skin {
-  background: transparent;
-}
+  --nh-surface-base: color-mix(in srgb, var(--nh-color-bg-base) 78%, transparent);
+  --nh-surface-elevated: color-mix(in srgb, var(--nh-color-bg-elevated) 74%, transparent);
+  --nh-border-subtle: color-mix(in srgb, var(--nh-color-border) 70%, transparent);
+  --nh-input-bg: color-mix(in srgb, var(--nh-color-bg-base) 68%, transparent);
 
-.nh-layout--skin :deep(.nh-sidebar),
-.nh-layout--skin :deep(.nh-chat),
-.nh-layout--skin :deep(.nh-statusbar) {
-  background-color: color-mix(in srgb, var(--nh-color-bg-base) 72%, transparent);
+  background: transparent;
 }
 
 .nh-layout__body,
@@ -445,11 +544,16 @@ onBeforeUnmount(() => {
   z-index: 1;
 }
 
+.nh-layout :deep(.nh-titlebar) {
+  position: relative;
+  z-index: 2;
+}
+
 .nh-layout {
   display: grid;
   height: 100%;
   overflow: hidden;
-  grid-template-rows: minmax(0, 1fr) 44px;
+  grid-template-rows: 44px minmax(0, 1fr) 44px;
   background: var(--nh-color-bg-base);
 }
 

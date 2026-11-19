@@ -63,6 +63,7 @@ const mergeAssistantRuns = (messages: ChatMessageView[], askUsers: ChatAskUser[]
 
     const content = [base.content, message.content].filter(Boolean).join('\n\n');
     base.content = content;
+    if (message.reasoning) base.reasoning = `${base.reasoning ?? ''}${message.reasoning}`;
     base.streaming = Boolean(base.streaming || message.streaming);
     const knownTools = new Set(base.toolCalls.map((tool) => tool.id));
     for (const tool of message.toolCalls) {
@@ -71,6 +72,13 @@ const mergeAssistantRuns = (messages: ChatMessageView[], askUsers: ChatAskUser[]
     const knownFiles = new Set((base.files ?? []).map((file) => file.id));
     for (const file of message.files ?? []) {
       if (!knownFiles.has(file.id)) base.files = [...(base.files ?? []), file];
+    }
+    if (message.usage) {
+      const merged = base.usage ?? emptyUsage();
+      merged.inputTokens += message.usage.inputTokens;
+      merged.outputTokens += message.usage.outputTokens;
+      merged.cost += message.usage.cost;
+      base.usage = merged;
     }
     for (const ask of askUsers) {
       if (ask.messageId === message.id) ask.messageId = base.id;
@@ -92,8 +100,47 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
   let running = false;
   let status: ChatProjection['status'] = 'idle';
   let error: string | undefined;
+  let pendingFailure: { event: NexusEvent; error: { code: string; message: string } } | undefined;
+  const pendingUsage = new Map<string, ChatUsage>();
+
+  const attachUsage = (messageId: string): void => {
+    const usage = pendingUsage.get(messageId);
+    if (!usage) return;
+    const message = messages.find((item) => item.id === messageId);
+    if (!message) return;
+    const existing = message.usage ?? emptyUsage();
+    existing.inputTokens += usage.inputTokens;
+    existing.outputTokens += usage.outputTokens;
+    existing.cost += usage.cost;
+    message.usage = existing;
+    pendingUsage.delete(messageId);
+  };
 
   for (const event of events) {
+    if (event.type === 'message.reasoning.delta') {
+      const payload = event.payload as EventPayloadMap['message.reasoning.delta'];
+      let message = messages.find((item) => item.id === payload.messageId);
+      if (!message) {
+        message = {
+          id: payload.messageId,
+          role: 'assistant',
+          content: '',
+          toolCalls: [],
+          createdAt: event.ts,
+          streaming: true,
+          files: [],
+          ...(event.runId ? { runId: event.runId } : {})
+        };
+        messages.push(message);
+      }
+      message.reasoning = (message.reasoning ?? '') + payload.text;
+      message.streaming = true;
+      attachUsage(payload.messageId);
+      if (event.runId) message.runId = event.runId;
+      lastAssistant = message;
+      continue;
+    }
+
     if (event.type === 'message.delta') {
       const payload = event.payload as EventPayloadMap['message.delta'];
       let message = messages.find((item) => item.id === payload.messageId);
@@ -112,6 +159,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       }
       message.content += payload.text;
       if (event.runId) message.runId = event.runId;
+      attachUsage(payload.messageId);
       message.streaming = true;
       lastAssistant = message;
       continue;
@@ -123,8 +171,11 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       if (existing) {
         existing.role = payload.role;
         existing.content = payload.content;
+        if (payload.reasoning !== undefined) existing.reasoning = payload.reasoning;
         existing.streaming = false;
+        if (payload.error) pendingFailure = undefined;
         if (event.runId) existing.runId = event.runId;
+        attachUsage(payload.messageId);
         if (payload.references?.length) existing.references = payload.references;
         lastAssistant = payload.role === 'assistant' ? existing : undefined;
       } else {
@@ -132,6 +183,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
           id: payload.messageId,
           role: payload.role,
           content: payload.content,
+          ...(payload.reasoning !== undefined ? { reasoning: payload.reasoning } : {}),
           toolCalls: [],
           createdAt: event.ts,
           streaming: false,
@@ -139,7 +191,9 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
           ...(payload.references?.length ? { references: payload.references } : {}),
           ...(event.runId ? { runId: event.runId } : {})
         };
+        if (payload.error) pendingFailure = undefined;
         messages.push(message);
+        attachUsage(payload.messageId);
         lastAssistant = payload.role === 'assistant' ? message : undefined;
       }
       continue;
@@ -261,23 +315,41 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       usage.inputTokens += payload.inputTokens;
       usage.outputTokens += payload.outputTokens;
       usage.cost += payload.cost ?? 0;
-      const target = [...messages]
-        .reverse()
-        .find(
-          (message) =>
-            message.role === 'assistant' && (!event.runId || message.runId === event.runId)
-        );
-      if (target) {
-        const messageUsage = target.usage ?? emptyUsage();
-        messageUsage.inputTokens += payload.inputTokens;
-        messageUsage.outputTokens += payload.outputTokens;
-        messageUsage.cost += payload.cost ?? 0;
-        target.usage = messageUsage;
+      if (payload.messageId) {
+        const target = messages.find((message) => message.id === payload.messageId);
+        if (target) {
+          const messageUsage = target.usage ?? emptyUsage();
+          messageUsage.inputTokens += payload.inputTokens;
+          messageUsage.outputTokens += payload.outputTokens;
+          messageUsage.cost += payload.cost ?? 0;
+          target.usage = messageUsage;
+        } else {
+          const queued = pendingUsage.get(payload.messageId) ?? emptyUsage();
+          queued.inputTokens += payload.inputTokens;
+          queued.outputTokens += payload.outputTokens;
+          queued.cost += payload.cost ?? 0;
+          pendingUsage.set(payload.messageId, queued);
+        }
+      } else {
+        const target = [...messages]
+          .reverse()
+          .find(
+            (message) =>
+              message.role === 'assistant' && (!event.runId || message.runId === event.runId)
+          );
+        if (target) {
+          const messageUsage = target.usage ?? emptyUsage();
+          messageUsage.inputTokens += payload.inputTokens;
+          messageUsage.outputTokens += payload.outputTokens;
+          messageUsage.cost += payload.cost ?? 0;
+          target.usage = messageUsage;
+        }
       }
       continue;
     }
 
     if (event.type === 'run.started') {
+      pendingFailure = undefined;
       runId = event.runId;
       running = true;
       status = 'running';
@@ -323,6 +395,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       running = false;
       status = 'failed';
       error = payload.error.message;
+      pendingFailure = { event, error: payload.error };
       finishStreaming(messages);
       finishAskUsers(askUsers);
       finishApprovals(approvals, messages);
@@ -356,6 +429,19 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
         )
       );
     }
+  }
+
+  // 兼容旧会话：只有 run.failed、没有错误消息事件的记录
+  if (pendingFailure && status === 'failed') {
+    messages.push({
+      id: `error-legacy-${pendingFailure.event.id}`,
+      role: 'assistant',
+      content: [pendingFailure.error.message, pendingFailure.error.code]
+        .filter(Boolean)
+        .join('\n\n'),
+      toolCalls: [],
+      createdAt: pendingFailure.event.ts
+    });
   }
 
   mergeAssistantRuns(messages, askUsers);

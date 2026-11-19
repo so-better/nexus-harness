@@ -10,8 +10,11 @@ import type { GlobalThemeOverrides } from 'naive-ui';
 export interface ThemePalette {
   bgBase: string;
   bgElevated: string;
+  bgModal: string;
   bgPopover: string;
   bgHover: string;
+  codeBg: string;
+  codeText: string;
   textPrimary: string;
   textSecondary: string;
   textDisabled: string;
@@ -30,9 +33,12 @@ export interface ThemePalette {
  */
 export const lightPalette: ThemePalette = {
   bgBase: '#ffffff',
-  bgElevated: '#fbfcfe',
+  bgElevated: '#f8fafc',
+  bgModal: '#ffffff',
   bgPopover: '#ffffff',
   bgHover: '#f1f6fc',
+  codeBg: '#0b1220',
+  codeText: '#dfe9f8',
   textPrimary: '#111827',
   textSecondary: '#5b6472',
   textDisabled: '#9ca3af',
@@ -51,9 +57,12 @@ export const lightPalette: ThemePalette = {
  */
 export const darkPalette: ThemePalette = {
   bgBase: '#090d13',
-  bgElevated: '#101720',
-  bgPopover: '#111a24',
-  bgHover: '#172233',
+  bgElevated: '#111a26',
+  bgModal: '#172231',
+  bgPopover: '#202e40',
+  bgHover: '#283a50',
+  codeBg: '#0b1220',
+  codeText: '#dfe9f8',
   textPrimary: '#f3f7ff',
   textSecondary: '#93a4bd',
   textDisabled: '#5b6a80',
@@ -76,8 +85,11 @@ export const getPalette = (mode: 'light' | 'dark'): ThemePalette =>
 const cssVariables: Record<keyof ThemePalette, string> = {
   bgBase: '--nh-color-bg-base',
   bgElevated: '--nh-color-bg-elevated',
+  bgModal: '--nh-color-bg-modal',
   bgPopover: '--nh-color-bg-popover',
   bgHover: '--nh-color-bg-hover',
+  codeBg: '--nh-color-code-bg',
+  codeText: '--nh-color-code-text',
   textPrimary: '--nh-color-text-primary',
   textSecondary: '--nh-color-text-secondary',
   textDisabled: '--nh-color-text-disabled',
@@ -113,13 +125,13 @@ export const getNaiveOverrides = (palette: ThemePalette): GlobalThemeOverrides =
     primaryColorSuppl: palette.accentHover,
     bodyColor: palette.bgBase,
     cardColor: palette.bgElevated,
-    modalColor: palette.bgElevated,
+    modalColor: palette.bgModal,
     popoverColor: palette.bgPopover,
-    inputColor: palette.bgBase,
+    inputColor: 'var(--nh-input-bg)',
     actionColor: palette.bgElevated,
     hoverColor: palette.bgHover,
-    borderColor: palette.border,
-    dividerColor: palette.border,
+    borderColor: 'var(--nh-border-subtle)',
+    dividerColor: 'var(--nh-border-subtle)',
     textColorBase: palette.textPrimary,
     textColor1: palette.textPrimary,
     textColor2: palette.textPrimary,
@@ -144,12 +156,16 @@ export const getNaiveOverrides = (palette: ThemePalette): GlobalThemeOverrides =
   Card: {
     borderRadius: '8px'
   },
+  Tooltip: {
+    color: palette.bgPopover,
+    textColor: palette.textPrimary
+  },
   Input: {
     borderRadius: '8px',
-    color: palette.bgBase,
-    colorHover: palette.bgBase,
-    colorFocus: palette.bgBase,
-    colorDisabled: palette.bgBase
+    color: 'var(--nh-input-bg)',
+    colorHover: 'var(--nh-input-bg)',
+    colorFocus: 'var(--nh-input-bg)',
+    colorDisabled: 'var(--nh-input-bg)'
   },
   Tag: {
     borderRadius: '4px'

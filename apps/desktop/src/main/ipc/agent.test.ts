@@ -124,6 +124,7 @@ vi.mock('../services/agent/agent-service', () => ({
 
 import { approvalService } from '../services/agent/approval-service';
 import { askUserService } from '../services/agent/ask-user-service';
+import { workspaceAuthService } from '../services/agent/workspace-auth-service';
 import { registerAgentIpc } from './agent';
 
 const input = {
@@ -183,6 +184,34 @@ describe('agent IPC', () => {
     )) as { data: { resolved: boolean } };
     expect(right.data.resolved).toBe(true);
     await expect(pending).resolves.toBe(true);
+  });
+
+  it('cancels a run by session and releases workspace authorization', async () => {
+    state.mode = 'wait';
+    const sender = createSender();
+    const runHandler = state.handlers.get(IPC_CHANNELS.agentRun);
+    const cancelSession = state.handlers.get(IPC_CHANNELS.agentCancelSession);
+    if (!runHandler || !cancelSession) throw new Error('agent handlers not registered');
+
+    const started = (await runHandler({ sender }, input)) as {
+      ok: boolean;
+      data: { runId: string };
+    };
+    const pendingAuth = workspaceAuthService.request(
+      'workspace-auth-test',
+      started.data.runId,
+      sender.id,
+      '/tmp'
+    );
+    const cancelled = (await cancelSession({ sender }, input.sessionId)) as {
+      ok: boolean;
+      data: { cancelled: boolean };
+    };
+
+    expect(cancelled.ok).toBe(true);
+    expect(cancelled.data.cancelled).toBe(true);
+    await expect(pendingAuth).resolves.toBeUndefined();
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
 
   it('cancels a run owned by the same window', async () => {

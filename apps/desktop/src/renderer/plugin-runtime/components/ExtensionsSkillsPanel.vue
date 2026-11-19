@@ -3,7 +3,7 @@
     <div class="nh-extension-panel__header">
       <p>{{ t('skills.hint') }}</p>
       <div class="nh-extension-panel__actions">
-        <NButton type="primary" :loading="busy" @click="importSkill">
+        <NButton type="primary" secondary :loading="busy" @click="importSkill">
           {{ t('skills.import') }}
         </NButton>
         <NButton secondary :loading="loading" @click="load">
@@ -114,7 +114,7 @@ onMounted(load);
   min-height: 220px;
   align-items: center;
   justify-content: center;
-  border: 1px dashed var(--nh-color-border);
+  border: 1px dashed var(--nh-border-subtle);
   border-radius: 12px;
   background: color-mix(in srgb, var(--nh-color-bg-elevated) 55%, transparent);
 }
@@ -148,7 +148,7 @@ onMounted(load);
 
 .nh-extension-item {
   padding: 12px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 9px;
   background: var(--nh-color-bg-elevated);
 }

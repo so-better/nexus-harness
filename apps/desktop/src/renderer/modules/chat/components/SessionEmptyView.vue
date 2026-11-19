@@ -95,12 +95,12 @@ const emit = defineEmits<{
   background-image:
     linear-gradient(
       to right,
-      color-mix(in srgb, var(--nh-color-border) 42%, transparent) 1px,
+      color-mix(in srgb, var(--nh-border-subtle) 42%, transparent) 1px,
       transparent 1px
     ),
     linear-gradient(
       to bottom,
-      color-mix(in srgb, var(--nh-color-border) 42%, transparent) 1px,
+      color-mix(in srgb, var(--nh-border-subtle) 42%, transparent) 1px,
       transparent 1px
     );
   background-size: 40px 40px;

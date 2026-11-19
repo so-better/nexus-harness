@@ -22,4 +22,18 @@ describe('save_ppt', () => {
       createPptBuffer({ slides: [{ title: 'missing layout' }] } as never)
     ).rejects.toThrow();
   });
+
+  it('rejects invalid chart data', async () => {
+    await expect(
+      createPptBuffer({
+        slides: [
+          {
+            layout: 'chart',
+            title: 'Chart',
+            chart: { type: 'radar', categories: ['A'], series: [{ name: 'S', values: ['x'] }] }
+          }
+        ]
+      } as never)
+    ).rejects.toThrow();
+  });
 });

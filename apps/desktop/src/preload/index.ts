@@ -10,11 +10,23 @@ import type {
   SessionSummary,
   TerminalEvent,
   TerminalSettings,
-  ThemeInfo
+  ThemeInfo,
+  WorkspaceAuthorizationSettled
 } from '@shared/ipc/contracts';
 import type { NexusEvent } from '@shared/events';
 
 const bridge: NexusBridge = {
+  window: {
+    minimize: () => ipcRenderer.invoke(IPC_CHANNELS.windowMinimize),
+    toggleMaximize: () => ipcRenderer.invoke(IPC_CHANNELS.windowToggleMaximize),
+    close: () => ipcRenderer.invoke(IPC_CHANNELS.windowClose),
+    isMaximized: () => ipcRenderer.invoke(IPC_CHANNELS.windowIsMaximized),
+    onMaximizedChange: (handler) => {
+      const listener = (_event: unknown, maximized: boolean) => handler(maximized);
+      ipcRenderer.on(IPC_CHANNELS.windowMaximizedChanged, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.windowMaximizedChanged, listener);
+    }
+  },
   app: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo),
     openExternal: (url) => ipcRenderer.invoke(IPC_CHANNELS.appOpenExternal, url),
@@ -24,6 +36,11 @@ const bridge: NexusBridge = {
   session: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.sessionList),
     events: (id) => ipcRenderer.invoke(IPC_CHANNELS.sessionEvents, id),
+    onRootsChanged: (handler) => {
+      const listener = (_event: unknown, sessionId: string) => handler(sessionId);
+      ipcRenderer.on(IPC_CHANNELS.sessionRootsChanged, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.sessionRootsChanged, listener);
+    },
     onChanged: (handler) => {
       const listener = (_event: IpcRendererEvent, session: SessionSummary) => handler(session);
       ipcRenderer.on(IPC_CHANNELS.sessionChanged, listener);
@@ -59,6 +76,8 @@ const bridge: NexusBridge = {
     getSkin: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetSkin),
     getImage: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetImage),
     setImage: (value) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetImage, value),
+    getSearch: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetSearch),
+    setSearch: (value) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetSearch, value),
     setSkin: (selection) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetSkin, selection)
   },
   cache: {
@@ -80,11 +99,26 @@ const bridge: NexusBridge = {
     read: (input) => ipcRenderer.invoke(IPC_CHANNELS.artifactRead, input)
   },
   files: {
-    saveAs: (input) => ipcRenderer.invoke(IPC_CHANNELS.filesSaveAs, input)
+    saveAs: (input) => ipcRenderer.invoke(IPC_CHANNELS.filesSaveAs, input),
+    read: (input) => ipcRenderer.invoke(IPC_CHANNELS.filesRead, input)
   },
   workspace: {
     chooseRoot: (input) => ipcRenderer.invoke(IPC_CHANNELS.workspaceChooseRoot, input),
-    searchFiles: (input) => ipcRenderer.invoke(IPC_CHANNELS.workspaceSearchFiles, input)
+    searchFiles: (input) => ipcRenderer.invoke(IPC_CHANNELS.workspaceSearchFiles, input),
+    onAuthorizationRequested: (handler) => {
+      const listener = (_event: unknown, request: unknown) => handler(request as never);
+      ipcRenderer.on(IPC_CHANNELS.workspaceAuthorizationRequested, listener);
+      return () =>
+        ipcRenderer.removeListener(IPC_CHANNELS.workspaceAuthorizationRequested, listener);
+    },
+    resolveAuthorization: (input) =>
+      ipcRenderer.invoke(IPC_CHANNELS.workspaceAuthorizationResolve, input),
+    onAuthorizationSettled: (handler) => {
+      const listener = (_event: unknown, settled: unknown) =>
+        handler(settled as WorkspaceAuthorizationSettled);
+      ipcRenderer.on(IPC_CHANNELS.workspaceAuthorizationSettled, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.workspaceAuthorizationSettled, listener);
+    }
   },
   approval: {
     resolve: (input) => ipcRenderer.invoke(IPC_CHANNELS.approvalResolve, input)
@@ -170,6 +204,7 @@ const bridge: NexusBridge = {
   agent: {
     run: (input) => ipcRenderer.invoke(IPC_CHANNELS.agentRun, input),
     cancel: (runId) => ipcRenderer.invoke(IPC_CHANNELS.agentCancel, runId),
+    cancelSession: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.agentCancelSession, sessionId),
     answerUser: (input) => ipcRenderer.invoke(IPC_CHANNELS.agentAnswerUser, input),
     onEvent: (handler) => {
       const listener = (_event: IpcRendererEvent, event: NexusEvent): void => handler(event);

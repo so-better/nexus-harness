@@ -23,7 +23,10 @@
           {{ tool.error.code }}: {{ tool.error.message }}
         </p>
         <NButton
-          v-if="tool.error?.code === 'PATH_OUTSIDE_ROOT'"
+          v-if="
+            tool.error?.code === 'PATH_OUTSIDE_ROOT' ||
+            tool.error?.code === 'TOOL_WORKSPACE_REQUIRED'
+          "
           size="tiny"
           secondary
           @click="emit('authorize-root')"
@@ -167,9 +170,9 @@ const statusType = computed(() => {
 <style scoped lang="less">
 .nh-tool {
   padding: 0 12px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: var(--nh-radius-md);
-  background: var(--nh-color-bg-elevated);
+  background: var(--nh-surface-elevated);
 }
 
 .nh-tool--flush {
@@ -228,7 +231,7 @@ const statusType = computed(() => {
   overflow: auto;
   padding: 10px 12px;
   border-radius: var(--nh-radius-sm);
-  background: var(--nh-color-bg-base);
+  background: var(--nh-surface-base);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

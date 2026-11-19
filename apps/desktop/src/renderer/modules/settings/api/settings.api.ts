@@ -4,6 +4,7 @@
 
 import { nexus } from '@/app/nexus-bridge';
 import type { ImageSettings } from '@shared/image';
+import type { SearchSettings } from '@shared/search';
 import type {
   AppInfo,
   CacheInfo,
@@ -50,6 +51,15 @@ export const getImageSettings = async (): Promise<ImageSettings | null> =>
 
 export const setImageSettings = async (value: ImageSettings): Promise<ImageSettings> =>
   unwrap(await nexus.settings.setImage(value));
+
+export const getSearchSettings = async (): Promise<SearchSettings | null> =>
+  unwrap(await nexus.settings.getSearch());
+
+export const setSearchSettings = async (value: SearchSettings): Promise<SearchSettings> =>
+  unwrap(await nexus.settings.setSearch(value));
+
+export const openExternalLink = async (url: string): Promise<boolean> =>
+  unwrap(await nexus.app.openExternal(url)).opened;
 
 export const getThemeInfo = async (): Promise<ThemeInfo> => unwrap(await nexus.theme.getInfo());
 

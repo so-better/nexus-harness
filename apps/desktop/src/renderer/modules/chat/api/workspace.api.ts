@@ -3,7 +3,12 @@
  */
 
 import { nexus } from '@/app/nexus-bridge';
-import type { WorkspaceFileReference } from '@shared/ipc/contracts';
+import type {
+  WorkspaceAuthorizationRequest,
+  WorkspaceAuthorizationResolveInput,
+  WorkspaceAuthorizationSettled,
+  WorkspaceFileReference
+} from '@shared/ipc/contracts';
 import { unwrap } from '@/app/ipc';
 
 /**
@@ -14,3 +19,24 @@ export const searchWorkspaceFiles = async (
   query: string
 ): Promise<WorkspaceFileReference[]> =>
   unwrap(await nexus.workspace.searchFiles({ sessionId, query, limit: 20 }));
+
+/**
+ * 订阅主进程发起的目录授权请求。
+ */
+export const onWorkspaceAuthorization = (
+  handler: (request: WorkspaceAuthorizationRequest) => void
+): (() => void) => nexus.workspace.onAuthorizationRequested(handler);
+
+/**
+ * 回应目录授权请求。
+ */
+export const resolveWorkspaceAuthorization = async (
+  input: WorkspaceAuthorizationResolveInput
+): Promise<boolean> => unwrap(await nexus.workspace.resolveAuthorization(input)).resolved;
+
+/**
+ * 订阅授权结束（允许、拒绝、超时、Run 取消），用于清理内联授权卡。
+ */
+export const onWorkspaceAuthorizationSettled = (
+  handler: (settled: WorkspaceAuthorizationSettled) => void
+): (() => void) => nexus.workspace.onAuthorizationSettled(handler);

@@ -36,6 +36,6 @@ const emit = defineEmits<{ back: []; save: [] }>();
   justify-content: flex-end;
   gap: 8px;
   padding-top: 16px;
-  border-top: 1px solid var(--nh-color-border);
+  border-top: 1px solid var(--nh-border-subtle);
 }
 </style>

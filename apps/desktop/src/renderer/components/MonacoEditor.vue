@@ -193,7 +193,7 @@ onBeforeUnmount(() => {
 .nh-monaco-editor {
   min-height: 120px;
   overflow: hidden;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 8px;
 }
 </style>

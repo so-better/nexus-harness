@@ -61,6 +61,18 @@
     <path v-else-if="name === 'arrow-up'" d="M12 19V5M6 11l6-6 6 6" />
     <path v-else-if="name === 'arrow-down'" d="M12 5v14M18 13l-6 6-6-6" />
     <path v-else-if="name === 'plug'" d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0V7ZM12 16v5" />
+    <path v-else-if="name === 'loader'" d="M21 12a9 9 0 1 1-6.2-8.56" />
+    <path
+      v-else-if="name === 'lightbulb'"
+      d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V18h6v-1.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2Z"
+    />
+    <path
+      v-else-if="name === 'brain'"
+      d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54"
+    />
+    <path v-else-if="name === 'minimize'" d="M5 12h14" />
+    <path v-else-if="name === 'maximize'" d="M6 6h12v12H6z" />
+    <path v-else-if="name === 'restore'" d="M8 8h9v9H8zM5 16V5h11" />
     <path
       v-else-if="name === 'copy'"
       d="M8 8h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2ZM4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"
@@ -78,44 +90,52 @@
  * 极简线性图标；只依赖 currentColor，跟随主题与按钮状态。
  */
 
+export type AppIconName =
+  | 'folder'
+  | 'plus'
+  | 'send'
+  | 'stop'
+  | 'spark'
+  | 'file'
+  | 'export'
+  | 'terminal'
+  | 'edit'
+  | 'history'
+  | 'settings'
+  | 'sun'
+  | 'moon'
+  | 'monitor'
+  | 'chevron-down'
+  | 'chevron-up'
+  | 'arrow-up'
+  | 'arrow-down'
+  | 'chevron-left'
+  | 'globe'
+  | 'database'
+  | 'power'
+  | 'alert'
+  | 'bell'
+  | 'close'
+  | 'pin'
+  | 'message'
+  | 'search'
+  | 'more'
+  | 'info'
+  | 'trash'
+  | 'check'
+  | 'refresh'
+  | 'copy'
+  | 'plug'
+  | 'minimize'
+  | 'maximize'
+  | 'restore'
+  | 'loader'
+  | 'brain'
+  | 'lightbulb';
+
 withDefaults(
   defineProps<{
-    name:
-      | 'folder'
-      | 'plus'
-      | 'send'
-      | 'stop'
-      | 'spark'
-      | 'file'
-      | 'export'
-      | 'terminal'
-      | 'edit'
-      | 'history'
-      | 'settings'
-      | 'sun'
-      | 'moon'
-      | 'monitor'
-      | 'chevron-down'
-      | 'chevron-up'
-      | 'arrow-up'
-      | 'arrow-down'
-      | 'chevron-left'
-      | 'globe'
-      | 'database'
-      | 'power'
-      | 'alert'
-      | 'bell'
-      | 'close'
-      | 'pin'
-      | 'message'
-      | 'search'
-      | 'more'
-      | 'info'
-      | 'trash'
-      | 'check'
-      | 'refresh'
-      | 'copy'
-      | 'plug';
+    name: AppIconName;
     size?: number;
   }>(),
   { size: 16 }

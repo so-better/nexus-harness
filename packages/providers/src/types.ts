@@ -24,6 +24,7 @@ export interface ChatImage {
 export interface ChatMessage {
   role: ChatRole;
   content: string;
+  reasoning?: string;
   images?: ChatImage[];
   toolCalls?: ProviderToolCall[];
   toolCallId?: string;

@@ -17,6 +17,9 @@
           fileId: file.id
         }"
       />
+      <NButton v-if="canPreview" text size="tiny" @click="previewOpen = true">
+        {{ t('file.preview') }}
+      </NButton>
       <NButton text size="tiny" :loading="saving" @click="saveAs">
         {{ t('file.saveAs') }}
       </NButton>
@@ -30,6 +33,7 @@
         fileId: file.id
       }"
     />
+    <FilePreviewModal v-model:show="previewOpen" :file="file" />
   </div>
 </template>
 
@@ -38,17 +42,28 @@
  * 输出文件卡片：仅负责另存，文件由用户用专业软件打开。
  */
 
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { NButton, useMessage } from 'naive-ui';
 import type { OutputFile } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import { saveOutputFileAs } from '../api/files.api';
+import FilePreviewModal from './FilePreviewModal.vue';
 
 const props = defineProps<{ file: OutputFile }>();
 const message = useMessage();
 const saving = ref(false);
+const previewOpen = ref(false);
+const canPreview = computed(
+  () =>
+    props.file.mime.startsWith('image/') ||
+    props.file.mime === 'text/html' ||
+    props.file.mime === 'application/xhtml+xml' ||
+    props.file.mime.startsWith('text/') ||
+    props.file.mime === 'application/json' ||
+    props.file.mime === 'application/xml'
+);
 
 /**
  * 格式化文件体积。
@@ -81,7 +96,7 @@ const saveAs = async (): Promise<void> => {
   flex-direction: column;
   gap: 6px;
   padding: 8px 10px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 10px;
   background: color-mix(in srgb, var(--nh-color-bg-base) 82%, transparent);
 }

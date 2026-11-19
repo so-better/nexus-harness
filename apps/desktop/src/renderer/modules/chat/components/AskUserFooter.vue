@@ -5,7 +5,7 @@
       <NButton size="small" secondary @click="emit('cancel')">
         {{ t('chat.askUserCancel') }}
       </NButton>
-      <NButton size="small" type="primary" @click="emit('submit')">
+      <NButton size="small" type="primary" secondary @click="emit('submit')">
         {{ t('chat.askUserSubmit') }}
       </NButton>
     </div>

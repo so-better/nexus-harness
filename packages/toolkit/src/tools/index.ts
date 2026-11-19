@@ -7,5 +7,7 @@ export * from './save-word';
 export * from './save-excel';
 export * from './save-ppt';
 export * from './save-pdf';
-export { createFileToolset, runCommandInputSchema } from './file-toolset';
+export { createFileToolset, fileToolDefinitions, runCommandInputSchema } from './file-toolset';
 export type { FileToolDefinition, FileToolResult, FileToolset } from './file-toolset';
+export * from './search-images';
+export * from './search-videos';

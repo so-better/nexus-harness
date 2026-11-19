@@ -11,6 +11,7 @@ import { getAppInfo, setThemeSource } from '@/modules/settings/api/settings.api'
  */
 export const useAppMeta = () => {
   const version = ref('0.0.0');
+  const platform = ref(navigator.userAgent.includes('Mac') ? 'darwin' : '');
   const settingsOpen = ref(false);
 
   /**
@@ -18,7 +19,9 @@ export const useAppMeta = () => {
    */
   const load = async (): Promise<void> => {
     try {
-      version.value = (await getAppInfo()).version;
+      const info = await getAppInfo();
+      version.value = info.version;
+      platform.value = info.platform;
     } catch {
       // 版本读取失败不影响工作台使用
     }
@@ -35,5 +38,5 @@ export const useAppMeta = () => {
     }
   };
 
-  return { version, settingsOpen, themeSource, load, setTheme };
+  return { version, platform, settingsOpen, themeSource, load, setTheme };
 };

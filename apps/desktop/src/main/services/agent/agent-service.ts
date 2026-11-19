@@ -22,7 +22,7 @@ import {
   type ChatProvider,
   type ProviderToolCall
 } from '@nexus/providers';
-import { createFileToolset, runCommandInputSchema } from '@nexus/toolkit';
+import { createFileToolset, fileToolDefinitions, runCommandInputSchema } from '@nexus/toolkit';
 import type { PptDeck } from '@nexus/toolkit';
 import { detectDangerousCommand, isSensitivePath } from '@nexus/runtime-utils';
 import { appendFileReferences, imageMimeForName } from '@shared/files';
@@ -31,7 +31,9 @@ import {
   createPdfBuffer,
   createPptBuffer,
   createWordBuffer,
-  generateImages
+  generateImages,
+  searchImages,
+  searchVideos
 } from '@nexus/toolkit';
 import { ArtifactService } from '../artifacts/artifact-service';
 import { FileService } from '../files/file-service';
@@ -39,6 +41,7 @@ import { CheckpointService } from '../checkpoint/checkpoint-service';
 import type { SkillService } from '../skills/skill-service';
 import type { McpService } from '../mcp/mcp-service';
 import type { ImageSettings } from '@shared/image';
+import type { SearchSettings } from '@shared/search';
 import {
   AgentContextService,
   TOOL_OUTPUT_ARTIFACT_CHAR_LIMIT,
@@ -69,6 +72,7 @@ export interface AgentServiceOptions {
   skills?: SkillService;
   mcp?: McpService;
   imageSettings?: () => Promise<ImageSettings | null>;
+  searchSettings?: () => Promise<SearchSettings | null>;
 }
 
 export interface AgentRunHooks {
@@ -82,6 +86,11 @@ export interface AgentRunHooks {
     approvalId: string
   ) => Promise<boolean>;
   askUser?: (requestId: string, questions: AskQuestion[]) => Promise<AskUserAnswer[] | undefined>;
+  requestWorkspace?: (call: {
+    id?: string;
+    name: string;
+    input: unknown;
+  }) => Promise<string[] | undefined>;
   terminalOwnerId?: number;
 }
 
@@ -400,6 +409,36 @@ const generateImageToolDefinition: AgentToolDefinition = {
   }
 };
 
+const searchImagesToolDefinition: AgentToolDefinition = {
+  name: 'search_images',
+  description: '从 Pexels 搜索图片素材。关键词优先翻译成英文；返回图片地址、作者和来源。',
+  permission: 'network',
+  requiresApproval: true,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: '英文搜索关键词' },
+      count: { type: 'number', description: '1-10，默认 5' }
+    },
+    required: ['query']
+  }
+};
+
+const searchVideosToolDefinition: AgentToolDefinition = {
+  name: 'search_videos',
+  description: '从 Pexels 搜索视频素材。关键词优先翻译成英文；返回视频地址、缩略图和作者。',
+  permission: 'network',
+  requiresApproval: true,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: '英文搜索关键词' },
+      count: { type: 'number', description: '1-10，默认 3' }
+    },
+    required: ['query']
+  }
+};
+
 const askUserToolDefinition: AgentToolDefinition = {
   name: 'ask_user',
   description: '向用户提出 1-4 个阻塞性澄清问题，可包含选项或自由文本；用户回答后继续执行。',
@@ -573,6 +612,7 @@ export class AgentService {
   private readonly skills: SkillService | undefined;
   private readonly mcp: McpService | undefined;
   private readonly imageSettings: (() => Promise<ImageSettings | null>) | undefined;
+  private readonly searchSettings: (() => Promise<SearchSettings | null>) | undefined;
 
   constructor(options: AgentServiceOptions = {}) {
     this.createProvider = options.createProvider ?? createAgentProvider;
@@ -582,6 +622,7 @@ export class AgentService {
     this.skills = options.skills;
     this.mcp = options.mcp;
     this.imageSettings = options.imageSettings;
+    this.searchSettings = options.searchSettings;
   }
 
   /**
@@ -605,10 +646,12 @@ export class AgentService {
       }
       const imageSettings = this.imageSettings ? await this.imageSettings() : null;
       const imageConfigs = imageSettings?.configs.filter((config) => config.enabled) ?? [];
+      const searchSettings = this.searchSettings ? await this.searchSettings() : null;
+      const pexelsApiKey = searchSettings?.pexelsApiKey?.trim() ?? '';
       let generatedImageCount = 0;
 
       const mode = input.mode ?? 'build';
-      const toolset =
+      let toolset =
         input.rootPaths.length > 0 ? await createFileToolset(input.rootPaths) : undefined;
       const provider = this.createProvider(providerConfig);
       const artifacts = new ArtifactService(this.artifactBaseDir, this.database);
@@ -625,7 +668,8 @@ export class AgentService {
         ...(providerConfig.extraParams ? { extraParams: providerConfig.extraParams } : {}),
         ...(hooks.signal ? { signal: hooks.signal } : {})
       });
-      const checkpointRoot = toolset ? await toolset.resolvePath('.') : undefined;
+      let checkpointRoot = toolset ? await toolset.resolvePath('.') : undefined;
+      let workspaceDenied = false;
 
       const executeTool = async (call: { id?: string; name: string; arguments: unknown }) => {
         if (call.name === 'ask_user') {
@@ -992,6 +1036,35 @@ export class AgentService {
           }
         }
 
+        if (call.name === 'search_images' || call.name === 'search_videos') {
+          const args = call.arguments as { query?: unknown; count?: unknown } | undefined;
+          if (typeof args?.query !== 'string' || !args.query.trim()) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'NETWORK_INVALID_INPUT', message: '搜索关键词不能为空' }
+            };
+          }
+          const count =
+            typeof args.count === 'number' ? Math.min(10, Math.max(1, Math.round(args.count))) : 5;
+          try {
+            const output =
+              call.name === 'search_images'
+                ? await searchImages(args.query, count, pexelsApiKey)
+                : await searchVideos(args.query, count, pexelsApiKey);
+            return { ok: true, output };
+          } catch (error) {
+            return {
+              ok: false,
+              output: '',
+              error: {
+                code: 'NETWORK_SEARCH_FAILED',
+                message: error instanceof Error ? error.message : '网络搜索失败'
+              }
+            };
+          }
+        }
+
         if (call.name === 'generate_image') {
           if (imageConfigs.length === 0) {
             return {
@@ -1103,14 +1176,43 @@ export class AgentService {
         }
 
         if (!toolset || !checkpointRoot) {
-          return {
-            ok: false,
-            output: '',
-            error: {
-              code: 'TOOL_WORKSPACE_REQUIRED',
-              message: '未选择工作区，无法执行本地文件或命令操作'
+          if (mode === 'plan') {
+            return {
+              ok: false,
+              output: '',
+              error: {
+                code: 'TOOL_WORKSPACE_REQUIRED',
+                message: 'Plan 模式不触发目录授权，请先在会话头选择工作区'
+              }
+            };
+          }
+          if (!workspaceDenied && hooks.requestWorkspace) {
+            try {
+              const roots = await hooks.requestWorkspace({
+                name: call.name,
+                input: call.arguments,
+                ...(call.id ? { id: call.id } : {})
+              });
+              if (roots?.length) {
+                toolset = await createFileToolset(roots);
+                checkpointRoot = await toolset.resolvePath('.');
+              } else {
+                workspaceDenied = true;
+              }
+            } catch {
+              workspaceDenied = true;
             }
-          };
+          }
+          if (!toolset || !checkpointRoot) {
+            return {
+              ok: false,
+              output: '',
+              error: {
+                code: 'TOOL_WORKSPACE_REQUIRED',
+                message: '未选择工作区，无法执行本地文件或命令操作'
+              }
+            };
+          }
         }
 
         if (call.name === 'run_command' && process.versions.electron) {
@@ -1283,7 +1385,14 @@ export class AgentService {
           };
         }
       };
-      const modeMessage: ChatMessage = { role: 'system', content: modeSystemPrompt(mode) };
+      const noWorkspaceHint =
+        input.rootPaths.length === 0
+          ? '\n当前没有工作区；调用本地文件或命令工具时必须使用用户明确给出的绝对路径，并在需要时请求目录授权，不要假设 Desktop。'
+          : '';
+      const modeMessage: ChatMessage = {
+        role: 'system',
+        content: `${modeSystemPrompt(mode)}${noWorkspaceHint}`
+      };
       const shouldAddUserMessage = !input.regenerateMessageId;
       const loadedImages = input.imagePaths?.length
         ? await loadImages(input.imagePaths, input.rootPaths)
@@ -1337,7 +1446,7 @@ export class AgentService {
         description: `${generateImageToolDefinition.description} 可用生图模型：${imageNames.join('、')}。可用 model 参数指定模型名称或模型 ID；未指定时使用第一个启用的配置。`
       };
       const allToolDefinitions = [
-        ...(toolset?.definitions ?? []),
+        ...(toolset?.definitions ?? fileToolDefinitions),
         ...mcpTools,
         askUserToolDefinition,
         saveFileToolDefinition,
@@ -1345,6 +1454,7 @@ export class AgentService {
         saveExcelToolDefinition,
         savePptToolDefinition,
         savePdfToolDefinition,
+        ...(pexelsApiKey ? [searchImagesToolDefinition, searchVideosToolDefinition] : []),
         ...(imageConfigs.length ? [imageToolDefinition] : []),
         ...(this.skills
           ? [

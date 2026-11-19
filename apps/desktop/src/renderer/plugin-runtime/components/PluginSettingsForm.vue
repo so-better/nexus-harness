@@ -96,7 +96,7 @@ watch(() => [props.plugin.id, props.plugin.version], load, { immediate: true });
 .nh-plugin-settings {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid var(--nh-color-border);
+  border-top: 1px solid var(--nh-border-subtle);
 }
 
 .nh-plugin-settings__title {

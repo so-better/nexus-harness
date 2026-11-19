@@ -14,6 +14,7 @@ import type {
 import type { Result } from './result';
 import type { McpTestResult } from '../mcp';
 import type { ImageSettings } from '../image';
+import type { SearchSettings } from '../search';
 import type { SkillDetail, SkillSummary } from '../skills';
 
 /**
@@ -145,6 +146,13 @@ export interface NexusBridge {
     openPath: (path: string) => Promise<Result<{ opened: boolean }>>;
     consumePendingSession: () => Promise<Result<string | null>>;
   };
+  window: {
+    minimize: () => Promise<Result<{ ok: boolean }>>;
+    toggleMaximize: () => Promise<Result<{ maximized: boolean }>>;
+    close: () => Promise<Result<{ ok: boolean }>>;
+    isMaximized: () => Promise<Result<{ maximized: boolean }>>;
+    onMaximizedChange: (handler: (maximized: boolean) => void) => Unsubscribe;
+  };
   theme: {
     getInfo: () => Promise<Result<ThemeInfo>>;
     setSource: (source: ThemeSource) => Promise<Result<ThemeInfo>>;
@@ -159,6 +167,8 @@ export interface NexusBridge {
     getSkin: () => Promise<Result<PluginSkinSelection | null>>;
     getImage: () => Promise<Result<ImageSettings | null>>;
     setImage: (value: ImageSettings) => Promise<Result<ImageSettings>>;
+    getSearch: () => Promise<Result<SearchSettings | null>>;
+    setSearch: (value: SearchSettings) => Promise<Result<SearchSettings>>;
     setSkin: (selection: PluginSkinSelection | null) => Promise<Result<PluginSkinSelection | null>>;
     setAutoLaunch: (enabled: boolean) => Promise<Result<boolean>>;
     getLanguage: () => Promise<Result<AppLanguage>>;
@@ -178,6 +188,7 @@ export interface NexusBridge {
     list: () => Promise<Result<SessionSummary[]>>;
     events: (id: string) => Promise<Result<NexusEvent[]>>;
     onChanged: (handler: (session: SessionSummary) => void) => Unsubscribe;
+    onRootsChanged: (handler: (sessionId: string) => void) => Unsubscribe;
     create: (input: SessionCreateInput) => Promise<Result<SessionSummary>>;
     get: (id: string) => Promise<Result<SessionSummary>>;
     rename: (input: SessionRenameInput) => Promise<Result<SessionSummary>>;
@@ -203,10 +214,20 @@ export interface NexusBridge {
   };
   files: {
     saveAs: (input: FileSaveAsInput) => Promise<Result<FileSaveAsResult>>;
+    read: (input: FileReadInput) => Promise<Result<FileReadResult>>;
   };
   workspace: {
     chooseRoot: (input?: WorkspaceChooseRootInput) => Promise<Result<WorkspaceRootSelection>>;
     searchFiles: (input: WorkspaceFileSearchInput) => Promise<Result<WorkspaceFileReference[]>>;
+    onAuthorizationRequested: (
+      handler: (request: WorkspaceAuthorizationRequest) => void
+    ) => Unsubscribe;
+    resolveAuthorization: (
+      input: WorkspaceAuthorizationResolveInput
+    ) => Promise<Result<{ resolved: boolean }>>;
+    onAuthorizationSettled: (
+      handler: (settled: WorkspaceAuthorizationSettled) => void
+    ) => Unsubscribe;
   };
   approval: {
     resolve: (input: ApprovalResolveInput) => Promise<Result<ApprovalResolveResult>>;
@@ -279,6 +300,7 @@ export interface NexusBridge {
   agent: {
     run: (input: AgentRunInput) => Promise<Result<AgentStartResult>>;
     cancel: (runId: string) => Promise<Result<AgentCancelResult>>;
+    cancelSession: (sessionId: string) => Promise<Result<AgentCancelResult>>;
     onEvent: (handler: (event: NexusEvent) => void) => Unsubscribe;
     answerUser: (input: AskUserResolveInput) => Promise<Result<AskUserResolveResult>>;
   };
@@ -567,6 +589,29 @@ export const workspaceFileReferenceSchema = z.object({
   isImage: z.boolean()
 });
 
+export const workspaceAuthorizationRequestSchema = z.object({
+  requestId: z.string().min(1),
+  sessionId: z.string().min(1),
+  suggestedPath: z.string().min(1),
+  toolName: z.string().optional(),
+  toolCallId: z.string().optional()
+});
+
+export const workspaceAuthorizationResolveInputSchema = z.object({
+  requestId: z.string().min(1),
+  decision: z.enum(['approved', 'rejected'])
+});
+
+export const workspaceAuthorizationSettledSchema = z.object({
+  requestId: z.string().min(1)
+});
+
+export type WorkspaceAuthorizationRequest = z.infer<typeof workspaceAuthorizationRequestSchema>;
+export type WorkspaceAuthorizationResolveInput = z.infer<
+  typeof workspaceAuthorizationResolveInputSchema
+>;
+export type WorkspaceAuthorizationSettled = z.infer<typeof workspaceAuthorizationSettledSchema>;
+
 export const workspaceFileSearchInputSchema = z.object({
   sessionId: z.string().min(1),
   query: z.string().max(200).default(''),
@@ -598,7 +643,22 @@ export const fileSaveAsResultSchema = z.object({
   path: z.string().optional()
 });
 
+export const fileReadInputSchema = z.object({
+  sessionId: z.string().min(1),
+  fileId: z.string().min(1)
+});
+
+export const fileReadResultSchema = z.object({
+  fileId: z.string().min(1),
+  name: z.string().min(1),
+  mime: z.string().min(1),
+  bytes: z.number().nonnegative(),
+  base64: z.string()
+});
+
 export type OutputFile = z.infer<typeof outputFileSchema>;
+export type FileReadInput = z.infer<typeof fileReadInputSchema>;
+export type FileReadResult = z.infer<typeof fileReadResultSchema>;
 export type FileSaveAsInput = z.infer<typeof fileSaveAsInputSchema>;
 export type FileSaveAsResult = z.infer<typeof fileSaveAsResultSchema>;
 

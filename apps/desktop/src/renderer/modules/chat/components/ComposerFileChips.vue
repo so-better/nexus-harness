@@ -47,8 +47,8 @@ const rootName = (path: string): string => path.split(/[\\/]/).filter(Boolean).a
 
 .nh-file-chip {
   max-width: 240px;
-  border: 1px solid var(--nh-color-border);
-  background: var(--nh-color-bg-elevated);
+  border: 1px solid var(--nh-border-subtle);
+  background: var(--nh-surface-elevated);
   color: var(--nh-color-text-secondary);
 }
 

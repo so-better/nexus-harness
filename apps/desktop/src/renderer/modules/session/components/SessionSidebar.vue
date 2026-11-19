@@ -357,8 +357,8 @@ const groups = computed<SessionGroup[]>(() => {
   min-height: 0;
   overflow: hidden;
   flex-direction: column;
-  border-right: 1px solid var(--nh-color-border);
-  background: var(--nh-color-bg-elevated);
+  border-right: 1px solid var(--nh-border-subtle);
+  background: var(--nh-surface-elevated);
 }
 
 .nh-sidebar__header {
@@ -369,7 +369,7 @@ const groups = computed<SessionGroup[]>(() => {
   justify-content: space-between;
   gap: 8px;
   padding: 0 16px;
-  box-shadow: inset 0 -1px 0 var(--nh-color-border);
+  box-shadow: inset 0 -1px 0 var(--nh-border-subtle);
 }
 
 .nh-sidebar__header-actions {
@@ -495,7 +495,7 @@ const groups = computed<SessionGroup[]>(() => {
 .nh-sidebar__group-title::after {
   height: 1px;
   flex: 1;
-  background: var(--nh-color-border);
+  background: var(--nh-border-subtle);
   content: '';
 }
 
@@ -510,7 +510,7 @@ const groups = computed<SessionGroup[]>(() => {
   justify-content: space-between;
   gap: 8px;
   padding: 10px 16px;
-  border-top: 1px solid var(--nh-color-border);
+  border-top: 1px solid var(--nh-border-subtle);
   color: var(--nh-color-text-secondary);
   font-size: 12px;
 }

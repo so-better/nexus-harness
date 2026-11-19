@@ -94,8 +94,6 @@ const withTimeout = async <T>(
   }
 };
 
-const safeToolName = (name: string): string => name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
-
 const normalizeResult = (result: unknown): { text: string; attachments: McpAttachment[] } => {
   if (!result || typeof result !== 'object' || !('content' in result)) {
     return { text: '', attachments: [] };
@@ -258,7 +256,7 @@ export class McpService {
       }
       const listed = await withTimeout(client.listTools(), `MCP ${config.id} 列举工具超时`);
       const tools = (listed.tools ?? []).slice(0, 100).map((tool) => ({
-        name: safeToolName(tool.name),
+        name: tool.name,
         ...(tool.description ? { description: tool.description } : {}),
         inputSchema:
           tool.inputSchema && typeof tool.inputSchema === 'object'

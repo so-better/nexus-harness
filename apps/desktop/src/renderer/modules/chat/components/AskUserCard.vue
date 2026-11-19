@@ -133,9 +133,9 @@ const submitAnswers = (): void => {
   align-items: flex-start;
   gap: 12px;
   padding: 14px;
-  border: 1px solid color-mix(in srgb, var(--nh-color-accent) 28%, var(--nh-color-border));
+  border: 1px solid color-mix(in srgb, var(--nh-color-accent) 28%, var(--nh-border-subtle));
   border-radius: var(--nh-radius-lg);
-  background: var(--nh-color-bg-base);
+  background: var(--nh-surface-base);
   box-shadow: var(--nh-shadow-card);
 }
 

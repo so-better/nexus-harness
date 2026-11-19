@@ -142,7 +142,7 @@ const initialOf = (name: string): string => name.trim().charAt(0).toUpperCase() 
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 10px;
   background: var(--nh-color-bg-base);
   font: inherit;
@@ -154,7 +154,7 @@ const initialOf = (name: string): string => name.trim().charAt(0).toUpperCase() 
 }
 
 .nh-provider-item:hover {
-  border-color: color-mix(in srgb, var(--nh-color-accent) 50%, var(--nh-color-border));
+  border-color: color-mix(in srgb, var(--nh-color-accent) 50%, var(--nh-border-subtle));
   background: color-mix(in srgb, var(--nh-color-accent) 3%, var(--nh-color-bg-base));
 }
 

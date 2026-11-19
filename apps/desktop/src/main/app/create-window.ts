@@ -3,6 +3,7 @@
  */
 
 import { app, BrowserWindow, screen, shell } from 'electron';
+import { IPC_CHANNELS } from '@shared/ipc/channels';
 import { join } from 'node:path';
 import { getWindowBackgroundColor } from './theme';
 
@@ -27,6 +28,12 @@ export const createMainWindow = (): BrowserWindow => {
     title: 'Nexus',
     ...(app.isPackaged ? {} : { icon: iconPath }),
     backgroundColor: getWindowBackgroundColor(),
+    ...(process.platform === 'darwin'
+      ? {
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 14, y: 16 }
+        }
+      : { frame: false }),
     show: false,
     webPreferences: {
       preload: preloadPath,
@@ -39,6 +46,14 @@ export const createMainWindow = (): BrowserWindow => {
   window.once('ready-to-show', () => {
     window.show();
   });
+
+  const sendMaximized = (): void => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(IPC_CHANNELS.windowMaximizedChanged, window.isMaximized());
+    }
+  };
+  window.on('maximize', sendMaximized);
+  window.on('unmaximize', sendMaximized);
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url).catch((error: unknown) => {

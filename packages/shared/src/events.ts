@@ -67,6 +67,10 @@ export const eventPayloadSchemas = {
   'run.interrupted': z.object({
     reason: z.string()
   }),
+  'message.reasoning.delta': z.object({
+    messageId: z.string(),
+    text: z.string()
+  }),
   'message.delta': z.object({
     messageId: z.string(),
     text: z.string()
@@ -75,6 +79,7 @@ export const eventPayloadSchemas = {
     messageId: z.string(),
     role: z.enum(['user', 'assistant']),
     content: z.string(),
+    reasoning: z.string().optional(),
     error: z.boolean().optional(),
     images: z.array(z.object({ path: z.string(), mime: z.string() })).optional(),
     references: z.array(messageFileReferenceSchema).max(64).optional()
@@ -155,6 +160,7 @@ export const eventPayloadSchemas = {
     pid: z.number().int().positive()
   }),
   'usage.recorded': z.object({
+    messageId: z.string().optional(),
     provider: z.string(),
     model: z.string(),
     inputTokens: z.number().nonnegative(),

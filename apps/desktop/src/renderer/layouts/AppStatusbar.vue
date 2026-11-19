@@ -152,8 +152,8 @@ const selectTheme = (key: string | number): void => {
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  border-top: 1px solid var(--nh-color-border);
-  background: var(--nh-color-bg-elevated);
+  border-top: 1px solid var(--nh-border-subtle);
+  background: var(--nh-surface-elevated);
   box-shadow: var(--nh-highlight);
   font-size: 12px;
 }

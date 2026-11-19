@@ -452,4 +452,100 @@ describe('projectEvents', () => {
       content: '认证失败\n\nPROVIDER_UNAUTHORIZED'
     });
   });
+
+  it('renders legacy run failures without message.completed', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'run.started',
+        payload: { model: 'mock-model' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'run.failed',
+        payload: { error: { code: 'PROVIDER_TIMEOUT', message: '请求超时' } }
+      })
+    ]);
+
+    expect(projection.status).toBe('failed');
+    expect(projection.messages[0]).toMatchObject({
+      role: 'assistant',
+      content: '请求超时\n\nPROVIDER_TIMEOUT'
+    });
+  });
+
+  it('projects reasoning deltas onto the assistant message', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'run.started',
+        payload: { model: 'mock-model' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'message.reasoning.delta',
+        payload: { messageId: 'assistant-1', text: '先分析' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'message.completed',
+        payload: {
+          messageId: 'assistant-1',
+          role: 'assistant',
+          content: '答案',
+          reasoning: '先分析'
+        }
+      })
+    ]);
+
+    expect(projection.messages[0]).toMatchObject({
+      role: 'assistant',
+      content: '答案',
+      reasoning: '先分析'
+    });
+  });
+
+  it('attaches usage arriving before the assistant message', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'run.started',
+        payload: { model: 'mock-model' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'usage.recorded',
+        payload: {
+          messageId: 'assistant-1',
+          provider: 'mock',
+          model: 'mock-model',
+          inputTokens: 10,
+          outputTokens: 5
+        }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'message.completed',
+        payload: { messageId: 'assistant-1', role: 'assistant', content: 'ok' }
+      })
+    ]);
+
+    expect(projection.messages[0]?.usage).toMatchObject({ inputTokens: 10, outputTokens: 5 });
+  });
 });

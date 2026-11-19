@@ -48,6 +48,12 @@ export const cancelAgent = async (runId: string): Promise<AgentCancelResult> =>
   unwrap(await nexus.agent.cancel(runId));
 
 /**
+ * 按会话取消 Run；即使渲染层尚未拿到 runId 也能停止。
+ */
+export const cancelAgentSession = async (sessionId: string): Promise<AgentCancelResult> =>
+  unwrap(await nexus.agent.cancelSession(sessionId));
+
+/**
  * 解决审批。
  */
 export const resolveApproval = async (

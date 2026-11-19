@@ -172,7 +172,7 @@ onMounted(load);
   align-items: center;
   gap: 12px;
   padding: 16px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 12px;
   background: color-mix(in srgb, var(--nh-color-bg-elevated) 55%, transparent);
 }
@@ -227,7 +227,7 @@ onMounted(load);
 
 .nh-cache__panel {
   overflow: hidden;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 12px;
   background: color-mix(in srgb, var(--nh-color-bg-elevated) 55%, transparent);
 }
@@ -240,7 +240,7 @@ onMounted(load);
 }
 
 .nh-cache__row + .nh-cache__row {
-  border-top: 1px solid var(--nh-color-border);
+  border-top: 1px solid var(--nh-border-subtle);
 }
 
 .nh-cache__icon {

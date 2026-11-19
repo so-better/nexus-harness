@@ -65,7 +65,7 @@ const parts = computed(() => {
   align-items: center;
   gap: 5px;
   padding: 3px 7px;
-  border: 1px solid color-mix(in srgb, var(--nh-color-accent) 14%, var(--nh-color-border));
+  border: 1px solid color-mix(in srgb, var(--nh-color-accent) 14%, var(--nh-border-subtle));
   border-radius: 6px;
   background: color-mix(in srgb, var(--nh-color-bg-base) 72%, transparent);
   color: var(--nh-color-text-secondary);

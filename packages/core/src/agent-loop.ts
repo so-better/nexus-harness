@@ -156,17 +156,19 @@ export class AgentLoop {
 
       this.toolCallCount += result.toolCalls.length;
 
-      if (result.text || result.toolCalls.length) {
+      if (result.text || result.reasoning || result.toolCalls.length) {
         const assistantMessage: ChatMessage = {
           role: 'assistant',
           content: result.text,
+          ...(result.reasoning ? { reasoning: result.reasoning } : {}),
           ...(result.toolCalls.length ? { toolCalls: result.toolCalls } : {})
         };
         this.messages.push(assistantMessage);
         this.emit('message.completed', {
           messageId: assistantMessageId,
           role: 'assistant',
-          content: result.text
+          content: result.text,
+          ...(result.reasoning ? { reasoning: result.reasoning } : {})
         });
       }
 
@@ -280,6 +282,7 @@ export class AgentLoop {
    */
   private async runStep(messageId: string): Promise<{
     text: string;
+    reasoning: string;
     toolCalls: ProviderToolCall[];
     finishReason: string;
     error?: { code: string; message: string };
@@ -294,16 +297,28 @@ export class AgentLoop {
     };
 
     let text = '';
+    let reasoning = '';
     let finishReason = 'stop';
     let error: { code: string; message: string } | undefined;
     const toolCalls: ProviderToolCall[] = [];
     let deltaBuffer = '';
     let lastDeltaAt = 0;
     let flushedDelta = false;
+    let reasoningBuffer = '';
+    let lastReasoningAt = 0;
+    let flushedReasoning = false;
 
     /**
      * 首个增量立即下发保证首字延迟，后续按时间/长度合并后持久化。
      */
+    const flushReasoning = (): void => {
+      if (!reasoningBuffer) return;
+      this.emit('message.reasoning.delta', { messageId, text: reasoningBuffer });
+      reasoningBuffer = '';
+      lastReasoningAt = Date.now();
+      flushedReasoning = true;
+    };
+
     const flushDelta = (): void => {
       if (!deltaBuffer) return;
       this.emit('message.delta', { messageId, text: deltaBuffer });
@@ -315,6 +330,20 @@ export class AgentLoop {
     try {
       for await (const event of this.options.provider.stream(request)) {
         switch (event.type) {
+          case 'reasoning-delta':
+            reasoning += event.text;
+            if (event.text) {
+              reasoningBuffer += event.text;
+              const now = Date.now();
+              if (
+                !flushedReasoning ||
+                reasoningBuffer.length >= 96 ||
+                (lastReasoningAt > 0 && now - lastReasoningAt >= 80)
+              ) {
+                flushReasoning();
+              }
+            }
+            break;
           case 'text-delta':
             text += event.text;
             if (event.text) {
@@ -335,6 +364,7 @@ export class AgentLoop {
           case 'usage':
             if (this.options.providerName) {
               this.emit('usage.recorded', {
+                messageId,
                 provider: this.options.providerName,
                 model: this.options.model,
                 inputTokens: event.usage.inputTokens,
@@ -362,8 +392,9 @@ export class AgentLoop {
       };
     }
 
+    flushReasoning();
     flushDelta();
-    return { text, toolCalls, finishReason, ...(error ? { error } : {}) };
+    return { text, reasoning, toolCalls, finishReason, ...(error ? { error } : {}) };
   }
 
   /**

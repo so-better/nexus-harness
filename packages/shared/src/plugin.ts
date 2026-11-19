@@ -22,7 +22,6 @@ export const PLUGIN_SLOT_LOCATIONS = [
   'message.user.actions',
   'toolcall.body',
   'toolcall.footer',
-  'approval.details',
   'terminal.toolbar',
   'filecard.actions',
   'filecard.footer'

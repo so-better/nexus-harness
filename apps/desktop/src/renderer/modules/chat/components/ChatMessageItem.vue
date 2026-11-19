@@ -11,6 +11,8 @@
   <article
     v-else-if="
       message.content ||
+      message.reasoning ||
+      message.streaming ||
       message.references?.length ||
       displayToolCalls.length ||
       askUsers.length ||
@@ -27,6 +29,8 @@
       <div
         v-if="
           message.content ||
+          message.reasoning ||
+          message.streaming ||
           message.references?.length ||
           displayToolCalls.length ||
           askUsers.length ||
@@ -50,15 +54,22 @@
             @keydown.meta.enter.prevent="saveEdit"
           />
           <div class="nh-message__edit-actions">
-            <NButton size="small" @click="cancelEdit">{{ t('chat.askUserCancel') }}</NButton>
-            <NButton size="small" type="primary" :disabled="!draft.trim()" @click="saveEdit">
+            <NButton size="small" secondary @click="cancelEdit">{{
+              t('chat.askUserCancel')
+            }}</NButton>
+            <NButton
+              size="small"
+              type="primary"
+              secondary
+              :disabled="!draft.trim()"
+              @click="saveEdit"
+            >
               {{ t('app.send') }}
             </NButton>
           </div>
         </template>
-        <template v-else>
+        <template v-if="message.role === 'assistant'">
           <PluginSlot
-            v-if="message.role === 'assistant'"
             location="message.assistant.header"
             :context="{
               location: 'message.assistant.header',
@@ -78,14 +89,42 @@
             @submit="(answers) => submitAsk(ask, answers)"
             @cancel="cancelAsk(ask)"
           />
-          <UserMessageContent
-            v-if="message.role === 'user' && (message.content || message.references?.length)"
-            :content="message.content"
-            :references="message.references"
+          <div v-if="message.reasoning" class="nh-message__reasoning">
+            <NButton
+              text
+              block
+              class="nh-message__reasoning-header"
+              @click="reasoningOpen = !reasoningOpen"
+            >
+              <span class="nh-message__reasoning-main">
+                <AppIcon
+                  :name="thinking ? 'loader' : 'lightbulb'"
+                  :size="14"
+                  :class="{ 'nh-message__reasoning-spin': thinking }"
+                />
+                {{ thinking ? t('chat.thinking') : t('chat.reasoning') }}
+              </span>
+              <AppIcon :name="reasoningOpen ? 'chevron-up' : 'chevron-down'" :size="14" />
+            </NButton>
+            <div v-show="reasoningOpen" class="nh-message__reasoning-body">
+              <MarkdownContent :content="message.reasoning" :streaming="thinking" />
+            </div>
+          </div>
+
+          <div
+            v-if="isTyping && !message.content && !message.reasoning"
+            class="nh-message__thinking"
+          >
+            <span />
+            <span />
+            <span />
+          </div>
+          <MarkdownSegments
+            v-else-if="message.content"
+            :content="contentText"
+            :streaming="isTyping"
           />
-          <p v-else-if="message.content" class="nh-message__content">
-            {{ contentText }}<span v-if="isTyping" class="nh-message__caret" />
-          </p>
+
           <div
             v-if="message.files?.length"
             class="nh-message__files"
@@ -104,8 +143,19 @@
               :key="tool.id"
               class="nh-message__tool-entry"
               :data-tool-call-id="tool.id"
+              :data-workspace-auth-id="
+                isWorkspaceAuthTool(tool.id) ? relatedWorkspaceAuth?.requestId : undefined
+              "
             >
+              <WorkspaceAuthCard
+                v-if="relatedWorkspaceAuth && relatedWorkspaceAuth.toolCallId === tool.id"
+                :data-workspace-auth-id="relatedWorkspaceAuth?.requestId"
+                :request="relatedWorkspaceAuth"
+                @allow="emit('allow-workspace')"
+                @reject="emit('reject-workspace')"
+              />
               <ToolCallCard
+                v-if="!isToolInterruption(tool)"
                 :tool="tool"
                 flush
                 :session-id="sessionId"
@@ -116,7 +166,6 @@
               <ApprovalCard
                 v-for="approval in approvalForTool(tool)"
                 :key="approval.id"
-                inline
                 :approval="approval"
                 :tool="tool"
                 :session-id="sessionId"
@@ -129,8 +178,23 @@
             </div>
           </div>
 
+          <WorkspaceAuthCard
+            v-if="orphanWorkspaceAuth"
+            :data-workspace-auth-id="orphanWorkspaceAuth.requestId"
+            :request="orphanWorkspaceAuth"
+            @allow="emit('allow-workspace')"
+            @reject="emit('reject-workspace')"
+          />
+          <AskUserCard
+            v-for="ask in otherAsks"
+            :key="ask.requestId"
+            class="nh-message__ask"
+            embedded
+            :ask="ask"
+            @submit="(answers) => submitAsk(ask, answers)"
+            @cancel="cancelAsk(ask)"
+          />
           <PluginSlot
-            v-if="message.role === 'assistant'"
             location="message.assistant.footer"
             :context="{
               location: 'message.assistant.footer',
@@ -141,8 +205,15 @@
               usage: message.usage
             }"
           />
+        </template>
+
+        <template v-else>
+          <UserMessageContent
+            v-if="message.content || message.references?.length"
+            :content="message.content"
+            :references="message.references"
+          />
           <PluginSlot
-            v-if="message.role === 'user'"
             location="message.user.footer"
             :context="{
               location: 'message.user.footer',
@@ -151,15 +222,6 @@
               runId: message.runId,
               role: 'user'
             }"
-          />
-          <AskUserCard
-            v-for="ask in otherAsks"
-            :key="ask.requestId"
-            class="nh-message__ask"
-            embedded
-            :ask="ask"
-            @submit="(answers) => submitAsk(ask, answers)"
-            @cancel="cancelAsk(ask)"
           />
         </template>
       </div>
@@ -235,6 +297,7 @@ import { t } from '@/app/i18n';
 import type { AskUserAnswer } from '@shared/ask-user';
 import type { MessageFileReference } from '@shared/events';
 import type { ChatApproval, ChatAskUser, ChatMessageView, ChatToolCall } from '../types';
+import type { WorkspaceAuthorizationRequest } from '@shared/ipc/contracts';
 import AppIcon from '@/components/AppIcon.vue';
 import ApprovalCard from './ApprovalCard.vue';
 import AskUserCard from './AskUserCard.vue';
@@ -242,6 +305,9 @@ import OutputFileCard from './OutputFileCard.vue';
 import ToolCallCard from './ToolCallCard.vue';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import UserMessageContent from './UserMessageContent.vue';
+import MarkdownSegments from '../render/MarkdownSegments.vue';
+import MarkdownContent from '../render/MarkdownContent.vue';
+import WorkspaceAuthCard from './WorkspaceAuthCard.vue';
 import { splitUserMessageReferences } from '../message-references';
 
 const props = withDefaults(
@@ -254,6 +320,8 @@ const props = withDefaults(
     sessionId?: string | undefined;
     isLastAssistant?: boolean;
     actionsDisabled?: boolean;
+    workspaceAuth?: WorkspaceAuthorizationRequest | null;
+    workspaceAuthToolExists?: boolean;
   }>(),
   {
     grouped: false,
@@ -262,7 +330,9 @@ const props = withDefaults(
     approvals: () => [],
     sessionId: undefined,
     isLastAssistant: false,
-    actionsDisabled: false
+    actionsDisabled: false,
+    workspaceAuth: null,
+    workspaceAuthToolExists: false
   }
 );
 
@@ -274,10 +344,13 @@ const emit = defineEmits<{
   'edit-message': [content: string, references?: MessageFileReference[]];
   'regenerate-message': [];
   'request-root': [];
+  'allow-workspace': [];
+  'reject-workspace': [];
 }>();
 
 const messageApi = useMessage();
 const editing = ref(false);
+const reasoningOpen = ref(true);
 const draft = ref('');
 const editingReferences = ref<MessageFileReference[]>([]);
 const editInput = ref<InputInst | null>(null);
@@ -395,6 +468,28 @@ const otherAsks = computed(() => props.askUsers.filter((ask) => ask.status !== '
 const displayToolCalls = computed(() =>
   props.message.toolCalls.filter((tool) => tool.name !== 'ask_user' && tool.name !== 'save_file')
 );
+const relatedWorkspaceAuth = computed<WorkspaceAuthorizationRequest | null>(() => {
+  const request = props.workspaceAuth;
+  return request && request.sessionId === props.sessionId ? request : null;
+});
+
+const isWorkspaceAuthTool = (toolId: string): boolean =>
+  relatedWorkspaceAuth.value?.toolCallId === toolId;
+
+/**
+ * 审批或目录授权等待时隐藏工具调用行，只展示正在等待用户处理的确认卡。
+ */
+const isToolInterruption = (tool: ChatToolCall): boolean =>
+  isWorkspaceAuthTool(tool.id) || approvalForTool(tool).length > 0;
+
+/**
+ * 工具调用尚未投影到界面时，授权卡仍必须可见，不能因为 ID 匹配失败而消失。
+ */
+const orphanWorkspaceAuth = computed<WorkspaceAuthorizationRequest | null>(() => {
+  const request = relatedWorkspaceAuth.value;
+  if (!request || !props.isLastAssistant || props.workspaceAuthToolExists) return null;
+  return request;
+});
 
 const contentText = computed(() =>
   props.message.role === 'assistant' ? visibleContent.value : props.message.content
@@ -404,6 +499,7 @@ const isTyping = computed(
     props.message.role === 'assistant' &&
     (props.message.streaming === true || visibleContent.value !== props.message.content)
 );
+const thinking = computed(() => isTyping.value && !props.message.content);
 
 watch(
   () => props.message.content,
@@ -481,14 +577,38 @@ const timeLabel = computed(() =>
   max-width: 100%;
 }
 
+.nh-message__actions {
+  display: flex;
+  min-height: 24px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+}
+
+.nh-message--assistant .nh-message__actions {
+  justify-content: flex-start;
+}
+
 .nh-message__time {
   color: var(--nh-color-text-disabled);
   font-size: 12px;
 }
 
+.nh-message--assistant .nh-message__time {
+  margin-left: auto;
+}
+
+.nh-message--user .nh-message__actions {
+  justify-content: flex-end;
+}
+
+.nh-message__actions :deep(.n-button) {
+  font-size: 12px;
+}
+
 .nh-message__bubble {
-  --bubble-bg: color-mix(in srgb, var(--nh-color-bg-elevated) 72%, transparent);
-  --bubble-border: var(--nh-color-border);
+  --bubble-bg: color-mix(in srgb, var(--nh-surface-elevated) 72%, transparent);
+  --bubble-border: var(--nh-border-subtle);
 
   position: relative;
   width: fit-content;
@@ -508,8 +628,8 @@ const timeLabel = computed(() =>
 }
 
 .nh-message--user .nh-message__bubble {
-  --bubble-bg: color-mix(in srgb, var(--nh-color-accent) 8%, var(--nh-color-bg-base));
-  --bubble-border: color-mix(in srgb, var(--nh-color-accent) 12%, var(--nh-color-border));
+  --bubble-bg: color-mix(in srgb, var(--nh-color-accent) 8%, var(--nh-surface-base));
+  --bubble-border: color-mix(in srgb, var(--nh-color-accent) 12%, var(--nh-border-subtle));
 
   border-top-right-radius: 0;
   box-shadow: var(--nh-highlight);
@@ -517,6 +637,13 @@ const timeLabel = computed(() =>
 
 .nh-message__bubble--editing {
   width: 100%;
+}
+
+.nh-message__edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .nh-message__content {
@@ -529,76 +656,83 @@ const timeLabel = computed(() =>
   text-wrap: pretty;
 }
 
-.nh-message__caret {
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  margin-left: 2px;
-  background: var(--nh-color-accent);
-  vertical-align: -0.12em;
-  animation: caret-blink 1s steps(2, start) infinite;
+.nh-message__reasoning {
+  margin-bottom: 10px;
+  overflow: hidden;
+  border: 1px solid var(--nh-border-subtle);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--nh-surface-elevated) 72%, transparent);
 }
 
-@keyframes caret-blink {
-  50% {
-    opacity: 0;
+.nh-message__reasoning-header {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  color: var(--nh-color-text-secondary);
+  font-size: 12px;
+}
+
+.nh-message__reasoning-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nh-message__reasoning-spin {
+  animation: nh-reasoning-spin 1.2s linear infinite;
+}
+
+.nh-message__reasoning-body {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 0 10px 10px;
+  color: var(--nh-color-text-secondary);
+  font-size: 12px;
+}
+
+@keyframes nh-reasoning-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
-.nh-message__files {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.nh-message__files--after-content {
-  margin-top: 9px;
-}
-
-.nh-message__tools {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 8px -5px -4px;
-}
-
-.nh-message__tool-entry {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.nh-message__tools--after-content {
-  margin-top: 9px;
-  padding-top: 7px;
-  border-top: 1px solid var(--nh-color-border);
-}
-
-.nh-message__ask {
-  margin-top: 9px;
-}
-
-.nh-message__ask--first {
-  margin-top: 0;
-  margin-bottom: 9px;
-}
-
-.nh-message__actions {
-  display: flex;
+.nh-message__thinking {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 6px;
+  gap: 5px;
+  padding: 4px 0;
 }
 
-.nh-message--user .nh-message__actions {
-  justify-content: flex-end;
+.nh-message__thinking span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--nh-color-accent);
+  animation: nh-message-thinking 1.2s ease-in-out infinite;
 }
 
-.nh-message__edit-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
+.nh-message__thinking span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.nh-message__thinking span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes nh-message-thinking {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
 }
 
 .nh-message--system {
@@ -609,9 +743,9 @@ const timeLabel = computed(() =>
   gap: 6px;
   margin: 0 auto;
   padding: 6px 12px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 12px;
-  background: var(--nh-color-bg-elevated);
+  background: var(--nh-surface-elevated);
   color: var(--nh-color-text-secondary);
   font-size: 12px;
   text-align: center;

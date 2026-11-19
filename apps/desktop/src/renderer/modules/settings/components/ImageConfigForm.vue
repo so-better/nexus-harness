@@ -235,7 +235,7 @@ const submit = (): void => {
   flex-direction: column;
   gap: 12px;
   padding: 16px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 12px;
   background: color-mix(in srgb, var(--nh-color-bg-elevated) 55%, transparent);
 }
@@ -276,7 +276,7 @@ const submit = (): void => {
 .nh-image-form__hint {
   margin: 0;
   padding-top: 8px;
-  border-top: 1px solid var(--nh-color-border);
+  border-top: 1px solid var(--nh-border-subtle);
   color: var(--nh-color-text-secondary);
   font-size: 12px;
   line-height: 1.5;
@@ -288,6 +288,6 @@ const submit = (): void => {
   justify-content: flex-end;
   gap: 8px;
   padding-top: 16px;
-  border-top: 1px solid var(--nh-color-border);
+  border-top: 1px solid var(--nh-border-subtle);
 }
 </style>

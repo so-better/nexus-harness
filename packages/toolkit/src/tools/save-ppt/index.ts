@@ -16,28 +16,70 @@ const pptDeckSchema = z
   .object({
     slides: z
       .array(
-        z
-          .object({
-            layout: z.enum([
-              'section',
-              'bullets',
-              'twoColumn',
-              'imageText',
-              'chart',
-              'table',
-              'kpi',
-              'quote',
-              'timeline',
-              'agenda',
-              'comparison',
-              'team',
-              'gallery',
-              'process',
-              'end'
-            ]),
-            title: z.string()
-          })
-          .passthrough()
+        z.object({
+          layout: z.enum([
+            'section',
+            'bullets',
+            'twoColumn',
+            'imageText',
+            'chart',
+            'table',
+            'kpi',
+            'quote',
+            'timeline',
+            'agenda',
+            'comparison',
+            'team',
+            'gallery',
+            'process',
+            'end'
+          ]),
+          title: z.string(),
+          subtitle: z.string().optional(),
+          items: z.array(z.string()).optional(),
+          left: z.array(z.string()).optional(),
+          right: z.array(z.string()).optional(),
+          text: z.array(z.string()).optional(),
+          image: z.string().optional(),
+          imageSide: z.enum(['left', 'right']).optional(),
+          chart: z
+            .object({
+              type: z.enum(['bar', 'line', 'area', 'pie', 'doughnut', 'radar']),
+              categories: z.array(z.string()),
+              series: z.array(z.object({ name: z.string(), values: z.array(z.number()) })).min(1)
+            })
+            .optional(),
+          table: z
+            .object({
+              headers: z.array(z.string()),
+              rows: z.array(z.array(z.string()))
+            })
+            .optional(),
+          kpis: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
+          quote: z.object({ text: z.string(), author: z.string().optional() }).optional(),
+          steps: z
+            .array(z.object({ title: z.string(), description: z.string().optional() }))
+            .optional(),
+          comparison: z
+            .object({
+              left: z.object({ title: z.string(), items: z.array(z.string()) }),
+              right: z.object({ title: z.string(), items: z.array(z.string()) })
+            })
+            .optional(),
+          team: z
+            .array(
+              z.object({
+                name: z.string(),
+                role: z.string().optional(),
+                avatar: z.string().optional()
+              })
+            )
+            .optional(),
+          gallery: z
+            .array(z.object({ image: z.string(), caption: z.string().optional() }))
+            .optional(),
+          notes: z.string().optional()
+        })
       )
       .min(1)
       .max(100),

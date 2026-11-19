@@ -148,7 +148,7 @@ onMounted(load);
   align-items: center;
   gap: 10px;
   padding: 14px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 10px;
   background: color-mix(in srgb, var(--nh-color-bg-elevated) 55%, transparent);
   color: var(--nh-color-text-primary);
@@ -161,7 +161,7 @@ onMounted(load);
 }
 
 .nh-theme-option:hover {
-  border-color: color-mix(in srgb, var(--nh-color-accent) 45%, var(--nh-color-border));
+  border-color: color-mix(in srgb, var(--nh-color-accent) 45%, var(--nh-border-subtle));
   background: color-mix(in srgb, var(--nh-color-accent) 3%, var(--nh-color-bg-base));
 }
 

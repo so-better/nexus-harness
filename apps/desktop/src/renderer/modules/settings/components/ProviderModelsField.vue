@@ -262,7 +262,7 @@ const updateModel = (
   width: 100%;
   margin-bottom: 0;
   padding: 10px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 8px;
   background: color-mix(in srgb, var(--nh-color-bg-elevated) 45%, transparent);
 }
@@ -300,7 +300,7 @@ const updateModel = (
   gap: 12px;
   min-height: 44px;
   padding: 12px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 10px;
   color: var(--nh-color-text-secondary);
   font-size: 12px;
@@ -323,7 +323,7 @@ const updateModel = (
   max-height: 320px;
   flex-direction: column;
   overflow: auto;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 10px;
 }
 
@@ -332,7 +332,7 @@ const updateModel = (
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
-  border-top: 1px solid var(--nh-color-border);
+  border-top: 1px solid var(--nh-border-subtle);
   transition: background var(--nh-duration-fast) var(--nh-ease-standard);
 }
 

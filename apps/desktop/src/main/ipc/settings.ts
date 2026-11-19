@@ -16,6 +16,7 @@ import {
 import { pluginSkinSelectionSchema, type PluginSkinSelection } from '@shared/plugin';
 import { fail, ok, type Result } from '@shared/ipc/result';
 import { imageSettingsSchema, type ImageSettings } from '@shared/image';
+import { searchSettingsSchema, type SearchSettings } from '@shared/search';
 import {
   applyAutoLaunch,
   loadAutoLaunch,
@@ -32,6 +33,7 @@ import {
 } from '../services/settings/notification-settings';
 import { loadSkinSelection, saveSkinSelection } from '../services/settings/skin-settings';
 import { loadImageSettings, saveImageSettings } from '../services/settings/image-settings';
+import { loadSearchSettings, saveSearchSettings } from '../services/settings/search-settings';
 import { clearCache, getCacheInfo } from '../services/cache/cache-service';
 import { getAppDataPaths } from '../services/storage/paths';
 import { hasActiveRuns } from '../services/agent/run-registry';
@@ -153,6 +155,36 @@ export const registerSettingsIpc = (): void => {
         return fail(
           'SETTINGS_WRITE_FAILED',
           error instanceof Error ? error.message : '保存图像模型配置失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.settingsGetSearch,
+    async (): Promise<Result<SearchSettings | null>> => {
+      try {
+        return ok(await loadSearchSettings());
+      } catch (error) {
+        return fail(
+          'SETTINGS_READ_FAILED',
+          error instanceof Error ? error.message : '读取搜索配置失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.settingsSetSearch,
+    async (_event, rawValue: unknown): Promise<Result<SearchSettings>> => {
+      const parsed = searchSettingsSchema.safeParse(rawValue);
+      if (!parsed.success) return fail('SETTINGS_INVALID_INPUT', '搜索配置不合法');
+      try {
+        return ok(await saveSearchSettings(parsed.data));
+      } catch (error) {
+        return fail(
+          'SETTINGS_WRITE_FAILED',
+          error instanceof Error ? error.message : '保存搜索配置失败'
         );
       }
     }

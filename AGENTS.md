@@ -271,7 +271,7 @@ Session   1 ── n Event
 | 契约校验 | zod | 4.x |
 | 打包 | electron-builder | 26.x |
 | 终端 | @xterm/xterm + node-pty | 6.x / 1.x |
-| Markdown | markdown-it + shiki | 15.x / 4.x |
+| Markdown | marked + DOMPurify + highlight.js + KaTeX + ECharts + Mermaid | 以 package.json 为准 |
 | 文档生成 | docx / exceljs / pptxgenjs / pdfkit | 9.x / 4.x / 4.x / 0.20.x |
 | LLM SDK | openai / @anthropic-ai/sdk | 7.x / 1.x |
 | MCP | @modelcontextprotocol/sdk | 1.x |
@@ -620,6 +620,7 @@ interface ProviderCapabilities {
 | `checkpoint` | write | 否（系统内部） |
 | `save_file` | write | 否（写入 `files`） |
 | `save_word` / `save_excel` / `save_ppt` / `save_pdf` | write | 否（写入 `files`） |
+| `search_images` / `search_videos` | network | 是 |
 | `generate_image` | network | 是（计费操作） |
 
 `save_*` 工具写入 `<userData>/files`，不触发工作区写审批，但必须记录 `file.created` 并受大小与类型限制。`save_file` 支持文本与 Base64 二进制内容；`save_word` / `save_pdf` 使用 Markdown，`save_ppt` 支持模板化版式。
@@ -715,7 +716,7 @@ interface ProviderCapabilities {
 路径与命令安全：
 
 - 允许路径 = Workspace root（Session RootGrant）；所有路径经 `realpath` 解析后必须落在其中。
-- 访问未授权路径时弹窗：允许一次 / 允许本会话 / 拒绝；敏感目录不提供授权选项。
+- 访问未授权路径时在会话流内联展示授权卡：允许 / 拒绝；敏感目录不提供授权选项。
 - RootGrant 按会话隔离，写入 scope 事件；撤销或会话结束后立即失效。
 - 文件 root 只允许读写自身；只有目录 root 可以作为 `cwd` 或执行命令。
 - 符号链接经 `realpath` 后重新校验，目标越界需重新授权或拒绝。
@@ -734,13 +735,13 @@ interface ProviderCapabilities {
 
 Session 可以不绑定 Workspace，也没有 Session RootGrant；这是合法状态，不得阻止发送消息或开始 Run。
 
-- 空 scope 下 Run 仍可对话；只提供与本地路径无关的能力，当前不注册文件、命令等本地工具，也不创建检查点。
-- 允许路径集合为空，所有本地路径访问一律拒绝；不因模型请求自动发起授权。
+- 空 scope 下 Run 仍可对话；Build 模式文件与命令工具仍注入 schema，首次本地调用时根据工具参数中的绝对目标路径在会话流内联请求目录授权；无绝对路径时返回 `TOOL_WORKSPACE_REQUIRED`；Plan 模式不自动请求授权，需用户先在会话头选择工作区。
+- 用户授权目录后写入 Session RootGrant，并在同一次 Run 内继续执行；取消或授权失败则返回 `TOOL_WORKSPACE_REQUIRED`，不得静默扩大 scope。
 - 不注入工作区索引、项目规则或文件上下文；只使用对话内容、技能元信息与用户显式输入。
-- 若残留工具调用或模型要求本地操作，返回 `TOOL_WORKSPACE_REQUIRED`，不得静默扩大 scope。
-- 会话中途新增 root 或绑定工作区后，从下一次 Run 起按新 scope 注入工具；当前 Run 不动态扩权。
+- 同一 Run 内用户拒绝后不再重复请求；后续本地调用直接返回 `TOOL_WORKSPACE_REQUIRED`。
+- 用户主动新增 root 或绑定工作区后，从下一次 Run 起按新 scope 注入工具；工具内授权只对当前 Run 生效。
 - UI 显示「未选择工作区」，选择工作区是可选动作；发送条件只要求会话、Provider 与模型有效。
-- `workspaceId`、RootGrant 与检查点均保持为空；事件中如实记录空 scope，不伪造路径。
+- 未授权前 `workspaceId`、RootGrant 与检查点保持为空；授权成功后写入 `scope.granted` 并同步刷新会话 root。
 
 ### 4.4 技能系统
 
@@ -876,7 +877,6 @@ requires: [read, write, execute]
 | 消息 | `message.assistant.header` / `.footer` / `.actions` | AI 消息头、尾部、操作 |
 | 消息 | `message.user.footer` / `.actions` | 用户消息尾、操作 |
 | 工具 | `toolcall.body` / `toolcall.footer` | 工具调用内容与尾部 |
-| 审批 | `approval.details` | 审批详情附加信息 |
 | 工作区 | `terminal.toolbar` | 终端工具条 |
 | 文件 | `filecard.actions` / `filecard.footer` | 输出文件卡片 |
 
@@ -1099,7 +1099,7 @@ export function activate(ctx) {
 ### 4.7.1 网络策略
 
 - 默认拒绝所有出站网络；按 provider、域名、端口显式放行。
-- 图像生成与 MCP HTTP 分别配置域名白名单；`localhost` 也需要显式允许。
+- 图像生成、媒体搜索与 MCP HTTP 分别配置域名白名单；`localhost` 也需要显式允许。
 - URL 经 DNS 解析后拒绝私网、回环、链路本地与云元数据地址；重定向每跳重新校验并限制次数。
 - 网络响应设置大小与超时上限；大文件流式写入 `files`，不整体载入内存。
 - 用户配置的 Base URL、图像模板与 MCP HTTP 地址同样做 SSRF 校验。
@@ -1110,7 +1110,7 @@ export function activate(ctx) {
 
 - 设置分三个层级，优先级为 **Session > Workspace > App**；读取时逐层合并，写入时记录 scope。
 - 设置分类：通用、模型与提供商、终端、外观、缓存、权限与审批、快捷键、高级；终端设置包含 shell、字号、滚回、选中即复制与 WebGL；字体使用默认等宽字体，默认字号 12px，自动检测的 shell 路径需回显。
-- 模型与提供商：对话 Provider 保持 Base URL、API Key、模型名、能力声明、上下文窗口、token 价格、`extra_params` 与自定义 headers；图像模型在独立入口配置完整请求 URL、模型、Key、headers、请求体模板与结果路径。
+- 模型与提供商：对话 Provider 保持 Base URL、API Key、模型名、能力声明、上下文窗口、token 价格、`extra_params` 与自定义 headers；图像模型在独立入口配置完整请求 URL、模型、Key、headers、请求体模板与结果路径；媒体搜索在通用设置中配置 Pexels API Key。
 - 支持连接测试与模型列表刷新；API Key 随本地 Provider 配置保存；不写死默认模型。
 - 图像模型可选；未配置时不注册 `generate_image`，设置页提供引导。
 - 权限与审批：默认审批策略、命令白名单、敏感路径策略、工作区信任管理。
@@ -1277,9 +1277,14 @@ interface AskUserAnswer {
  * 背景与表面
  */
 --nh-color-bg-base: #ffffff;
---nh-color-bg-elevated: #fbfcfe;
+--nh-color-bg-elevated: #f8fafc;
+--nh-color-bg-modal: #ffffff;
 --nh-color-bg-popover: #ffffff;
+--nh-border-subtle: #e6ebf2;
+--nh-input-bg: #ffffff;
 --nh-color-bg-hover: #f1f6fc;
+--nh-color-code-bg: #0b1220;
+--nh-color-code-text: #dfe9f8;
 
 /**
  * 文本
@@ -1647,7 +1652,7 @@ pnpm rebuild:native # 为 Electron 重建 node-pty
 | M0 | 规范、monorepo 骨架、electron-vite + Vue、类型化 IPC、深浅主题与动效 token、布局占位、事件总线与扩展点骨架、CI 门禁 |
 | M1 | 单 Agent 闭环：多提供商、流式对话、工具调用、审批、多会话与重命名/置顶、自动标题、消息编辑/重生成/停止、可选工作区与路径授权、事件流持久化、文件输出与另存为、读改跑测验证 |
 | M2 | 文件修改审批强化：写文件与执行命令前展示路径、命令、cwd、实际 diff 或写入内容与影响范围；输入框 `@` 文件引用与轻量索引，普通文件插入路径、图片读取并作为视觉内容发送；内置终端面板（xterm + node-pty，多标签、拖拽宽度、关闭确认与右键菜单），AI 命令直接创建终端标签；跨会话搜索；会话导出；后台通知。明确不做文件树、Monaco、文件 IDE、Git 集成、独立变更审阅面板与回滚 UI |
-| M3 | 工具完善、图像生成、Office 生成、本地二进制文件读取与按类型处理、Skill/MCP 目录扫描与注册；媒体搜索暂不内置，后续通过 MCP 或 Skill 扩展 |
+| M3 | 工具完善、图像生成、Office 生成、媒体搜索、本地二进制文件读取与按类型处理、Skill/MCP 目录扫描与注册 |
 | M4 | 插件宿主、目录扫描、Extensions 管理页、`token-usage` 示例 |
 | M5 | 产品化打包：发布流水线、签名、公证、自动更新、崩溃恢复 |
 
@@ -1658,7 +1663,7 @@ pnpm rebuild:native # 为 Electron 重建 node-pty
 | M0 | 应用可启动；深浅主题可切换；IPC 往返成功；事件总线与插槽注册表骨架可用；`typecheck`、`lint` 全绿；渲染层无 Node 访问 |
 | M1 | 完成 3 个任务（代码修复、文档修改、脚本数据处理，可用临时会话）；未授权路径触发授权；多会话切换不中断后台 Run；标题可自动生成、重命名与置顶；消息可编辑重发、重新生成与停止；AI 输出文件可另存；重启后会话与工作区可恢复 |
 | M2 | 文件与命令审批展示真实路径、参数、cwd、diff/写入内容和影响范围；`@` 可在工作区内检索文件并尊重 `.gitignore`，图片按视觉内容发送；内置终端默认使用工作区目录，无工作区时使用根目录；状态栏可打开终端面板，支持多标签、拖拽宽度、搜索、指定目录、拖入文件、关闭运行中终端二次确认；AI 命令在终端标签中执行；跨会话搜索可跳转；会话可导出；后台完成/失败有系统通知 |
-| M3 | 工具覆盖既定清单；图像模型可配置并生成图片；Office 文件可用；本地二进制文件可按类型读取、转文本或按文件引用处理，不把原始二进制塞入上下文；`<userData>/mcp` 可自动扫描接入；`<userData>/skills` 可自动注册并通过 `/skill` 调用 |
+| M3 | 工具覆盖既定清单；图像模型可配置并生成图片；Office 文件与媒体搜索可用；本地二进制文件可按类型读取、转文本或按文件引用处理，不把原始二进制塞入上下文；`<userData>/mcp` 可自动扫描接入；`<userData>/skills` 可自动注册并通过 `/skill` 调用 |
 | M4 | 将示例插件放入 `<userData>/plugins` 后自动注册；可启用/禁用；越权调用被拒绝；热重载不残留副作用 |
 | M5 | dmg 与 nsis 可安装；签名与公证通过；自动更新可用；崩溃恢复不丢事件；性能达标 |
 
@@ -1716,10 +1721,10 @@ CHANGELOG.md         # 版本变更记录
 | 工作区模型 | 可选 | Session 可无工作区；Scope = workspace + 唯一工作区目录 |
 | 设置优先级 | 已定 | Session > Workspace > App |
 | 路由 | 不引入 | 单主窗口 + 弹窗，视图由导航状态驱动 |
-| 路径授权 | 会话级 | 未授权路径弹窗，敏感目录始终拒绝 |
+| 路径授权 | 会话级 | 会话流内联授权卡，按目标路径请求，敏感目录始终拒绝 |
 | 检查点 | 逐文件快照 | 不依赖 git，工作区与临时会话通用 |
 | AI 输出文件 | `<userData>/files` | 永久保留，手动清理；仅通过 fileId 另存为 |
-| Office 工具 | 核心工具 | `save_*` 内置；媒体搜索不内置，后续通过 MCP 或 Skill 扩展 |
+| Office/媒体工具 | 核心工具 | `save_*` 与 Pexels 图片/视频搜索内置 |
 | Prompt 策略 | 静态前缀 + 动态追加 | 动态上下文追加到用户消息，保护 prompt cache |
 | Prompt 行为 | 内置约束 | 反幻觉、工具诚实、链接真实性、文件生成自检 |
 | 图像生成 | 工具化 | 独立图像模板（URL + body + result + 可选 poll），文本模型通过 `generate_image` 调用 |
@@ -1744,7 +1749,7 @@ CHANGELOG.md         # 版本变更记录
 | 跨会话搜索 | SQLite FTS5 | 消息正文；结果附会话标题与定位信息 |
 | 网络访问 | 默认拒绝 | 按 provider / 域名显式放行 |
 | 发布 | 签名 + 自动更新 | stable / beta 双通道 |
-| 网络工具 | 不内置 | 后续通过 MCP 或 Skill 扩展 |
+| 网络工具 | 仅内置媒体搜索 | Pexels API Key 本地配置；其他网络能力后续通过 MCP 或 Skill 扩展 |
 | MCP 接入时机 | M3 | 先支持本地 stdio Server |
 | 高风险插件权限 | 需单独评审 | `workspace:write`、`tools:register`、`network` 默认关闭 |
 | 自动更新渠道 | M5 | stable / beta 双通道 |
@@ -1778,7 +1783,7 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 上下文压缩保留不可压缩内容，写入 `context.compacted`，失败可降级为硬截断。
 - [ ] 系统提示包含反幻觉、工具诚实、链接真实性与文件生成自检约束。
 - [ ] 路径访问基于 Workspace root + Session RootGrant，未授权路径必须走授权流程。
-- [ ] 无工作区会话可正常发送与对话；不注册本地工具、不创建检查点，越界调用返回 `TOOL_WORKSPACE_REQUIRED`。
+- [ ] 无工作区会话可正常发送与对话；首次本地工具调用可请求目录授权，取消后返回 `TOOL_WORKSPACE_REQUIRED`。
 - [ ] RootGrant 按会话隔离并写入事件，不跨会话继承。
 - [ ] AI 输出文件只写入 `<userData>/files`，默认永久保留、手动清理，仅通过 fileId 另存为。
 - [ ] 工具结果统一归一化，文件与媒体落盘并记录来源，不把二进制直接塞进上下文。
@@ -1846,8 +1851,9 @@ CHANGELOG.md         # 版本变更记录
 | `run.interrupted` | `runId`、`reason` | 应用中断或崩溃后恢复 |
 | `run.budget.exceeded` | `runId`、`budget`、`threshold`、`action` | 预算触发，记录继续或停止 |
 | `run.no_progress` | `runId`、`reason` | 连续无进展，暂停等待用户 |
+| `message.reasoning.delta` | `messageId`、`text` | 推理内容增量，仅用于展示与导出 |
 | `message.delta` | `messageId`、`text` | 流式文本增量 |
-| `message.completed` | `messageId`、`content` | 消息完成 |
+| `message.completed` | `messageId`、`content`、`reasoning` | 消息完成 |
 | `message.edited` | `messageId`、`content` | 用户编辑消息 |
 | `message.regenerated` | `messageId`、`sourceMessageId` | 重新生成回复 |
 | `message.superseded` | `messageId`、`reason` | 旧回复被编辑或重生成替代 |

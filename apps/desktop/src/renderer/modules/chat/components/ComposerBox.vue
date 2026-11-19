@@ -30,34 +30,48 @@
       :searching="searching"
       @select="selectReference"
     />
-    <div v-if="skillOpen && skillItems.length" class="nh-composer__skills">
-      <button
-        v-for="skill in skillItems"
-        :key="skill.id"
-        type="button"
-        class="nh-composer__skill"
-        @mousedown.prevent="chooseSkill(skill.id)"
-      >
-        <span class="nh-composer__skill-name">/{{ skill.id }}</span>
-        <span class="nh-composer__skill-description">{{ skill.description }}</span>
-      </button>
-    </div>
     <PluginSlot
       v-if="sessionId"
       location="composer.above"
       :context="{ location: 'composer.above', sessionId, usage }"
     />
-    <NInput
-      ref="inputRef"
-      v-model:value="draft"
-      type="textarea"
-      :bordered="false"
-      :autosize="{ minRows: 2, maxRows: 6 }"
-      :placeholder="placeholder"
-      :disabled="disabled || running"
-      @keydown="onKeydown"
-      @blur="closeReferences"
-    />
+    <NPopover
+      :show="skillOpen && skillItems.length > 0"
+      trigger="manual"
+      placement="top-start"
+      :show-arrow="false"
+      :style="{ width: 'min(420px, calc(100vw - 48px))' }"
+    >
+      <template #trigger>
+        <NInput
+          ref="inputRef"
+          v-model:value="draft"
+          type="textarea"
+          :bordered="false"
+          :autosize="{ minRows: 2, maxRows: 6 }"
+          :placeholder="placeholder"
+          :disabled="disabled || running"
+          @keydown="onComposerKeydown"
+          @blur="onInputBlur"
+        />
+      </template>
+      <div ref="skillListRef" class="nh-composer__skills" role="listbox">
+        <button
+          v-for="(skill, index) in skillItems"
+          :key="skill.id"
+          type="button"
+          class="nh-composer__skill"
+          :class="{ 'nh-composer__skill--active': index === skillActiveIndex }"
+          role="option"
+          :aria-selected="index === skillActiveIndex"
+          @mouseenter="skillActiveIndex = index"
+          @mousedown.prevent="chooseSkill(skill.id)"
+        >
+          <span class="nh-composer__skill-name">/{{ skill.id }}</span>
+          <span class="nh-composer__skill-description">{{ skill.description }}</span>
+        </button>
+      </div>
+    </NPopover>
     <ComposerFileChips :files="selectedReferences" @remove="removeReference" />
     <PluginSlot
       v-if="sessionId"
@@ -82,8 +96,8 @@
  * 输入区：消息发送、文件引用和模型/工作区选择。
  */
 
-import { computed, ref, toRef, watch } from 'vue';
-import { NInput, type InputInst } from 'naive-ui';
+import { computed, nextTick, ref, toRef, watch } from 'vue';
+import { NInput, NPopover, type InputInst } from 'naive-ui';
 import type { MessageFileReference } from '@shared/events';
 import type { AgentMode, ProviderModel, ProviderPublic, SessionRoot } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
@@ -128,6 +142,9 @@ const emit = defineEmits<{
 const draft = ref('');
 const skillOpen = ref(false);
 const skillItems = ref<SkillSummary[]>([]);
+const skillActiveIndex = ref(0);
+const skillListRef = ref<HTMLElement | null>(null);
+let skillRequest = 0;
 const inputRef = ref<InputInst | null>(null);
 const placeholder = computed(() => t('chat.composerPlaceholder'));
 
@@ -135,14 +152,35 @@ const placeholder = computed(() => t('chat.composerPlaceholder'));
  * 输入 / 时展示 Skill；选中后由 Agent 以显式 Skill 方式激活。
  */
 watch(draft, async (value) => {
-  if (!/^\/[a-zA-Z0-9._-]*$/.test(value)) {
+  const match = /^\/([a-zA-Z0-9._-]*)$/.exec(value);
+  if (!match) {
     skillOpen.value = false;
     return;
   }
+  const query = (match[1] ?? '').toLowerCase();
+  const request = ++skillRequest;
   try {
-    skillItems.value = (await listSkills()).slice(0, 8);
+    const skills = await listSkills();
+    if (request !== skillRequest) return;
+    const filtered = skills
+      .filter(
+        (skill) =>
+          !query ||
+          skill.id.toLowerCase().includes(query) ||
+          skill.name.toLowerCase().includes(query) ||
+          skill.description.toLowerCase().includes(query) ||
+          skill.tags.some((tag) => tag.toLowerCase().includes(query))
+      )
+      .sort((a, b) => {
+        const aPrefix = a.id.toLowerCase().startsWith(query) ? 0 : 1;
+        const bPrefix = b.id.toLowerCase().startsWith(query) ? 0 : 1;
+        return aPrefix - bPrefix || a.id.localeCompare(b.id);
+      });
+    skillItems.value = filtered.slice(0, 8);
+    skillActiveIndex.value = 0;
     skillOpen.value = skillItems.value.length > 0;
   } catch {
+    if (request !== skillRequest) return;
     skillItems.value = [];
     skillOpen.value = false;
   }
@@ -152,6 +190,45 @@ const chooseSkill = (id: string): void => {
   draft.value = `/${id} `;
   skillOpen.value = false;
   inputRef.value?.focus();
+};
+
+const onComposerKeydown = (event: KeyboardEvent): void => {
+  if (skillOpen.value && skillItems.value.length) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      skillActiveIndex.value = (skillActiveIndex.value + 1) % skillItems.value.length;
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      skillActiveIndex.value =
+        (skillActiveIndex.value - 1 + skillItems.value.length) % skillItems.value.length;
+      return;
+    }
+    if (event.key === 'Enter' && !event.isComposing && !event.shiftKey) {
+      event.preventDefault();
+      const skill = skillItems.value[skillActiveIndex.value];
+      if (skill) chooseSkill(skill.id);
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      skillOpen.value = false;
+      return;
+    }
+  }
+  onKeydown(event);
+};
+
+watch(skillActiveIndex, async () => {
+  await nextTick();
+  const buttons = skillListRef.value?.querySelectorAll<HTMLElement>('.nh-composer__skill');
+  buttons?.[skillActiveIndex.value]?.scrollIntoView({ block: 'nearest' });
+});
+
+const onInputBlur = (): void => {
+  closeReferences();
+  skillOpen.value = false;
 };
 const { selectedReferences, addReference, removeReference, send } = useComposerReferences({
   draft,
@@ -219,9 +296,9 @@ const {
   max-width: 1040px;
   margin: 0 auto 24px;
   padding: 10px 12px 8px;
-  border: 1px solid var(--nh-color-border);
+  border: 1px solid var(--nh-border-subtle);
   border-radius: 16px;
-  background: var(--nh-color-bg-base);
+  background: var(--nh-surface-base);
   box-shadow: var(--nh-shadow-card);
   transition:
     border-color var(--nh-duration-fast) var(--nh-ease-standard),
@@ -229,7 +306,7 @@ const {
 }
 
 .nh-composer:focus-within {
-  border-color: color-mix(in srgb, var(--nh-color-accent) 45%, var(--nh-color-border));
+  border-color: color-mix(in srgb, var(--nh-color-accent) 45%, var(--nh-border-subtle));
   box-shadow:
     var(--nh-shadow-card),
     0 0 0 3px color-mix(in srgb, var(--nh-color-accent) 8%, transparent);
@@ -247,7 +324,7 @@ const {
   justify-content: space-between;
   gap: 8px;
   padding: 0 0 6px;
-  border-bottom: 1px solid var(--nh-color-border);
+  border-bottom: 1px solid var(--nh-border-subtle);
 }
 
 .nh-composer__toolbar-right {
@@ -259,12 +336,11 @@ const {
 
 .nh-composer__skills {
   display: flex;
+  max-height: 280px;
   flex-direction: column;
   gap: 2px;
-  padding: 6px;
-  border: 1px solid var(--nh-color-border);
-  border-radius: 9px;
-  background: var(--nh-color-bg-elevated);
+  overflow-y: auto;
+  padding: 2px;
 }
 
 .nh-composer__skill {
@@ -281,7 +357,8 @@ const {
   cursor: pointer;
 }
 
-.nh-composer__skill:hover {
+.nh-composer__skill:hover,
+.nh-composer__skill--active {
   background: var(--nh-color-bg-hover);
 }
 

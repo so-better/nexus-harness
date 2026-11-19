@@ -16,6 +16,7 @@ import {
   resolveForWrite,
   resolveWithinRoots,
   type FileToolContext,
+  type FileToolDefinition,
   type FileToolResult,
   type FileToolset
 } from '../internal';
@@ -29,6 +30,13 @@ const tools = {
   glob: { definition: globToolDefinition, run: runGlobTool },
   grep: { definition: grepToolDefinition, run: runGrepTool }
 } as const;
+
+/**
+ * 文件工具定义；无工作区时也注入 schema，首次调用再请求授权。
+ */
+export const fileToolDefinitions: FileToolDefinition[] = Object.values(tools).map(
+  (item) => item.definition
+);
 
 /**
  * 创建绑定到 roots 的文件工具集。
