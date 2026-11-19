@@ -6,7 +6,6 @@
     <div class="nh-authorization__body">
       <div class="nh-authorization__heading">
         <p class="nh-authorization__title">{{ title }}</p>
-        <slot name="title-extra" />
       </div>
       <slot />
       <p v-if="warning" class="nh-authorization__warning">{{ warning }}</p>

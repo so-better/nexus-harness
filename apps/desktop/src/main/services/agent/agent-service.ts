@@ -455,7 +455,6 @@ const askUserToolDefinition: AgentToolDefinition = {
           type: 'object',
           properties: {
             id: { type: 'string' },
-            header: { type: 'string' },
             question: { type: 'string' },
             options: {
               type: 'array',

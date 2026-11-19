@@ -6,9 +6,6 @@
     @approve="emit('approve')"
     @reject="emit('reject')"
   >
-    <template #title-extra>
-      <code v-if="tool" class="nh-approval-tool">{{ tool.name }}</code>
-    </template>
     <p v-if="!tool || approval.scope !== tool.name" class="nh-approval-scope">
       {{ approval.scope }}
     </p>
@@ -50,15 +47,6 @@ const title = computed(() => {
 </script>
 
 <style scoped lang="less">
-.nh-approval-tool {
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: var(--nh-color-bg-hover);
-  color: var(--nh-color-text-secondary);
-  font-family: var(--nh-font-mono);
-  font-size: 11px;
-}
-
 .nh-approval-scope {
   margin: 6px 0 0;
   color: var(--nh-color-text-secondary);

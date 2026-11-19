@@ -5,9 +5,7 @@
       <code class="nh-approval__value">{{ path }}</code>
     </div>
     <div v-if="command" class="nh-approval__field">
-      <span class="nh-approval__label">{{ t('chat.approvalCommand') }}</span>
       <pre class="nh-approval__pre nh-approval__pre--command">{{ command }}</pre>
-      <span v-if="cwd" class="nh-approval__hint">{{ t('chat.approvalCwd') }}: {{ cwd }}</span>
     </div>
     <div v-if="oldText !== undefined || newText !== undefined" class="nh-approval__field">
       <span class="nh-approval__label">{{ t('chat.approvalDiff') }}</span>
@@ -46,7 +44,6 @@ const stringValue = (key: string): string | undefined =>
   typeof input.value[key] === 'string' ? (input.value[key] as string) : undefined;
 const path = computed(() => stringValue('path'));
 const command = computed(() => stringValue('command'));
-const cwd = computed(() => stringValue('cwd'));
 const content = computed(() => stringValue('content'));
 const oldText = computed(() => stringValue('oldText'));
 const newText = computed(() => stringValue('newText'));
@@ -69,16 +66,20 @@ const inputPreview = computed(() => {
   margin-top: 9px;
 }
 
-.nh-approval__label,
-.nh-approval__hint {
+.nh-approval__label {
   color: var(--nh-color-text-secondary);
   font-size: 11px;
 }
 
 .nh-approval__value {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   color: var(--nh-color-text-secondary);
   font-family: var(--nh-font-mono);
   font-size: 11px;
+  line-height: 1.5;
 }
 
 .nh-approval__pre {

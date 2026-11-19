@@ -1,8 +1,5 @@
 <template>
   <div class="nh-ask-question">
-    <p v-if="question.header && !resolved" class="nh-ask-question__header">
-      {{ question.header }}
-    </p>
     <p class="nh-ask-question__text">
       {{ question.question }}
       <span v-if="question.required" class="nh-ask-question__required">*</span>
@@ -16,8 +13,6 @@
         class="nh-ask-option"
         :class="{ 'nh-ask-option--selected': isSelected(option.id) }"
         :aria-pressed="isSelected(option.id)"
-        :aria-disabled="disabled"
-        :disabled="disabled"
         @click="emit('toggle', option.id)"
       >
         <span class="nh-ask-option__indicator">
@@ -36,7 +31,6 @@
       v-if="!question.options?.length || question.allowOther"
       class="nh-ask-question__input"
       :value="text"
-      :disabled="disabled"
       :placeholder="t('chat.askUserOther')"
       @update:value="emit('update:text', $event)"
       @keydown.enter.exact.prevent="emit('submit')"
@@ -46,7 +40,7 @@
 
 <script setup lang="ts">
 /**
- * Ask User 单个问题：选项与自定义输入，只读时禁用交互。
+ * Ask User 单个问题：选项与自定义输入。
  */
 
 import { NInput } from 'naive-ui';
@@ -58,8 +52,6 @@ const props = defineProps<{
   question: AskQuestion;
   selectedIds: string[];
   text: string;
-  disabled: boolean;
-  resolved: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -81,13 +73,9 @@ const isSelected = (optionId: string): boolean => props.selectedIds.includes(opt
   gap: 7px;
 }
 
-.nh-ask-question__header {
-  color: var(--nh-color-accent);
-  font-size: 12px;
-}
-
 .nh-ask-question__text {
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 500;
   line-height: 1.6;
 }
 

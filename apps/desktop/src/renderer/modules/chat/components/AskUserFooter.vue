@@ -2,10 +2,10 @@
   <footer class="nh-ask-user__footer">
     <span v-if="showError" class="nh-ask-user__error">{{ t('chat.askUserRequired') }}</span>
     <div class="nh-ask-user__actions">
-      <NButton size="small" secondary @click="emit('cancel')">
+      <NButton secondary @click="emit('cancel')">
         {{ t('chat.askUserCancel') }}
       </NButton>
-      <NButton size="small" type="primary" secondary @click="emit('submit')">
+      <NButton type="primary" secondary @click="emit('submit')">
         {{ t('chat.askUserSubmit') }}
       </NButton>
     </div>

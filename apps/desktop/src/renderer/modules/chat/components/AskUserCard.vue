@@ -9,30 +9,44 @@
     </span>
 
     <div class="nh-ask-user__body">
-      <header v-if="!isResolved" class="nh-ask-user__header">
-        <p class="nh-ask-user__title">{{ statusTitle }}</p>
-        <p v-if="isPending" class="nh-ask-user__hint">{{ t('chat.askUserHint') }}</p>
-      </header>
+      <template v-if="isPending">
+        <AskUserQuestion
+          v-for="question in ask.questions"
+          :key="question.id"
+          :question="question"
+          :selected-ids="selected[question.id] ?? []"
+          :text="texts[question.id] ?? ''"
+          @toggle="toggleOption(question, $event)"
+          @update:text="texts[question.id] = $event"
+          @submit="submitAnswers"
+        />
 
-      <AskUserQuestion
-        v-for="question in ask.questions"
-        :key="question.id"
-        :question="question"
-        :selected-ids="selected[question.id] ?? []"
-        :text="texts[question.id] ?? ''"
-        :disabled="!isPending"
-        :resolved="isResolved"
-        @toggle="toggleOption(question, $event)"
-        @update:text="texts[question.id] = $event"
-        @submit="submitAnswers"
-      />
+        <AskUserFooter
+          :show-error="attempted && !canSubmit"
+          @cancel="emit('cancel')"
+          @submit="submitAnswers"
+        />
+      </template>
 
-      <AskUserFooter
-        v-if="isPending"
-        :show-error="attempted && !canSubmit"
-        @cancel="emit('cancel')"
-        @submit="submitAnswers"
-      />
+      <div v-else-if="isResolved" class="nh-ask-user__summary">
+        <p class="nh-ask-user__status nh-ask-user__status--done" role="status" aria-live="polite">
+          <AppIcon name="check" :size="13" />
+          {{ t('chat.askUserAnswered') }}
+        </p>
+        <dl class="nh-ask-user__answers">
+          <div v-for="entry in answerSummary" :key="entry.questionId" class="nh-ask-user__answer">
+            <dt class="nh-ask-user__answer-question">{{ entry.question }}</dt>
+            <dd class="nh-ask-user__answer-value">{{ entry.answer }}</dd>
+          </div>
+        </dl>
+      </div>
+
+      <div v-else class="nh-ask-user__summary">
+        <p class="nh-ask-user__status" role="status" aria-live="polite">
+          {{ t('chat.askUserCancelled') }}
+        </p>
+        <p class="nh-ask-user__cancelled-question">{{ cancelledQuestions }}</p>
+      </div>
     </div>
   </section>
 </template>
@@ -47,6 +61,7 @@ import type { AskQuestion, AskUserAnswer } from '@shared/ask-user';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import type { ChatAskUser } from '../types';
+import { buildAnswerSummary, joinQuestionTexts } from '../ask-user-summary';
 import AskUserFooter from './AskUserFooter.vue';
 import AskUserQuestion from './AskUserQuestion.vue';
 
@@ -68,6 +83,9 @@ for (const question of props.ask.questions) {
   selected[question.id] = [...(answer?.selectedOptionIds ?? [])];
   texts[question.id] = answer?.text ?? '';
 }
+
+const isPending = computed(() => props.ask.status === 'pending');
+const isResolved = computed(() => props.ask.status === 'resolved');
 
 /**
  * 单选替换，多选切换。
@@ -94,12 +112,17 @@ const canSubmit = computed(() =>
   props.ask.questions.every((question) => !question.required || hasAnswer(question))
 );
 
-const isPending = computed(() => props.ask.status === 'pending');
-const isResolved = computed(() => props.ask.status === 'resolved');
-const statusTitle = computed(() => {
-  if (props.ask.status === 'cancelled') return t('chat.askUserCancelled');
-  return t('chat.askUserTitle');
-});
+/**
+ * 已取消状态保留问题原文，便于回看当时被跳过的内容。
+ */
+const cancelledQuestions = computed(() => joinQuestionTexts(props.ask.questions));
+
+/**
+ * 已回答状态只回显问题与最终选择，避免重复铺开全部选项。
+ */
+const answerSummary = computed(() =>
+  buildAnswerSummary(props.ask.questions, props.ask.answers, t('chat.askUserNoAnswer'))
+);
 
 /**
  * Esc 只关闭仍待回答的提问，已回显的卡片不再触发取消。
@@ -174,24 +197,60 @@ const submitAnswers = (): void => {
   gap: 9px;
 }
 
-.nh-ask-user__header {
+.nh-ask-user__status {
+  margin: 0;
+  color: var(--nh-color-text-secondary);
+  font-size: 12px;
+}
+
+.nh-ask-user__cancelled-question {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: var(--nh-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.nh-ask-user__status--done {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--nh-color-success);
+}
+
+.nh-ask-user__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nh-ask-user__answers {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+}
+
+.nh-ask-user__answer {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.nh-ask-user__title,
-.nh-ask-user__hint {
+.nh-ask-user__answer-question {
   margin: 0;
-}
-
-.nh-ask-user__title {
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.nh-ask-user__hint {
   color: var(--nh-color-text-secondary);
   font-size: 12px;
+}
+
+.nh-ask-user__answer-value {
+  margin: 0;
+  color: var(--nh-color-text-primary);
+  font-size: 14px;
+  line-height: 1.5;
 }
 </style>

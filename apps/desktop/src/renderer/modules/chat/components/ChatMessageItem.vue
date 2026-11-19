@@ -16,7 +16,8 @@
       message.references?.length ||
       displayToolCalls.length ||
       askUsers.length ||
-      message.files?.length
+      message.files?.length ||
+      orphanWorkspaceAuth
     "
     class="nh-message"
     :class="[
@@ -34,12 +35,14 @@
           message.references?.length ||
           displayToolCalls.length ||
           askUsers.length ||
-          message.files?.length
+          message.files?.length ||
+          orphanWorkspaceAuth
         "
         class="nh-message__bubble"
         :class="{
           'nh-message__bubble--tools':
             displayToolCalls.length > 0 || askUsers.some((ask) => ask.status === 'pending'),
+          'nh-message__bubble--interruption': hasInterruption && !contentText,
           'nh-message__bubble--editing': editing
         }"
       >
@@ -491,6 +494,15 @@ const orphanWorkspaceAuth = computed<WorkspaceAuthorizationRequest | null>(() =>
   return request;
 });
 
+/**
+ * 需要用户确认时让消息气泡退场，把确认卡本身作为唯一焦点。
+ */
+const hasInterruption = computed(
+  () =>
+    Boolean(orphanWorkspaceAuth.value) ||
+    displayToolCalls.value.some((tool) => isToolInterruption(tool))
+);
+
 const contentText = computed(() =>
   props.message.role === 'assistant' ? visibleContent.value : props.message.content
 );
@@ -625,6 +637,13 @@ const timeLabel = computed(() =>
 
 .nh-message--assistant .nh-message__bubble--tools {
   width: 100%;
+}
+
+.nh-message--assistant .nh-message__bubble--interruption {
+  width: 100%;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
 }
 
 .nh-message--user .nh-message__bubble {

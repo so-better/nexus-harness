@@ -12,7 +12,6 @@ export const askQuestionOptionSchema = z.object({
 
 export const askQuestionSchema = z.object({
   id: z.string().min(1),
-  header: z.string().optional(),
   question: z.string().min(1),
   options: z.array(askQuestionOptionSchema).min(2).max(9).optional(),
   multiple: z.boolean().optional(),
