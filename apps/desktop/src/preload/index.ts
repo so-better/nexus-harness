@@ -4,7 +4,7 @@
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
-import type { NexusBridge, SessionSummary, ThemeInfo } from '@shared/ipc/contracts';
+import type { NexusBridge, SessionSummary, TerminalEvent, ThemeInfo } from '@shared/ipc/contracts';
 import type { NexusEvent } from '@shared/events';
 
 const bridge: NexusBridge = {
@@ -65,6 +65,21 @@ const bridge: NexusBridge = {
   },
   approval: {
     resolve: (input) => ipcRenderer.invoke(IPC_CHANNELS.approvalResolve, input)
+  },
+  terminal: {
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.terminalCreate, input),
+    write: (input) => ipcRenderer.invoke(IPC_CHANNELS.terminalWrite, input),
+    resize: (input) => ipcRenderer.invoke(IPC_CHANNELS.terminalResize, input),
+    close: (input) => ipcRenderer.invoke(IPC_CHANNELS.terminalClose, input),
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.terminalList),
+    busy: (input) => ipcRenderer.invoke(IPC_CHANNELS.terminalBusy, input),
+    onEvent: (handler) => {
+      const listener = (_event: IpcRendererEvent, payload: TerminalEvent): void => handler(payload);
+      ipcRenderer.on(IPC_CHANNELS.terminalEvent, listener);
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.terminalEvent, listener);
+      };
+    }
   },
   agent: {
     run: (input) => ipcRenderer.invoke(IPC_CHANNELS.agentRun, input),

@@ -130,6 +130,23 @@ export const eventPayloadSchemas = {
     decision: z.enum(['approved', 'rejected', 'expired']),
     reason: z.string().optional()
   }),
+  'terminal.opened': z.object({
+    terminalId: z.string(),
+    sessionId: z.string(),
+    cwd: z.string(),
+    pid: z.number().int().positive(),
+    shell: z.string()
+  }),
+  'terminal.closed': z.object({
+    terminalId: z.string(),
+    sessionId: z.string()
+  }),
+  'terminal.started': z.object({
+    terminalId: z.string(),
+    command: z.string(),
+    cwd: z.string(),
+    pid: z.number().int().positive()
+  }),
   'usage.recorded': z.object({
     provider: z.string(),
     model: z.string(),

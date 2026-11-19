@@ -22,7 +22,12 @@ import {
   type ChatProvider,
   type ProviderToolCall
 } from '@nexus/providers';
-import { createFileToolset, isSensitivePath } from '@nexus/tools';
+import {
+  createFileToolset,
+  detectDangerousCommand,
+  isSensitivePath,
+  runCommandInputSchema
+} from '@nexus/tools';
 import { appendFileReferences, imageMimeForName } from '@shared/files';
 import { ArtifactService } from '../artifacts/artifact-service';
 import { FileService } from '../files/file-service';
@@ -67,6 +72,7 @@ export interface AgentRunHooks {
     approvalId: string
   ) => Promise<boolean>;
   askUser?: (requestId: string, questions: AskQuestion[]) => Promise<AskUserAnswer[] | undefined>;
+  terminalOwnerId?: number;
 }
 
 /**
@@ -394,6 +400,105 @@ export class AgentService {
               message: '未选择工作区，无法执行本地文件或命令操作'
             }
           };
+        }
+
+        if (call.name === 'run_command' && process.versions.electron) {
+          const parsed = runCommandInputSchema.safeParse(call.arguments);
+          if (!parsed.success) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'COMMAND_INVALID_INPUT', message: '命令参数不合法' }
+            };
+          }
+          const danger = detectDangerousCommand(parsed.data.command);
+          if (danger) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'COMMAND_BLOCKED', message: danger }
+            };
+          }
+          try {
+            const cwd = await toolset.resolvePath(parsed.data.cwd ?? '.');
+            const { terminalService } = await import('../terminal/terminal-service');
+            const task = terminalService.startCommand({
+              sessionId: input.sessionId,
+              cwd,
+              command: parsed.data.command,
+              title: parsed.data.command.slice(0, 40),
+              ...(hooks.terminalOwnerId === undefined ? {} : { ownerId: hooks.terminalOwnerId }),
+              ...(parsed.data.timeoutMs === undefined ? {} : { timeoutMs: parsed.data.timeoutMs })
+            });
+            eventBus.publish(
+              createNexusEvent({
+                sessionId: input.sessionId,
+                runId,
+                seq: 1,
+                type: 'terminal.started',
+                payload: {
+                  terminalId: task.terminal.id,
+                  command: parsed.data.command,
+                  cwd,
+                  pid: task.terminal.pid
+                }
+              })
+            );
+            const abort = (): void => {
+              terminalService.close(task.terminal.id);
+            };
+            hooks.signal?.addEventListener('abort', abort, { once: true });
+            const result = await task.done;
+            hooks.signal?.removeEventListener('abort', abort);
+            if (hooks.signal?.aborted) {
+              return {
+                ok: false,
+                output: result.output,
+                error: { code: 'COMMAND_CANCELLED', message: '命令已取消' }
+              };
+            }
+            if (result.closed) {
+              return {
+                ok: false,
+                output: result.output,
+                error: { code: 'COMMAND_CANCELLED', message: '终端已关闭' }
+              };
+            }
+            if (result.timedOut) {
+              return {
+                ok: false,
+                output: result.output,
+                error: { code: 'COMMAND_TIMEOUT', message: '命令执行超时' }
+              };
+            }
+            if (result.truncated) {
+              return {
+                ok: false,
+                output: result.output,
+                error: { code: 'COMMAND_OUTPUT_TRUNCATED', message: '输出超限被截断' }
+              };
+            }
+            if (result.exitCode !== 0) {
+              return {
+                ok: false,
+                output: result.output,
+                error: {
+                  code: 'COMMAND_EXIT_NONZERO',
+                  message: `退出码 ${result.exitCode ?? 'unknown'}`
+                }
+              };
+            }
+            return { ok: true, output: result.output };
+          } catch (error) {
+            return {
+              ok: false,
+              output: '',
+              error: {
+                code: 'COMMAND_FAILED',
+                message: error instanceof Error ? error.message : '命令执行失败'
+              }
+            };
+          }
         }
 
         let checkpointInfo:

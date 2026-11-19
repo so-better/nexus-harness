@@ -25,6 +25,7 @@ import { EventStore } from '../services/session/event-store';
 import { SessionService } from '../services/session/session-service';
 import { searchSessions } from '../services/session/session-search';
 import { getDatabase } from '../services/storage/database';
+import { terminalService } from '../services/terminal/terminal-service';
 
 /**
  * 注册会话相关 IPC；数据库在 app ready 后已初始化。
@@ -134,7 +135,9 @@ export const registerSessionIpc = (): void => {
     if (busy) return fail('SESSION_BUSY', `会话有运行中的 Run：${busy.id}`);
 
     try {
-      return ok(sessions.removeAll());
+      const result = sessions.removeAll();
+      for (const session of items) terminalService.closeBySession(session.id);
+      return ok(result);
     } catch (error) {
       return fail('SESSION_CLEAR_FAILED', error instanceof Error ? error.message : '清除会话失败');
     }
@@ -266,6 +269,7 @@ export const registerSessionIpc = (): void => {
 
       try {
         sessions.remove(rawId);
+        terminalService.closeBySession(rawId);
         return ok({ id: rawId });
       } catch (error) {
         return fail(

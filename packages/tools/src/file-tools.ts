@@ -55,7 +55,7 @@ const applyPatchInput = z.object({
   newText: z.string().max(800_000)
 });
 
-const runCommandInput = z.object({
+export const runCommandInputSchema = z.object({
   command: z.string().min(1).max(10_000),
   cwd: z.string().optional(),
   timeoutMs: z.number().int().positive().max(120_000).optional()
@@ -252,10 +252,10 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /:\(\)\s*\{\s*:\|:&\s*\}\s*;:/, reason: '禁止 fork 炸弹' }
 ];
 
-const detectDangerousCommand = (command: string): string | undefined =>
+export const detectDangerousCommand = (command: string): string | undefined =>
   DANGEROUS_PATTERNS.find((item) => item.pattern.test(command))?.reason;
 
-const buildShellInvocation = (command: string): { file: string; args: string[] } => {
+export const buildShellInvocation = (command: string): { file: string; args: string[] } => {
   if (process.platform === 'win32') {
     return { file: 'powershell.exe', args: ['-NoProfile', '-NonInteractive', '-Command', command] };
   }
@@ -263,12 +263,33 @@ const buildShellInvocation = (command: string): { file: string; args: string[] }
   return { file, args: ['-c', command] };
 };
 
+/**
+ * 按平台清理 shell 环境变量，避免继承无关密钥。
+ */
+export const createShellEnvironment = (): NodeJS.ProcessEnv => {
+  if (process.platform === 'win32') {
+    return {
+      PATH: process.env['PATH'] ?? '',
+      SystemRoot: process.env['SystemRoot'] ?? '',
+      TEMP: process.env['TEMP'] ?? '',
+      USERPROFILE: process.env['USERPROFILE'] ?? ''
+    };
+  }
+  return {
+    PATH: process.env['PATH'] ?? '/usr/bin:/bin',
+    HOME: process.env['HOME'] ?? '',
+    USER: process.env['USER'] ?? '',
+    TMPDIR: process.env['TMPDIR'] ?? '/tmp',
+    LANG: process.env['LANG'] ?? 'en_US.UTF-8'
+  };
+};
+
 const runCommandTool = async (
   roots: readonly string[],
   primaryRoot: string,
   input: unknown
 ): Promise<FileToolResult> => {
-  const parsed = validateInput(runCommandInput, input);
+  const parsed = validateInput(runCommandInputSchema, input);
   const danger = detectDangerousCommand(parsed.command);
   if (danger) throw new FileToolError('COMMAND_BLOCKED', danger);
 
@@ -279,21 +300,7 @@ const runCommandTool = async (
   const timeoutMs = parsed.timeoutMs ?? 30_000;
   const maxOutputBytes = 200_000;
   const invocation = buildShellInvocation(parsed.command);
-  const env =
-    process.platform === 'win32'
-      ? {
-          PATH: process.env['PATH'] ?? '',
-          SystemRoot: process.env['SystemRoot'] ?? '',
-          TEMP: process.env['TEMP'] ?? '',
-          USERPROFILE: process.env['USERPROFILE'] ?? ''
-        }
-      : {
-          PATH: process.env['PATH'] ?? '/usr/bin:/bin',
-          HOME: process.env['HOME'] ?? '',
-          USER: process.env['USER'] ?? '',
-          TMPDIR: process.env['TMPDIR'] ?? '/tmp',
-          LANG: process.env['LANG'] ?? 'en_US.UTF-8'
-        };
+  const env = createShellEnvironment();
 
   return new Promise<FileToolResult>((resolve) => {
     const child = spawn(invocation.file, invocation.args, {

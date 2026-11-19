@@ -187,6 +187,15 @@ export interface NexusBridge {
   approval: {
     resolve: (input: ApprovalResolveInput) => Promise<Result<ApprovalResolveResult>>;
   };
+  terminal: {
+    create: (input: TerminalCreateInput) => Promise<Result<TerminalSessionPublic>>;
+    write: (input: TerminalWriteInput) => Promise<Result<{ ok: boolean }>>;
+    resize: (input: TerminalResizeInput) => Promise<Result<{ ok: boolean }>>;
+    close: (input: TerminalCloseInput) => Promise<Result<{ closed: boolean }>>;
+    list: () => Promise<Result<TerminalSessionPublic[]>>;
+    busy: (input: TerminalBusyInput) => Promise<Result<TerminalBusyResult>>;
+    onEvent: (handler: (event: TerminalEvent) => void) => Unsubscribe;
+  };
   agent: {
     run: (input: AgentRunInput) => Promise<Result<AgentStartResult>>;
     cancel: (runId: string) => Promise<Result<AgentCancelResult>>;
@@ -194,6 +203,61 @@ export interface NexusBridge {
     answerUser: (input: AskUserResolveInput) => Promise<Result<AskUserResolveResult>>;
   };
 }
+
+/**
+ * 内置终端：会话级 PTY，不依赖外部终端窗口。
+ */
+export const terminalSessionPublicSchema = z.object({
+  id: z.string().min(1),
+  sessionId: z.string().min(1),
+  title: z.string().min(1),
+  cwd: z.string().min(1),
+  shell: z.string().min(1),
+  pid: z.number().int().positive(),
+  status: z.enum(['running', 'exited', 'closed']),
+  exitCode: z.number().int().nullable().optional(),
+  source: z.enum(['user', 'ai']),
+  createdAt: z.number().nonnegative()
+});
+
+export const terminalCreateInputSchema = z.object({
+  sessionId: z.string().min(1),
+  cols: z.number().int().min(2).max(500).optional(),
+  rows: z.number().int().min(1).max(300).optional()
+});
+
+export const terminalWriteInputSchema = z.object({
+  id: z.string().min(1),
+  data: z.string().max(1_000_000)
+});
+
+export const terminalResizeInputSchema = z.object({
+  id: z.string().min(1),
+  cols: z.number().int().min(2).max(500),
+  rows: z.number().int().min(1).max(300)
+});
+
+export const terminalCloseInputSchema = z.object({ id: z.string().min(1) });
+export const terminalBusyInputSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1).max(64)
+});
+export const terminalBusyResultSchema = z.object({
+  busy: z.array(z.string().min(1))
+});
+
+export type TerminalSessionPublic = z.infer<typeof terminalSessionPublicSchema>;
+export type TerminalCreateInput = z.infer<typeof terminalCreateInputSchema>;
+export type TerminalWriteInput = z.infer<typeof terminalWriteInputSchema>;
+export type TerminalResizeInput = z.infer<typeof terminalResizeInputSchema>;
+export type TerminalCloseInput = z.infer<typeof terminalCloseInputSchema>;
+export type TerminalBusyInput = z.infer<typeof terminalBusyInputSchema>;
+export type TerminalBusyResult = z.infer<typeof terminalBusyResultSchema>;
+
+export type TerminalEvent =
+  | { type: 'created'; terminal: TerminalSessionPublic }
+  | { type: 'data'; id: string; data: string }
+  | { type: 'exit'; id: string; exitCode: number | null; status: 'exited' }
+  | { type: 'closed'; id: string; sessionId: string };
 
 /**
  * Agent 运行只引用已保存的 Provider，避免渲染进程直接传 API Key。

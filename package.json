@@ -14,12 +14,15 @@
     "lint:style": "stylelint \"apps/**/*.{vue,less,css}\" \"packages/**/*.{less,css}\"",
     "test": "vitest run",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "rebuild:native": "pnpm --filter @nexus/desktop rebuild:native",
+    "postinstall": "pnpm --filter @nexus/desktop rebuild:native"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
       "electron",
-      "esbuild"
+      "esbuild",
+      "node-pty"
     ]
   },
   "devDependencies": {

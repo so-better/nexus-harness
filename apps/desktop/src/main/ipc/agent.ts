@@ -278,6 +278,7 @@ export const registerAgentIpc = (): void => {
             runId,
             history: runHistory,
             signal: controller.signal,
+            terminalOwnerId: senderId,
             approveTool: (_call, _tool, approvalId) => {
               return approvalService.request(approvalId, runId, senderId);
             },

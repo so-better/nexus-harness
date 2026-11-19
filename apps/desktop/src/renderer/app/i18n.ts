@@ -6,6 +6,17 @@ import { ref } from 'vue';
 import type { AppLanguage } from '@shared/ipc/contracts';
 
 const zhCN = {
+  'terminal.title': '终端',
+  'terminal.new': '新建终端',
+  'terminal.empty': '还没有终端',
+  'terminal.hide': '隐藏终端',
+  'terminal.close': '关闭终端',
+  'terminal.closeConfirmTitle': '关闭终端',
+  'terminal.closeRunningConfirm': '有命令正在运行，确定要关闭吗？',
+  'terminal.closeOthers': '关闭其他终端',
+  'terminal.closeRight': '关闭右侧终端',
+  'terminal.rename': '重命名',
+  'terminal.createFailed': '创建终端失败',
   'app.brand': 'Nexus',
   'app.chooseRoot': '选择工作区',
   'app.addWorkspace': '添加工作区',
@@ -229,6 +240,17 @@ const zhCN = {
 export type MessageKey = keyof typeof zhCN;
 
 const enUS: Record<MessageKey, string> = {
+  'terminal.title': 'Terminal',
+  'terminal.new': 'New terminal',
+  'terminal.empty': 'No terminals',
+  'terminal.hide': 'Hide terminal',
+  'terminal.close': 'Close terminal',
+  'terminal.closeConfirmTitle': 'Close terminal',
+  'terminal.closeRunningConfirm': 'A command is still running. Close it anyway?',
+  'terminal.closeOthers': 'Close other terminals',
+  'terminal.closeRight': 'Close terminals to the right',
+  'terminal.rename': 'Rename',
+  'terminal.createFailed': 'Failed to create terminal',
   'app.brand': 'Nexus',
   'app.chooseRoot': 'Choose workspace',
   'app.addWorkspace': 'Add workspace',

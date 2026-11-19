@@ -21,6 +21,7 @@ import { expirePendingApprovals } from './services/session/approval-recovery';
 import { SessionService } from './services/session/session-service';
 import { syncBuiltinPlugins } from './services/plugins/builtin-plugin-service';
 import { initializeAutoLaunch } from './services/settings/startup-settings';
+import { terminalService } from './services/terminal/terminal-service';
 
 app.setName('Nexus');
 
@@ -72,7 +73,11 @@ if (!hasSingleInstanceLock) {
       }
 
       registerIpcHandlers();
-      createMainWindow();
+      const mainWindow = createMainWindow();
+      const terminalOwnerId = mainWindow.webContents.id;
+      mainWindow.webContents.once('destroyed', () => {
+        terminalService.closeByOwner(terminalOwnerId);
+      });
 
       app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
@@ -86,6 +91,7 @@ if (!hasSingleInstanceLock) {
     });
 
   app.on('will-quit', () => {
+    terminalService.disposeAll();
     closeDatabase();
   });
 

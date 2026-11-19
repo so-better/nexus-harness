@@ -15,6 +15,7 @@ export default {
   ],
   rules: {
     'selector-class-pattern': null,
+    'selector-pseudo-class-no-unknown': [true, { ignorePseudoClasses: ['deep'] }],
     'custom-property-pattern': null
   }
 };

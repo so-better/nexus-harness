@@ -42,11 +42,14 @@
         @edit-message="editMessage"
         @regenerate-message="regenerateMessage"
       />
+      <TerminalPanel :session-id="activeId ?? undefined" :can-create="roots.length > 0" />
     </div>
 
     <AppStatusbar
       :theme-source="themeSource"
       :version="version"
+      :terminal-open="terminal.open"
+      @toggle-terminal="terminal.togglePanel"
       @update-theme="setTheme"
       @open-settings="settingsOpen = true"
     />
@@ -66,7 +69,7 @@
  * 主布局容器：协调会话、聊天状态、Provider、设置与临时工作目录。
  */
 
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useMessage } from 'naive-ui';
 import { storeToRefs } from 'pinia';
 import type { AgentMode, ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
@@ -81,12 +84,17 @@ import { subscribeSessionChanges } from '@/modules/session/api/session.api';
 import { useSessionStore } from '@/modules/session/stores/session.store';
 import { getLanguage } from '@/modules/settings/api/settings.api';
 import SettingsModal from '@/modules/settings/views/SettingsModal.vue';
+import { useTerminalStore } from '@/modules/terminal/stores/terminal.store';
 import AppStatusbar from './AppStatusbar.vue';
 import { useAppMeta } from './use-app-meta';
 import { useSessionStatusSync } from './use-session-status';
 
 const sessions = useSessionStore();
 const chat = useChatStore();
+const terminal = useTerminalStore();
+const TerminalPanel = defineAsyncComponent(
+  () => import('@/modules/terminal/components/TerminalPanel.vue')
+);
 const message = useMessage();
 const { sessions: sessionList, activeId } = storeToRefs(sessions);
 const { providers, providerId, modelId, models, roots, runningBySession } = storeToRefs(chat);
@@ -353,6 +361,7 @@ const stop = async (): Promise<void> => {
 };
 
 onMounted(async () => {
+  terminal.init();
   unsubscribeSessionChanges = subscribeSessionChanges((session) => sessions.applyUpdate(session));
   try {
     setLocale(await getLanguage());
@@ -385,12 +394,12 @@ onBeforeUnmount(() => {
   display: grid;
   min-height: 0;
   overflow: hidden;
-  grid-template-columns: 288px minmax(0, 1fr);
+  grid-template-columns: 288px minmax(0, 1fr) auto;
 }
 
 @media (width <= 1024px) {
   .nh-layout__body {
-    grid-template-columns: 268px minmax(0, 1fr);
+    grid-template-columns: 268px minmax(0, 1fr) auto;
   }
 }
 </style>

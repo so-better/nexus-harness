@@ -5,6 +5,17 @@
     </div>
 
     <div class="nh-statusbar__actions">
+      <NButton
+        text
+        size="tiny"
+        :class="{ 'nh-statusbar__terminal--active': terminalOpen }"
+        :title="t('terminal.title')"
+        @click="emit('toggle-terminal')"
+      >
+        <template #icon><AppIcon name="terminal" :size="14" /></template>
+        {{ t('terminal.title') }}
+      </NButton>
+
       <NDropdown trigger="click" placement="top-end" :options="themeOptions" @select="selectTheme">
         <NButton text size="tiny" :aria-label="t('app.theme')" :title="t('app.theme')">
           <template #icon>
@@ -38,11 +49,13 @@ import AppIcon from '@/components/AppIcon.vue';
 const props = defineProps<{
   themeSource: ThemeSource;
   version: string;
+  terminalOpen: boolean;
 }>();
 
 const emit = defineEmits<{
   'update-theme': [source: ThemeSource];
   'open-settings': [];
+  'toggle-terminal': [];
 }>();
 
 /**
@@ -99,6 +112,10 @@ const selectTheme = (key: string | number): void => {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.nh-statusbar__terminal--active {
+  color: var(--nh-color-accent);
 }
 
 .nh-statusbar__version {

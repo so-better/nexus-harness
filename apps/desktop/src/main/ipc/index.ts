@@ -10,6 +10,7 @@ import { registerAppIpc } from './app';
 import { registerProviderIpc } from './provider';
 import { registerSessionIpc } from './session';
 import { registerSettingsIpc } from './settings';
+import { registerTerminalIpc } from './terminal';
 import { registerThemeIpc } from './theme';
 import { registerWorkspaceIpc } from './workspace';
 
@@ -25,6 +26,7 @@ export const registerIpcHandlers = (): void => {
   registerProviderIpc();
   registerSessionIpc();
   registerSettingsIpc();
+  registerTerminalIpc();
   registerThemeIpc();
   registerWorkspaceIpc();
 };

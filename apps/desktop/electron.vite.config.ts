@@ -28,7 +28,7 @@ export default defineConfig({
     build: {
       externalizeDeps: false,
       rollupOptions: {
-        external: ['electron']
+        external: ['electron', 'node-pty']
       }
     }
   },

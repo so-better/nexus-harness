@@ -19,7 +19,10 @@
     <path v-else-if="name === 'send'" d="m4 11 16-7-7 16-2-7-7-2Z" />
     <path v-else-if="name === 'stop'" d="M7 7h10v10H7z" fill="currentColor" stroke="none" />
     <path v-else-if="name === 'file'" d="M7 3h7l4 4v14H7zM14 3v5h5" />
-    <path v-else-if="name === 'terminal'" d="m4 7 4 4-4 4M12 17h8" />
+    <path
+      v-else-if="name === 'terminal'"
+      d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7 9l3 3-3 3M13 15h4"
+    />
     <path v-else-if="name === 'edit'" d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4" />
     <path v-else-if="name === 'history'" d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6M4 4v4.6h4.6M12 8v4l3 2" />
     <path v-else-if="name === 'settings'" d="M4 7h8M16 7h4M4 17h4M12 17h8M12 5v4M8 15v4" />

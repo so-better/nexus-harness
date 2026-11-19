@@ -93,7 +93,7 @@
  * 会话主区：欢迎页、消息流、审批与输入区。
  */
 
-import { computed } from 'vue';
+import { computed, nextTick, watch } from 'vue';
 import { NButton, NTag } from 'naive-ui';
 import type {
   AgentMode,
@@ -162,6 +162,20 @@ const focusApproval = (): void => {
     );
   node?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 };
+
+/**
+ * 新审批到达时把会话流滚到审批卡片，避免用户看不到阻塞操作。
+ */
+watch(
+  () => pendingApprovals.value.map((approval) => approval.id).join('|'),
+  (next, previous) => {
+    if (!next) return;
+    const known = new Set(previous ? previous.split('|') : []);
+    if (previous !== undefined && !next.split('|').some((id) => !known.has(id))) return;
+    nextTick(() => focusApproval());
+  },
+  { immediate: true }
+);
 </script>
 
 <style scoped lang="less">
