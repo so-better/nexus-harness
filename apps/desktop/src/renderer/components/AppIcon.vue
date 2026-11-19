@@ -52,6 +52,9 @@
     <path v-else-if="name === 'trash'" d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
     <path v-else-if="name === 'check'" d="m5 12 4 4L19 6" />
     <path v-else-if="name === 'chevron-down'" d="m6 9 6 6 6-6" />
+    <path v-else-if="name === 'chevron-up'" d="m6 15 6-6 6 6" />
+    <path v-else-if="name === 'arrow-up'" d="M12 19V5M6 11l6-6 6 6" />
+    <path v-else-if="name === 'arrow-down'" d="M12 5v14M18 13l-6 6-6-6" />
     <path
       v-else-if="name === 'refresh'"
       d="M20 7v5h-5M4 17v-5h5M6.1 9a7 7 0 0 1 11.2-2.6L20 9M4 15l2.7 2.6A7 7 0 0 0 17.9 15"
@@ -82,6 +85,9 @@ withDefaults(
       | 'moon'
       | 'monitor'
       | 'chevron-down'
+      | 'chevron-up'
+      | 'arrow-up'
+      | 'arrow-down'
       | 'chevron-left'
       | 'globe'
       | 'database'

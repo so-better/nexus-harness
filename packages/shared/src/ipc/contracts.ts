@@ -130,6 +130,8 @@ export type Unsubscribe = () => void;
 export interface NexusBridge {
   app: {
     getInfo: () => Promise<Result<AppInfo>>;
+    openExternal: (url: string) => Promise<Result<{ opened: boolean }>>;
+    openPath: (path: string) => Promise<Result<{ opened: boolean }>>;
   };
   theme: {
     getInfo: () => Promise<Result<ThemeInfo>>;
@@ -194,6 +196,18 @@ export interface NexusBridge {
     close: (input: TerminalCloseInput) => Promise<Result<{ closed: boolean }>>;
     list: () => Promise<Result<TerminalSessionPublic[]>>;
     busy: (input: TerminalBusyInput) => Promise<Result<TerminalBusyResult>>;
+    selectDirectory: () => Promise<Result<{ path?: string }>>;
+    selectShell: () => Promise<Result<{ path?: string }>>;
+    currentDirectory: (id: string) => Promise<Result<{ cwd: string | null }>>;
+    updateTitle: (id: string, title: string, custom: boolean) => Promise<Result<{ ok: boolean }>>;
+    reorder: (ids: string[]) => Promise<Result<{ ok: boolean }>>;
+    getSettings: () => Promise<Result<TerminalSettings>>;
+    getShellInfo: () => Promise<Result<TerminalShellInfo>>;
+    setSettings: (settings: TerminalSettings) => Promise<Result<TerminalSettings>>;
+    onSettingsChanged: (handler: (settings: TerminalSettings) => void) => Unsubscribe;
+    readClipboard: () => Promise<Result<string>>;
+    writeClipboard: (text: string) => Promise<Result<{ ok: boolean }>>;
+    getPathForFile: (file: unknown) => string;
     onEvent: (handler: (event: TerminalEvent) => void) => Unsubscribe;
   };
   agent: {
@@ -213,6 +227,7 @@ export const terminalSessionPublicSchema = z.object({
   title: z.string().min(1),
   cwd: z.string().min(1),
   shell: z.string().min(1),
+  customTitle: z.boolean(),
   pid: z.number().int().positive(),
   status: z.enum(['running', 'exited', 'closed']),
   exitCode: z.number().int().nullable().optional(),
@@ -222,6 +237,7 @@ export const terminalSessionPublicSchema = z.object({
 
 export const terminalCreateInputSchema = z.object({
   sessionId: z.string().min(1),
+  cwd: z.string().min(1).optional(),
   cols: z.number().int().min(2).max(500).optional(),
   rows: z.number().int().min(1).max(300).optional()
 });
@@ -245,6 +261,31 @@ export const terminalBusyResultSchema = z.object({
   busy: z.array(z.string().min(1))
 });
 
+export const terminalSettingsSchema = z.object({
+  shell: z.string().nullable(),
+  fontSize: z.number().int().min(9).max(32),
+  scrollback: z.number().int().min(1000).max(100_000),
+  copyOnSelect: z.boolean(),
+  webgl: z.boolean()
+});
+
+export type TerminalSettings = z.infer<typeof terminalSettingsSchema>;
+
+export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
+  shell: null,
+  fontSize: 12,
+  scrollback: 5000,
+  copyOnSelect: false,
+  webgl: true
+};
+export const terminalShellInfoSchema = z.object({
+  path: z.string().min(1),
+  available: z.boolean(),
+  source: z.enum(['settings', 'environment', 'auto']),
+  name: z.string().min(1)
+});
+
+export type TerminalShellInfo = z.infer<typeof terminalShellInfoSchema>;
 export type TerminalSessionPublic = z.infer<typeof terminalSessionPublicSchema>;
 export type TerminalCreateInput = z.infer<typeof terminalCreateInputSchema>;
 export type TerminalWriteInput = z.infer<typeof terminalWriteInputSchema>;

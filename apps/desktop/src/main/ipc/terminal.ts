@@ -2,11 +2,14 @@
  * 内置终端 IPC：创建、输入、调整尺寸、关闭与事件广播。
  */
 
-import { BrowserWindow, ipcMain } from 'electron';
+import { BrowserWindow, clipboard, dialog, ipcMain } from 'electron';
+import type { OpenDialogOptions } from 'electron';
+import { statSync } from 'node:fs';
 import { createNexusEvent } from '@nexus/core';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import {
   terminalBusyInputSchema,
+  terminalSettingsSchema,
   terminalCloseInputSchema,
   terminalCreateInputSchema,
   terminalResizeInputSchema,
@@ -18,6 +21,7 @@ import { getDatabase } from '../services/storage/database';
 import { EventStore } from '../services/session/event-store';
 import { SessionService } from '../services/session/session-service';
 import { terminalService } from '../services/terminal/terminal-service';
+import { loadTerminalSettings, saveTerminalSettings } from '../services/settings/terminal-settings';
 import { resolveTerminalCwd } from '../services/terminal/terminal-cwd';
 
 /**
@@ -85,12 +89,24 @@ export const registerTerminalIpc = (): void => {
       const session = sessions.get(parsed.data.sessionId);
       if (!session) return fail('SESSION_NOT_FOUND', '会话不存在');
       const root = sessions.listRoots(session.id).find((item) => item.kind === 'directory');
-      const cwd = resolveTerminalCwd(root?.path);
+      let cwd = resolveTerminalCwd(root?.path);
+      if (parsed.data.cwd) {
+        try {
+          if (!statSync(parsed.data.cwd).isDirectory()) {
+            return fail('TERMINAL_INVALID_CWD', '终端目录不存在或不是目录');
+          }
+          cwd = parsed.data.cwd;
+        } catch {
+          return fail('TERMINAL_INVALID_CWD', '终端目录不存在');
+        }
+      }
+      const settings = await loadTerminalSettings();
       try {
         return ok(
           terminalService.create({
             sessionId: session.id,
             cwd,
+            shell: settings.shell,
             ...(parsed.data.cols === undefined ? {} : { cols: parsed.data.cols }),
             ...(parsed.data.rows === undefined ? {} : { rows: parsed.data.rows }),
             source: 'user',
@@ -103,6 +119,138 @@ export const registerTerminalIpc = (): void => {
           error instanceof Error ? error.message : '创建终端失败'
         );
       }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.terminalSelectDirectory,
+    async (event): Promise<Result<{ path?: string }>> => {
+      const window = BrowserWindow.fromWebContents(event.sender);
+      const options: OpenDialogOptions = {
+        title: '选择终端工作目录',
+        properties: ['openDirectory', 'createDirectory']
+      };
+      const result = window
+        ? await dialog.showOpenDialog(window, options)
+        : await dialog.showOpenDialog(options);
+      return ok(result.canceled || !result.filePaths[0] ? {} : { path: result.filePaths[0] });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.terminalSelectShell,
+    async (event): Promise<Result<{ path?: string }>> => {
+      const window = BrowserWindow.fromWebContents(event.sender);
+      const options: OpenDialogOptions = {
+        title: '选择 Shell',
+        properties: ['openFile', 'showHiddenFiles']
+      };
+      const result = window
+        ? await dialog.showOpenDialog(window, options)
+        : await dialog.showOpenDialog(options);
+      return ok(result.canceled || !result.filePaths[0] ? {} : { path: result.filePaths[0] });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.terminalCurrentDirectory,
+    async (event, id: unknown): Promise<Result<{ cwd: string | null }>> => {
+      if (typeof id !== 'string' || !terminalService.isOwnedBy(id, event.sender.id)) {
+        return fail('TERMINAL_ACCESS_DENIED', '无权访问该终端');
+      }
+      return ok({ cwd: await terminalService.currentDirectory(id) });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.terminalUpdateTitle,
+    (event, rawInput: unknown): Result<{ ok: boolean }> => {
+      if (!rawInput || typeof rawInput !== 'object') {
+        return fail('TERMINAL_INVALID_INPUT', '终端标题不合法');
+      }
+      const { id, title, custom } = rawInput as {
+        id?: unknown;
+        title?: unknown;
+        custom?: unknown;
+      };
+      if (
+        typeof id !== 'string' ||
+        typeof title !== 'string' ||
+        !terminalService.isOwnedBy(id, event.sender.id)
+      ) {
+        return fail('TERMINAL_ACCESS_DENIED', '无权修改该终端');
+      }
+      return ok({ ok: terminalService.updateTitle(id, title, custom === true) });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.terminalReorder,
+    (event, rawIds: unknown): Result<{ ok: boolean }> => {
+      if (!Array.isArray(rawIds) || rawIds.some((id) => typeof id !== 'string')) {
+        return fail('TERMINAL_INVALID_INPUT', '终端顺序不合法');
+      }
+      return ok({ ok: terminalService.reorder(event.sender.id, rawIds) });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.terminalGetSettings,
+    async (): Promise<Result<Awaited<ReturnType<typeof loadTerminalSettings>>>> =>
+      ok(await loadTerminalSettings())
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.terminalGetShellInfo,
+    async (): Promise<Result<ReturnType<typeof terminalService.getShellInfo>>> => {
+      const settings = await loadTerminalSettings();
+      return ok(terminalService.getShellInfo(settings.shell));
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.terminalSetSettings,
+    async (
+      _event,
+      rawSettings: unknown
+    ): Promise<Result<Awaited<ReturnType<typeof saveTerminalSettings>>>> => {
+      const parsed = terminalSettingsSchema.safeParse(rawSettings);
+      if (!parsed.success) return fail('TERMINAL_SETTINGS_INVALID', '终端设置不合法');
+      if (parsed.data.shell) {
+        try {
+          if (!statSync(parsed.data.shell).isFile()) {
+            return fail('TERMINAL_SETTINGS_INVALID', 'Shell 路径不存在');
+          }
+        } catch {
+          return fail('TERMINAL_SETTINGS_INVALID', 'Shell 路径不存在');
+        }
+      }
+      try {
+        const saved = await saveTerminalSettings(parsed.data);
+        for (const window of BrowserWindow.getAllWindows()) {
+          if (!window.isDestroyed()) {
+            window.webContents.send(IPC_CHANNELS.terminalSettingsChanged, saved);
+          }
+        }
+        return ok(saved);
+      } catch (error) {
+        return fail(
+          'TERMINAL_SETTINGS_FAILED',
+          error instanceof Error ? error.message : '保存终端设置失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.terminalReadClipboard, async (): Promise<Result<string>> =>
+    ok(await clipboard.readText())
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.terminalWriteClipboard,
+    (_event, text: unknown): Result<{ ok: boolean }> => {
+      if (typeof text !== 'string') return fail('TERMINAL_INVALID_INPUT', '剪贴板内容不合法');
+      clipboard.writeText(text);
+      return ok({ ok: true });
     }
   );
 

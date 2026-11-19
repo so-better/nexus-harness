@@ -2,14 +2,22 @@
  * preload 唯一入口：通过 contextBridge 暴露类型化 API。
  */
 
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
-import type { NexusBridge, SessionSummary, TerminalEvent, ThemeInfo } from '@shared/ipc/contracts';
+import type {
+  NexusBridge,
+  SessionSummary,
+  TerminalEvent,
+  TerminalSettings,
+  ThemeInfo
+} from '@shared/ipc/contracts';
 import type { NexusEvent } from '@shared/events';
 
 const bridge: NexusBridge = {
   app: {
-    getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo)
+    getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo),
+    openExternal: (url) => ipcRenderer.invoke(IPC_CHANNELS.appOpenExternal, url),
+    openPath: (path) => ipcRenderer.invoke(IPC_CHANNELS.appOpenPath, path)
   },
   session: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.sessionList),
@@ -73,6 +81,26 @@ const bridge: NexusBridge = {
     close: (input) => ipcRenderer.invoke(IPC_CHANNELS.terminalClose, input),
     list: () => ipcRenderer.invoke(IPC_CHANNELS.terminalList),
     busy: (input) => ipcRenderer.invoke(IPC_CHANNELS.terminalBusy, input),
+    selectDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.terminalSelectDirectory),
+    selectShell: () => ipcRenderer.invoke(IPC_CHANNELS.terminalSelectShell),
+    currentDirectory: (id) => ipcRenderer.invoke(IPC_CHANNELS.terminalCurrentDirectory, id),
+    updateTitle: (id, title, custom) =>
+      ipcRenderer.invoke(IPC_CHANNELS.terminalUpdateTitle, { id, title, custom }),
+    reorder: (ids) => ipcRenderer.invoke(IPC_CHANNELS.terminalReorder, ids),
+    getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.terminalGetSettings),
+    getShellInfo: () => ipcRenderer.invoke(IPC_CHANNELS.terminalGetShellInfo),
+    setSettings: (settings) => ipcRenderer.invoke(IPC_CHANNELS.terminalSetSettings, settings),
+    onSettingsChanged: (handler) => {
+      const listener = (_event: IpcRendererEvent, settings: TerminalSettings): void =>
+        handler(settings);
+      ipcRenderer.on(IPC_CHANNELS.terminalSettingsChanged, listener);
+      return () => {
+        ipcRenderer.removeListener(IPC_CHANNELS.terminalSettingsChanged, listener);
+      };
+    },
+    readClipboard: () => ipcRenderer.invoke(IPC_CHANNELS.terminalReadClipboard),
+    writeClipboard: (text) => ipcRenderer.invoke(IPC_CHANNELS.terminalWriteClipboard, text),
+    getPathForFile: (file) => webUtils.getPathForFile(file as File),
     onEvent: (handler) => {
       const listener = (_event: IpcRendererEvent, payload: TerminalEvent): void => handler(payload);
       ipcRenderer.on(IPC_CHANNELS.terminalEvent, listener);

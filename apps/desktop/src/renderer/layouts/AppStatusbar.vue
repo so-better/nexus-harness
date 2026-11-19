@@ -5,6 +5,15 @@
     </div>
 
     <div class="nh-statusbar__actions">
+      <NDropdown trigger="click" placement="top-end" :options="themeOptions" @select="selectTheme">
+        <NButton text size="tiny" :aria-label="t('app.theme')" :title="t('app.theme')">
+          <template #icon>
+            <AppIcon :name="currentThemeIcon" :size="14" />
+          </template>
+          <AppIcon name="chevron-down" :size="12" />
+        </NButton>
+      </NDropdown>
+
       <NButton
         text
         size="tiny"
@@ -15,15 +24,6 @@
         <template #icon><AppIcon name="terminal" :size="14" /></template>
         {{ t('terminal.title') }}
       </NButton>
-
-      <NDropdown trigger="click" placement="top-end" :options="themeOptions" @select="selectTheme">
-        <NButton text size="tiny" :aria-label="t('app.theme')" :title="t('app.theme')">
-          <template #icon>
-            <AppIcon :name="currentThemeIcon" :size="14" />
-          </template>
-          <AppIcon name="chevron-down" :size="12" />
-        </NButton>
-      </NDropdown>
 
       <NButton text size="tiny" @click="emit('open-settings')">
         <template #icon>

@@ -5,100 +5,219 @@
     :style="{ width: `${store.width}px`, ...terminalCssVariables }"
   >
     <div class="nh-terminal-panel__resize" @pointerdown="startResize" />
-    <header class="nh-terminal-panel__header">
-      <span class="nh-terminal-panel__title">
-        <AppIcon name="terminal" :size="14" />
-        {{ t('terminal.title') }}
-      </span>
-      <div class="nh-terminal-panel__actions">
-        <NButton text size="tiny" :disabled="!sessionId" :title="t('terminal.new')" @click="create">
-          <template #icon><AppIcon name="plus" :size="14" /></template>
-        </NButton>
-        <NButton text size="tiny" :title="t('terminal.hide')" @click="store.open = false">
-          <template #icon><AppIcon name="close" :size="14" /></template>
-        </NButton>
-      </div>
-    </header>
+    <NConfigProvider
+      class="nh-terminal-provider"
+      :theme="darkTheme"
+      :theme-overrides="terminalThemeOverrides"
+    >
+      <header class="nh-terminal-panel__header">
+        <span class="nh-terminal-panel__title">
+          <AppIcon name="terminal" :size="14" />
+          {{ t('terminal.title') }}
+        </span>
+        <div class="nh-terminal-panel__actions">
+          <NTooltip placement="bottom" :show-arrow="false">
+            <template #trigger>
+              <NButton
+                text
+                size="small"
+                class="nh-terminal-panel__icon-button"
+                :aria-label="t('terminal.search')"
+                @click="toggleSearch"
+              >
+                <template #icon><AppIcon name="search" :size="17" /></template>
+              </NButton>
+            </template>
+            {{ t('terminal.search') }}
+          </NTooltip>
+          <NTooltip placement="bottom" :show-arrow="false">
+            <template #trigger>
+              <NButton
+                text
+                size="small"
+                class="nh-terminal-panel__icon-button"
+                :aria-label="t('terminal.hide')"
+                @click="store.open = false"
+              >
+                <template #icon><AppIcon name="close" :size="17" /></template>
+              </NButton>
+            </template>
+            {{ t('terminal.hide') }}
+          </NTooltip>
+        </div>
+      </header>
 
-    <div class="nh-terminal-panel__tabs" role="tablist">
-      <div
-        v-for="tab in store.tabs"
-        :key="tab.id"
-        class="nh-terminal-tab"
-        :class="{
-          'nh-terminal-tab--active': tab.id === store.activeId,
-          'nh-terminal-tab--exited': tab.status !== 'running'
-        }"
-        role="tab"
-        :aria-selected="tab.id === store.activeId"
-        @click="store.activeId = tab.id"
-        @contextmenu.prevent.stop="openMenu($event, tab)"
-      >
-        <NInput
-          v-if="renamingId === tab.id"
-          v-model:value="renameDraft"
-          size="tiny"
-          :bordered="false"
-          @keydown.enter.prevent="commitRename"
-          @keydown.esc.prevent="cancelRename"
-          @blur="commitRename"
-        />
-        <span v-else class="nh-terminal-tab__title">{{ tab.title }}</span>
-        <NPopconfirm
-          trigger="manual"
-          :show="confirmTabId === tab.id"
-          placement="bottom-end"
-          :positive-text="t('terminal.close')"
-          :negative-text="t('chat.askUserCancel')"
-          @positive-click="confirmClose"
-          @negative-click="cancelClose"
-          @update:show="
-            (value) => {
-              if (!value) cancelClose();
-            }
-          "
+      <div class="nh-terminal-panel__tabs" role="tablist">
+        <VueDraggable
+          class="nh-terminal-panel__tab-list"
+          :model-value="store.tabs"
+          :animation="160"
+          handle=".nh-terminal-tab__title"
+          ghost-class="nh-terminal-tab--ghost"
+          chosen-class="nh-terminal-tab--chosen"
+          drag-class="nh-terminal-tab--drag"
+          @update:model-value="updateTabOrder"
         >
-          <template #trigger>
-            <button
-              type="button"
-              class="nh-terminal-tab__close"
-              :aria-label="t('terminal.close')"
-              :title="t('terminal.close')"
-              @click.stop="requestClose([tab.id], tab.id)"
+          <div
+            v-for="tab in store.tabs"
+            :key="tab.id"
+            class="nh-terminal-tab"
+            :class="{
+              'nh-terminal-tab--active': tab.id === store.activeId,
+              'nh-terminal-tab--exited': tab.status !== 'running'
+            }"
+            role="tab"
+            :aria-selected="tab.id === store.activeId"
+            @click="store.activeId = tab.id"
+            @contextmenu.prevent.stop="openMenu($event, tab)"
+          >
+            <NInput
+              v-if="renamingId === tab.id"
+              v-model:value="renameDraft"
+              size="tiny"
+              :bordered="false"
+              @keydown.enter.prevent="commitRename"
+              @keydown.esc.prevent="cancelRename"
+              @blur="commitRename"
+            />
+            <span v-else class="nh-terminal-tab__title" @dblclick.stop="startRename(tab)">
+              {{ tab.title }}
+            </span>
+            <NPopconfirm
+              trigger="manual"
+              :show="confirmTabId === tab.id"
+              placement="bottom-end"
+              :positive-text="t('terminal.close')"
+              :negative-text="t('chat.askUserCancel')"
+              @positive-click="confirmClose"
+              @negative-click="cancelClose"
+              @update:show="
+                (value) => {
+                  if (!value) cancelClose();
+                }
+              "
             >
-              <AppIcon name="close" :size="12" />
+              <template #trigger>
+                <button
+                  type="button"
+                  class="nh-terminal-tab__close"
+                  :aria-label="t('terminal.close')"
+                  :title="t('terminal.close')"
+                  @click.stop="requestClose([tab.id], tab.id)"
+                >
+                  <AppIcon name="close" :size="12" />
+                </button>
+              </template>
+              {{ t('terminal.closeRunningConfirm') }} ({{ pendingBusyCount }})
+            </NPopconfirm>
+          </div>
+        </VueDraggable>
+        <div class="nh-terminal-panel__tab-actions">
+          <NTooltip placement="bottom" :show-arrow="false">
+            <template #trigger>
+              <NButton
+                text
+                size="small"
+                class="nh-terminal-panel__icon-button"
+                :disabled="!sessionId"
+                :aria-label="t('terminal.newDirectory')"
+                @click="createInDirectory"
+              >
+                <template #icon><AppIcon name="folder" :size="17" /></template>
+              </NButton>
+            </template>
+            {{ t('terminal.newDirectory') }}
+          </NTooltip>
+          <NTooltip placement="bottom" :show-arrow="false">
+            <template #trigger>
+              <NButton
+                text
+                size="small"
+                class="nh-terminal-panel__icon-button"
+                :disabled="!sessionId"
+                :aria-label="t('terminal.new')"
+                @click="create()"
+              >
+                <template #icon><AppIcon name="plus" :size="17" /></template>
+              </NButton>
+            </template>
+            {{ t('terminal.new') }}
+          </NTooltip>
+        </div>
+      </div>
+
+      <div class="nh-terminal-panel__body">
+        <div v-if="searchOpen" class="nh-terminal-search">
+          <NInput
+            ref="searchInput"
+            v-model:value="searchTerm"
+            size="small"
+            :placeholder="t('terminal.searchPlaceholder')"
+            @keydown.enter.prevent="runSearch($event.shiftKey ? 'previous' : 'next')"
+            @keydown.esc.prevent="closeSearch"
+          />
+          <span v-if="searchNoResult" class="nh-terminal-search__empty">{{
+            t('terminal.noResult')
+          }}</span>
+          <NButton text size="tiny" :title="t('terminal.previous')" @click="runSearch('previous')">
+            <template #icon><AppIcon name="chevron-up" :size="14" /></template>
+          </NButton>
+          <NButton text size="tiny" :title="t('terminal.next')" @click="runSearch('next')">
+            <template #icon><AppIcon name="chevron-down" :size="14" /></template>
+          </NButton>
+          <NButton text size="tiny" :title="t('terminal.closeSearch')" @click="closeSearch">
+            <template #icon><AppIcon name="close" :size="14" /></template>
+          </NButton>
+        </div>
+        <TerminalTab
+          v-for="tab in store.tabs"
+          v-show="tab.id === store.activeId"
+          :key="tab.id"
+          :tab="tab"
+          :active="tab.id === store.activeId"
+          @search="openSearch"
+          @contextmenu="openPaneMenu"
+        />
+        <div
+          v-if="menu"
+          class="nh-terminal-menu-mask"
+          @mousedown="closeMenu"
+          @contextmenu.prevent="closeMenu"
+        />
+        <div
+          v-if="menu"
+          ref="menuRef"
+          class="nh-terminal-menu"
+          :style="menuStyle"
+          role="menu"
+          @mousedown.stop
+          @keydown.esc.prevent="closeMenu"
+          @keydown.down.prevent="focusMenuItem(1)"
+          @keydown.up.prevent="focusMenuItem(-1)"
+        >
+          <template v-for="item in menuItems" :key="item.key">
+            <div v-if="item.divider" class="nh-terminal-menu__divider" />
+            <button
+              v-else
+              type="button"
+              class="nh-terminal-menu__item"
+              :class="{ 'nh-terminal-menu__item--danger': item.danger }"
+              :disabled="item.disabled"
+              @click.stop="selectMenu(item.key)"
+            >
+              {{ item.label }}
             </button>
           </template>
-          {{ t('terminal.closeRunningConfirm') }} ({{ pendingBusyCount }})
-        </NPopconfirm>
+        </div>
+        <div v-if="!store.tabs.length" class="nh-terminal-panel__empty">
+          <AppIcon name="terminal" :size="20" />
+          <p>{{ t('terminal.empty') }}</p>
+          <NButton size="small" secondary :disabled="!sessionId" @click="create()">
+            {{ t('terminal.new') }}
+          </NButton>
+        </div>
       </div>
-      <NDropdown
-        trigger="manual"
-        :show="menuShow"
-        :x="menuX"
-        :y="menuY"
-        :options="menuOptions()"
-        @select="selectMenu"
-        @clickoutside="menuShow = false"
-      />
-    </div>
-
-    <div class="nh-terminal-panel__body">
-      <TerminalTab
-        v-for="tab in store.tabs"
-        v-show="tab.id === store.activeId"
-        :key="tab.id"
-        :tab="tab"
-        :active="tab.id === store.activeId"
-      />
-      <div v-if="!store.tabs.length" class="nh-terminal-panel__empty">
-        <AppIcon name="terminal" :size="20" />
-        <p>{{ t('terminal.empty') }}</p>
-        <NButton size="small" secondary :disabled="!sessionId" @click="create">
-          {{ t('terminal.new') }}
-        </NButton>
-      </div>
-    </div>
+    </NConfigProvider>
   </aside>
 </template>
 
@@ -107,28 +226,51 @@
  * 右侧内置终端面板：标签、右键菜单、关闭确认与宽度拖拽。
  */
 
-import { nextTick, ref, watch } from 'vue';
-import { useMessage, NButton, NDropdown, NInput, NPopconfirm, type DropdownOption } from 'naive-ui';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { darkTheme, NConfigProvider } from 'naive-ui';
+import { useMessage, NButton, NInput, NPopconfirm, NTooltip, type InputInst } from 'naive-ui';
 import type { TerminalSessionPublic } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import { useTerminalStore } from '../stores/terminal.store';
-import { terminalCssVariables } from '../terminal-theme';
+import { terminalCssVariables, terminalThemeOverrides } from '../terminal-theme';
 import TerminalTab from './TerminalTab.vue';
+import { VueDraggable } from 'vue-draggable-plus';
 
-const props = defineProps<{ sessionId?: string | undefined }>();
+const props = defineProps<{
+  sessionId?: string | undefined;
+  shortcutEnabled?: boolean;
+}>();
 const store = useTerminalStore();
 const message = useMessage();
 const renamingId = ref<string>();
 const renameDraft = ref('');
 const creating = ref(false);
-const menuShow = ref(false);
-const menuX = ref(0);
-const menuY = ref(0);
-const menuTab = ref<TerminalSessionPublic>();
+interface TerminalMenuState {
+  kind: 'tab' | 'pane';
+  x: number;
+  y: number;
+  tab?: TerminalSessionPublic;
+}
+
+interface TerminalMenuItem {
+  key: string;
+  label: string;
+  disabled?: boolean;
+  danger?: boolean;
+  divider?: boolean;
+}
+
+const menu = ref<TerminalMenuState>();
+const menuRef = ref<HTMLElement>();
 const confirmTabId = ref<string>();
 const pendingCloseIds = ref<string[]>([]);
 const pendingBusyCount = ref(0);
+const searchOpen = ref(false);
+const searchTerm = ref('');
+const searchNoResult = ref(false);
+const searchInput = ref<InputInst>();
+
 let resizing = false;
 let startX = 0;
 let startWidth = 0;
@@ -136,11 +278,11 @@ let startWidth = 0;
 /**
  * 新建终端；没有工作区时由主进程返回明确错误。
  */
-const create = async (): Promise<void> => {
+const create = async (cwd?: string): Promise<void> => {
   if (!props.sessionId || creating.value) return;
   creating.value = true;
   try {
-    const created = await store.create(props.sessionId);
+    const created = await store.create(props.sessionId, cwd);
     if (!created) message.error(store.error ?? t('terminal.createFailed'));
   } finally {
     creating.value = false;
@@ -159,6 +301,26 @@ watch(
   },
   { immediate: true }
 );
+
+/**
+ * 选择目录后在该目录新建终端。
+ */
+const createInDirectory = async (): Promise<void> => {
+  if (!props.sessionId) return;
+  const cwd = await store.selectDirectory();
+  if (!cwd) return;
+  await create(cwd);
+};
+
+const startRename = (tab: TerminalSessionPublic): void => {
+  renamingId.value = tab.id;
+  renameDraft.value = tab.title;
+  nextTick(() => {
+    const input = document.querySelector<HTMLInputElement>('.nh-terminal-tab input');
+    input?.focus();
+    input?.select();
+  });
+};
 
 /**
  * 关闭前检查运行中的终端并要求二次确认。
@@ -199,32 +361,107 @@ const cancelClose = (): void => {
 };
 
 /**
- * 右键菜单：关闭当前、其他、右侧与重命名。
+ * 右键菜单项：按标签或终端内容切换动作。
  */
-const menuOptions = (): DropdownOption[] => [
-  { key: 'close', label: t('terminal.close') },
-  { key: 'close-others', label: t('terminal.closeOthers') },
-  { key: 'close-right', label: t('terminal.closeRight') },
-  { key: 'rename', label: t('terminal.rename') }
-];
+const menuItems = computed<TerminalMenuItem[]>(() => {
+  if (!menu.value) return [];
+  if (menu.value.kind === 'pane') {
+    const controller = store.controller(store.activeId);
+    return [
+      { key: 'copy', label: t('terminal.copy'), disabled: !controller },
+      { key: 'paste', label: t('terminal.paste'), disabled: !controller },
+      { key: 'select-all', label: t('terminal.selectAll'), disabled: !controller },
+      { key: 'clear', label: t('terminal.clear'), disabled: !controller },
+      { key: 'divider-pane', label: '', divider: true },
+      { key: 'new-tab', label: t('terminal.new') },
+      { key: 'close-tab', label: t('terminal.close'), danger: true }
+    ];
+  }
+  return [
+    { key: 'rename', label: t('terminal.rename') },
+    { key: 'same-directory', label: t('terminal.newSameDirectory') },
+    { key: 'reset-title', label: t('terminal.resetTitle') },
+    { key: 'divider-tab', label: '', divider: true },
+    { key: 'close', label: t('terminal.close'), danger: true },
+    { key: 'close-others', label: t('terminal.closeOthers') },
+    { key: 'close-right', label: t('terminal.closeRight') }
+  ];
+});
 
 /**
- * 在鼠标位置打开标签右键菜单。
+ * 菜单固定在鼠标位置，并限制在窗口内。
  */
-const openMenu = (event: MouseEvent, tab: TerminalSessionPublic): void => {
-  menuTab.value = tab;
-  menuX.value = event.clientX;
-  menuY.value = event.clientY;
-  menuShow.value = true;
+const menuStyle = computed(() => {
+  if (!menu.value) return {};
+  const width = 208;
+  const height = menuItems.value.reduce((total, item) => total + (item.divider ? 9 : 30), 12);
+  return {
+    left: `${Math.max(8, Math.min(menu.value.x, window.innerWidth - width - 8))}px`,
+    top: `${Math.max(8, Math.min(menu.value.y, window.innerHeight - height - 8))}px`
+  };
+});
+
+const closeMenu = (): void => {
+  menu.value = undefined;
 };
 
-const selectMenu = (key: string): void => {
-  const tab = menuTab.value;
-  menuShow.value = false;
+const focusFirstMenuItem = (): void => {
+  nextTick(() => menuRef.value?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus());
+};
+
+const focusMenuItem = (direction: number): void => {
+  const items = [
+    ...(menuRef.value?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])
+  ];
+  if (!items.length) return;
+  const current = items.indexOf(document.activeElement as HTMLButtonElement);
+  const next = (current + direction + items.length) % items.length;
+  items[next]?.focus();
+};
+
+const openMenu = (event: MouseEvent, tab: TerminalSessionPublic): void => {
+  menu.value = { kind: 'tab', x: event.clientX, y: event.clientY, tab };
+  focusFirstMenuItem();
+};
+
+const openPaneMenu = (event: MouseEvent): void => {
+  menu.value = { kind: 'pane', x: event.clientX, y: event.clientY };
+  focusFirstMenuItem();
+};
+
+const selectMenu = async (key: string): Promise<void> => {
+  const state = menu.value;
+  closeMenu();
+  if (!state) return;
+
+  if (state.kind === 'pane') {
+    const id = store.activeId;
+    const controller = store.controller(id);
+    if (!id) return;
+    if (key === 'copy') await controller?.copy();
+    else if (key === 'paste') await controller?.paste();
+    else if (key === 'select-all') controller?.selectAll();
+    else if (key === 'clear') controller?.clear();
+    else if (key === 'new-tab') await create();
+    else if (key === 'close-tab') requestClose([id], id);
+    controller?.focus();
+    return;
+  }
+
+  const tab = state.tab;
   if (!tab) return;
   const index = store.tabs.findIndex((item) => item.id === tab.id);
   if (key === 'close') requestClose([tab.id], tab.id);
-  else if (key === 'close-others') {
+  else if (key === 'same-directory') {
+    store
+      .currentDirectory(tab.id)
+      .then((cwd) => create(cwd ?? undefined))
+      .catch(() => message.error(t('terminal.cwdReadFailed')));
+  } else if (key === 'reset-title') {
+    store.resetTitle(tab.id);
+  } else if (key === 'rename') {
+    startRename(tab);
+  } else if (key === 'close-others') {
     requestClose(
       store.tabs.filter((item) => item.id !== tab.id).map((item) => item.id),
       tab.id
@@ -234,15 +471,12 @@ const selectMenu = (key: string): void => {
       store.tabs.slice(index + 1).map((item) => item.id),
       tab.id
     );
-  } else if (key === 'rename') {
-    renamingId.value = tab.id;
-    renameDraft.value = tab.title;
-    nextTick(() => {
-      const input = document.querySelector<HTMLInputElement>('.nh-terminal-tab input');
-      input?.focus();
-      input?.select();
-    });
   }
+};
+
+const updateTabOrder = async (next: TerminalSessionPublic[]): Promise<void> => {
+  const saved = await store.setTabOrder(next);
+  if (!saved) message.error(t('terminal.reorderFailed'));
 };
 
 const commitRename = (): void => {
@@ -256,8 +490,81 @@ const cancelRename = (): void => {
   renameDraft.value = '';
 };
 
+const openSearch = (): void => {
+  closeMenu();
+  searchOpen.value = true;
+  nextTick(() => {
+    searchInput.value?.focus();
+    searchInput.value?.select();
+  });
+};
+
+const toggleSearch = (): void => {
+  if (searchOpen.value) closeSearch();
+  else openSearch();
+};
+
+const closeSearch = (): void => {
+  searchOpen.value = false;
+  searchTerm.value = '';
+  searchNoResult.value = false;
+  store.controller(store.activeId)?.clearSearch();
+  store.controller(store.activeId)?.focus();
+};
+
+const runSearch = (direction: 'next' | 'previous'): void => {
+  const controller = store.controller(store.activeId);
+  if (!controller || !searchTerm.value) {
+    searchNoResult.value = false;
+    return;
+  }
+  const found =
+    direction === 'next'
+      ? controller.findNext(searchTerm.value)
+      : controller.findPrevious(searchTerm.value);
+  searchNoResult.value = !found;
+};
+
+watch(
+  () => store.activeId,
+  () => {
+    store.controller(store.activeId)?.clearSearch();
+    if (searchOpen.value && searchTerm.value) nextTick(() => runSearch('next'));
+  }
+);
+
+watch(searchTerm, () => {
+  if (!searchOpen.value) return;
+  nextTick(() => runSearch('next'));
+});
+
 /**
- * 拖拽左侧分隔条调整面板宽度；默认约占窗口一半。
+ * 终端面板打开时，在页面级响应搜索快捷键。
+ */
+const onSearchShortcut = (event: KeyboardEvent): void => {
+  if (!store.open || props.shortcutEnabled === false || event.defaultPrevented) return;
+  const isFind =
+    (event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.shiftKey &&
+      event.key.toLowerCase() === 'f') ||
+    (event.ctrlKey &&
+      event.shiftKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      event.key.toLowerCase() === 'f');
+  if (!isFind) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openSearch();
+};
+
+onMounted(() => window.addEventListener('keydown', onSearchShortcut, true));
+onBeforeUnmount(() => window.removeEventListener('keydown', onSearchShortcut, true));
+
+/**
+ * 拖拽左侧分隔条调整面板宽度；默认 600px。
  */
 const startResize = (event: PointerEvent): void => {
   resizing = true;
@@ -328,7 +635,20 @@ const stopResize = (): void => {
 .nh-terminal-panel__actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+}
+
+.nh-terminal-panel__icon-button {
+  width: 28px;
+  height: 28px;
+}
+
+.nh-terminal-panel__tab-actions :deep(.n-button) {
+  color: var(--terminal-secondary);
+}
+
+.nh-terminal-panel__tab-actions :deep(.n-button:hover) {
+  color: var(--terminal-text);
 }
 
 .nh-terminal-panel__actions :deep(.n-button) {
@@ -339,13 +659,37 @@ const stopResize = (): void => {
   color: var(--terminal-text);
 }
 
+.nh-terminal-provider {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
 .nh-terminal-panel__tabs {
   display: flex;
   flex: none;
-  gap: 2px;
-  overflow-x: auto;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
   padding: 6px 6px 0;
   border-bottom: 1px solid var(--terminal-border);
+}
+
+.nh-terminal-panel__tab-list {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  gap: 2px;
+  overflow-x: auto;
+  max-width: calc(100% - 84px);
+}
+
+.nh-terminal-panel__tab-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
 }
 
 .nh-terminal-tab {
@@ -389,6 +733,18 @@ const stopResize = (): void => {
   white-space: nowrap;
 }
 
+.nh-terminal-tab--ghost {
+  opacity: 0.35;
+}
+
+.nh-terminal-tab--chosen {
+  background: var(--terminal-hover);
+}
+
+.nh-terminal-tab--drag {
+  box-shadow: var(--nh-shadow-popover);
+}
+
 .nh-terminal-tab--exited .nh-terminal-tab__title {
   opacity: 0.55;
 }
@@ -424,9 +780,103 @@ const stopResize = (): void => {
   min-height: 0;
 }
 
-.nh-terminal-panel__body > :deep(.nh-terminal-view) {
+.nh-terminal-search {
+  position: absolute;
+  z-index: 20;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 24px);
+  padding: 4px;
+  border: 1px solid var(--terminal-border);
+  border-radius: 8px;
+  background: var(--terminal-surface);
+  box-shadow: var(--nh-shadow-popover);
+}
+
+.nh-terminal-search :deep(.n-input) {
+  width: 220px;
+
+  --n-color: var(--terminal-bg);
+  --n-color-focus: var(--terminal-bg);
+  --n-text-color: var(--terminal-text);
+  --n-border: 1px solid var(--terminal-border);
+  --n-border-focus: 1px solid var(--terminal-accent);
+  --n-border-hover: 1px solid var(--terminal-accent);
+}
+
+.nh-terminal-search__empty {
+  color: var(--terminal-danger);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.nh-terminal-search :deep(.n-button) {
+  color: var(--terminal-secondary);
+}
+
+.nh-terminal-search :deep(.n-button:hover) {
+  color: var(--terminal-text);
+}
+
+.nh-terminal-panel__body > :deep(.nh-terminal-shell) {
   position: absolute;
   inset: 0;
+}
+
+.nh-terminal-menu-mask {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+}
+
+.nh-terminal-menu {
+  position: fixed;
+  z-index: 1001;
+  display: flex;
+  width: 208px;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px;
+  border: 1px solid var(--terminal-border);
+  border-radius: 10px;
+  background: var(--terminal-surface);
+  box-shadow: var(--nh-shadow-popover);
+}
+
+.nh-terminal-menu__divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--terminal-border);
+}
+
+.nh-terminal-menu__item {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--terminal-text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nh-terminal-menu__item:disabled {
+  color: var(--terminal-disabled);
+  cursor: not-allowed;
+}
+
+.nh-terminal-menu__item--danger {
+  color: var(--terminal-danger);
+}
+
+.nh-terminal-menu__item:hover:not(:disabled) {
+  background: var(--terminal-hover);
 }
 
 .nh-terminal-panel__empty {

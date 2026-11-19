@@ -42,7 +42,7 @@
         @edit-message="editMessage"
         @regenerate-message="regenerateMessage"
       />
-      <TerminalPanel :session-id="activeId ?? undefined" :can-create="roots.length > 0" />
+      <TerminalPanel :session-id="activeId ?? undefined" :shortcut-enabled="!settingsOpen" />
     </div>
 
     <AppStatusbar

@@ -93,3 +93,23 @@ export const getLanguage = async (): Promise<AppLanguage> =>
  */
 export const setLanguage = async (language: AppLanguage): Promise<AppLanguage> =>
   unwrap(await window.nexus.settings.setLanguage(language));
+
+import type { TerminalSettings, TerminalShellInfo } from '@shared/ipc/contracts';
+
+/**
+ * 读取终端外观与 shell 设置。
+ */
+export const getTerminalSettings = async (): Promise<TerminalSettings> =>
+  unwrap(await window.nexus.terminal.getSettings());
+
+/**
+ * 保存终端外观与 shell 设置。
+ */
+export const getTerminalShellInfo = async (): Promise<TerminalShellInfo> =>
+  unwrap(await window.nexus.terminal.getShellInfo());
+
+export const selectTerminalShell = async (): Promise<string | undefined> =>
+  unwrap(await window.nexus.terminal.selectShell()).path;
+
+export const setTerminalSettings = async (settings: TerminalSettings): Promise<TerminalSettings> =>
+  unwrap(await window.nexus.terminal.setSettings(settings));

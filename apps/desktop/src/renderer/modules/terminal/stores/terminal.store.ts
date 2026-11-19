@@ -4,19 +4,37 @@
 
 import { computed, reactive, ref } from 'vue';
 import { defineStore } from 'pinia';
-import type { TerminalEvent, TerminalSessionPublic } from '@shared/ipc/contracts';
+import { DEFAULT_TERMINAL_SETTINGS } from '@shared/ipc/contracts';
+import type { TerminalEvent, TerminalSessionPublic, TerminalSettings } from '@shared/ipc/contracts';
 import { TERMINAL_DEFAULT_WIDTH, clampTerminalWidth } from '../terminal-layout';
 import {
   busyTerminals,
   closeTerminal,
   createTerminal,
+  currentTerminalDirectory,
+  getTerminalSettings,
   listTerminals,
+  reorderTerminals,
   resizeTerminal,
+  selectTerminalDirectory,
   subscribeTerminalEvents,
+  subscribeTerminalSettings,
+  updateTerminalTitle,
   writeTerminal
 } from '../api/terminal.api';
 
 const MAX_BUFFER = 500_000;
+
+export interface TerminalController {
+  findNext: (term: string) => boolean;
+  findPrevious: (term: string) => boolean;
+  clearSearch: () => void;
+  copy: () => Promise<boolean>;
+  paste: () => Promise<void>;
+  selectAll: () => void;
+  clear: () => void;
+  focus: () => void;
+}
 
 export const useTerminalStore = defineStore('terminal', () => {
   const tabs = ref<TerminalSessionPublic[]>([]);
@@ -26,8 +44,12 @@ export const useTerminalStore = defineStore('terminal', () => {
   const ready = ref(false);
   const width = ref(clampTerminalWidth(TERMINAL_DEFAULT_WIDTH, window.innerWidth));
   const error = ref<string>();
+  const settings = ref<TerminalSettings>({ ...DEFAULT_TERMINAL_SETTINGS });
   const outputs = reactive<Record<string, string>>({});
   let unsubscribe: (() => void) | undefined;
+  let unsubscribeSettings: (() => void) | undefined;
+  const titleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const controllers = new Map<string, TerminalController>();
 
   const activeTab = computed(() => tabs.value.find((tab) => tab.id === activeId.value));
 
@@ -41,12 +63,14 @@ export const useTerminalStore = defineStore('terminal', () => {
   const removeTab = (id: string): void => {
     tabs.value = tabs.value.filter((tab) => tab.id !== id);
     delete outputs[id];
+    controllers.delete(id);
     if (activeId.value === id) activeId.value = tabs.value.at(-1)?.id;
   };
 
   const pushData = (id: string, data: string): void => {
     const next = `${outputs[id] ?? ''}${data}`;
     outputs[id] = next.length > MAX_BUFFER ? next.slice(-MAX_BUFFER) : next;
+    scheduleTitleSync(id);
   };
 
   const handleEvent = (event: TerminalEvent): void => {
@@ -87,7 +111,17 @@ export const useTerminalStore = defineStore('terminal', () => {
    */
   const init = (): void => {
     if (!unsubscribe) unsubscribe = subscribeTerminalEvents(handleEvent);
+    if (!unsubscribeSettings) {
+      unsubscribeSettings = subscribeTerminalSettings((next) => {
+        settings.value = next;
+      });
+    }
     window.addEventListener('resize', handleResize);
+    getTerminalSettings()
+      .then((next) => {
+        settings.value = next;
+      })
+      .catch(() => undefined);
     listTerminals()
       .then((terminals) => {
         for (const terminal of terminals) upsert(terminal);
@@ -117,15 +151,58 @@ export const useTerminalStore = defineStore('terminal', () => {
     width.value = clampTerminalWidth(next, window.innerWidth);
   };
 
-  const create = async (sessionId: string): Promise<boolean> => {
+  const create = async (sessionId: string, cwd?: string): Promise<boolean> => {
     try {
       error.value = undefined;
-      await createTerminal(sessionId, 100, 30);
+      await createTerminal(sessionId, 100, 30, cwd);
       openPanel();
       return true;
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);
       return false;
+    }
+  };
+
+  const currentDirectory = async (id: string): Promise<string | null> => {
+    try {
+      return await currentTerminalDirectory(id);
+    } catch {
+      return null;
+    }
+  };
+
+  const selectDirectory = async (): Promise<string | undefined> => {
+    try {
+      return await selectTerminalDirectory();
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+      return undefined;
+    }
+  };
+
+  const scheduleTitleSync = (id: string): void => {
+    const existing = titleTimers.get(id);
+    if (existing !== undefined) clearTimeout(existing);
+    titleTimers.set(
+      id,
+      setTimeout(() => {
+        titleTimers.delete(id);
+        syncTitle(id).catch(() => undefined);
+      }, 350)
+    );
+  };
+
+  const syncTitle = async (id: string): Promise<void> => {
+    const tab = tabs.value.find((item) => item.id === id);
+    if (!tab || tab.customTitle) return;
+    const cwd = await currentTerminalDirectory(id);
+    if (!cwd) return;
+    const current = tabs.value.find((item) => item.id === id);
+    if (!current || current.customTitle) return;
+    const title = cwd.split(/[\\/]/).filter(Boolean).at(-1) ?? '终端';
+    if (current.title !== title) {
+      current.title = title;
+      updateTerminalTitle(id, title, false).catch(() => undefined);
     }
   };
 
@@ -153,8 +230,48 @@ export const useTerminalStore = defineStore('terminal', () => {
 
   const rename = (id: string, title: string): void => {
     const tab = tabs.value.find((item) => item.id === id);
-    if (tab && title.trim()) tab.title = title.trim();
+    if (tab && title.trim()) {
+      tab.title = title.trim();
+      tab.customTitle = true;
+      updateTerminalTitle(id, tab.title, true).catch(() => undefined);
+    }
   };
+
+  const resetTitle = (id: string): void => {
+    const tab = tabs.value.find((item) => item.id === id);
+    if (!tab) return;
+    tab.customTitle = false;
+    updateTerminalTitle(id, tab.title, false).catch(() => undefined);
+    syncTitle(id).catch(() => undefined);
+  };
+
+  const moveTab = (from: number, to: number): void => {
+    if (from === to || from < 0 || to < 0) return;
+    const next = [...tabs.value];
+    const [item] = next.splice(from, 1);
+    if (!item) return;
+    next.splice(to, 0, item);
+    tabs.value = next;
+  };
+
+  const setTabOrder = async (next: TerminalSessionPublic[]): Promise<boolean> => {
+    tabs.value = [...next];
+    try {
+      await reorderTerminals(next.map((tab) => tab.id));
+      return true;
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+      return false;
+    }
+  };
+
+  const registerController = (id: string, controller: TerminalController): (() => void) => {
+    controllers.set(id, controller);
+    return () => controllers.delete(id);
+  };
+
+  const controller = (id: string | undefined): TerminalController | undefined =>
+    id ? controllers.get(id) : undefined;
 
   const buffer = (id: string): string => outputs[id] ?? '';
 
@@ -167,16 +284,26 @@ export const useTerminalStore = defineStore('terminal', () => {
     ready,
     width,
     error,
+    settings,
     init,
     openPanel,
     togglePanel,
     setWidth,
     create,
+    selectDirectory,
+    currentDirectory,
+    scheduleTitleSync,
+    syncTitle,
     write,
     resize,
     close,
     busy,
     rename,
+    resetTitle,
+    moveTab,
+    setTabOrder,
+    registerController,
+    controller,
     buffer,
     outputs
   };

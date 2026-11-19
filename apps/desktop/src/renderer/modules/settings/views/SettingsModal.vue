@@ -22,6 +22,10 @@
         <AppearanceSettings />
       </NTabPane>
 
+      <NTabPane name="terminal" :tab="t('settings.terminal')">
+        <TerminalSettingsPanel />
+      </NTabPane>
+
       <NTabPane name="cache" :tab="t('settings.cache')">
         <CacheSettings :busy="busy" />
       </NTabPane>
@@ -40,6 +44,7 @@ import AppearanceSettings from './AppearanceSettings.vue';
 import CacheSettings from './CacheSettings.vue';
 import GeneralSettings from './GeneralSettings.vue';
 import ProviderSettingsPanel from './ProviderSettingsPanel.vue';
+import TerminalSettingsPanel from './TerminalSettingsPanel.vue';
 
 defineProps<{
   show: boolean;

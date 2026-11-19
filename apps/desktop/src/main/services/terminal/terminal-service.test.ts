@@ -127,4 +127,21 @@ describe('TerminalService', () => {
     service.closeByOwner(2);
     expect(service.list()).toEqual([]);
   });
+
+  it('reorders terminals for one owner without affecting others', () => {
+    const first = makePty();
+    const second = makePty();
+    const third = makePty();
+    second.pid = 999_996;
+    third.pid = 999_995;
+    spawnMock.mockReturnValueOnce(first).mockReturnValueOnce(second).mockReturnValueOnce(third);
+    const service = new TerminalService();
+    const a = service.create({ sessionId: 's1', cwd: '/tmp', ownerId: 1 });
+    const b = service.create({ sessionId: 's1', cwd: '/tmp', ownerId: 1 });
+    service.create({ sessionId: 's2', cwd: '/tmp', ownerId: 2 });
+
+    expect(service.reorder(1, [b.id, a.id])).toBe(true);
+    expect(service.list(1).map((terminal) => terminal.id)).toEqual([b.id, a.id]);
+    expect(service.list(2)).toHaveLength(1);
+  });
 });

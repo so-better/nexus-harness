@@ -3,6 +3,7 @@
  */
 
 import { execFile, spawn } from 'node:child_process';
+import { readlink } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { basename } from 'node:path';
 import { existsSync } from 'node:fs';
@@ -25,6 +26,7 @@ interface TerminalRecord {
   status: 'running' | 'exited' | 'closed';
   exitCode: number | null;
   source: 'user' | 'ai';
+  customTitle: boolean;
   ownerId?: number | undefined;
   command?: string | undefined;
   createdAt: number;
@@ -55,6 +57,7 @@ interface CreateTerminalOptions {
   source?: 'user' | 'ai';
   title?: string;
   command?: string;
+  shell?: string | null;
   ownerId?: number;
   timeoutMs?: number;
 }
@@ -65,7 +68,10 @@ interface CreateTerminalOptions {
 const shellForCommand = (command: string): { file: string; args: string[] } =>
   buildShellInvocation(command);
 
-const shellForInteractive = (): { file: string; args: string[] } => {
+const shellForInteractive = (configuredShell?: string | null): { file: string; args: string[] } => {
+  if (configuredShell && existsSync(configuredShell)) {
+    return { file: configuredShell, args: [] };
+  }
   if (process.platform === 'win32') {
     const file = process.env['COMSPEC'] || 'powershell.exe';
     return { file, args: /powershell|pwsh/i.test(file) ? ['-NoLogo'] : [] };
@@ -107,7 +113,7 @@ export class TerminalService {
             '-NoProfile',
             '-NonInteractive',
             '-Command',
-            `(Get-CimInstance Win32_Process -Filter "ParentProcessId=${record.pid}").Count`
+            `@(Get-CimInstance Win32_Process -Filter "ParentProcessId=${record.pid}" | Where-Object { $_.Name -notin @('conhost.exe','OpenConsole.exe') }).Count`
           ],
           { timeout: 1_000 }
         );
@@ -139,6 +145,102 @@ export class TerminalService {
     return [...this.records.values()]
       .filter((record) => ownerId === undefined || record.ownerId === ownerId)
       .map((record) => this.toPublic(record));
+  }
+
+  /**
+   * 返回当前将用于新终端的 shell 信息。
+   */
+  getShellInfo(configuredShell?: string | null): {
+    path: string;
+    available: boolean;
+    source: 'settings' | 'environment' | 'auto';
+    name: string;
+  } {
+    if (configuredShell && existsSync(configuredShell)) {
+      return {
+        path: configuredShell,
+        available: true,
+        source: 'settings',
+        name: basename(configuredShell)
+      };
+    }
+    const shell = shellForInteractive();
+    const source =
+      process.platform === 'win32'
+        ? process.env['COMSPEC']
+          ? ('environment' as const)
+          : ('auto' as const)
+        : process.env['SHELL'] && existsSync(process.env['SHELL'])
+          ? ('environment' as const)
+          : ('auto' as const);
+    return {
+      path: shell.file,
+      available: existsSync(shell.file),
+      source,
+      name: basename(shell.file)
+    };
+  }
+
+  /**
+   * 读取 shell 当前工作目录；无法读取时返回创建时的目录。
+   */
+  async currentDirectory(id: string): Promise<string | null> {
+    const record = this.records.get(id);
+    if (!record) return null;
+    try {
+      if (process.platform === 'darwin') {
+        const lsof = existsSync('/usr/sbin/lsof') ? '/usr/sbin/lsof' : 'lsof';
+        const { stdout } = await execFileAsync(
+          lsof,
+          ['-a', '-p', String(record.pid), '-d', 'cwd', '-Fn'],
+          { timeout: 3_000 }
+        );
+        const path = stdout
+          .split(/\r?\n/)
+          .find((line) => line.startsWith('n'))
+          ?.slice(1);
+        if (path && existsSync(path)) {
+          record.cwd = path;
+          return path;
+        }
+      } else if (process.platform === 'linux') {
+        const path = await readlink(`/proc/${record.pid}/cwd`);
+        if (existsSync(path)) {
+          record.cwd = path;
+          return path;
+        }
+      }
+    } catch {
+      // 进程退出或系统工具不可用时回退
+    }
+    return record.cwd;
+  }
+
+  updateTitle(id: string, title: string, custom: boolean): boolean {
+    const record = this.records.get(id);
+    if (!record) return false;
+    record.title = title.trim() || basename(record.cwd) || '终端';
+    record.customTitle = custom;
+    return true;
+  }
+
+  reorder(ownerId: number, ids: string[]): boolean {
+    const owned = [...this.records.values()].filter((record) => record.ownerId === ownerId);
+    if (!owned.length) return false;
+    const byId = new Map(owned.map((record) => [record.id, record]));
+    const ordered: TerminalRecord[] = [];
+    for (const id of ids) {
+      const record = byId.get(id);
+      if (!record) continue;
+      ordered.push(record);
+      byId.delete(id);
+    }
+    ordered.push(...byId.values());
+    const others = [...this.records.values()].filter((record) => record.ownerId !== ownerId);
+    this.records.clear();
+    for (const record of others) this.records.set(record.id, record);
+    for (const record of ordered) this.records.set(record.id, record);
+    return true;
   }
 
   ownerOf(id: string): number | undefined {
@@ -236,7 +338,9 @@ export class TerminalService {
   }
 
   private createRecord(options: CreateTerminalOptions): TerminalRecord {
-    const invocation = options.command ? shellForCommand(options.command) : shellForInteractive();
+    const invocation = options.command
+      ? shellForCommand(options.command)
+      : shellForInteractive(options.shell);
     const id = randomUUID();
     const title = (options.title ?? basename(options.cwd)) || '终端';
     const env = options.command
@@ -260,6 +364,7 @@ export class TerminalService {
       status: 'running',
       exitCode: null,
       source: options.source ?? 'user',
+      customTitle: Boolean(options.title),
       ...(options.ownerId === undefined ? {} : { ownerId: options.ownerId }),
       ...(options.command ? { command: options.command } : {}),
       createdAt: Date.now(),
@@ -383,6 +488,7 @@ export class TerminalService {
       status: record.status,
       ...(record.exitCode === null ? {} : { exitCode: record.exitCode }),
       source: record.source,
+      customTitle: record.customTitle,
       createdAt: record.createdAt
     };
   }
