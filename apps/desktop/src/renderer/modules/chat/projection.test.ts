@@ -77,6 +77,61 @@ describe('projectEvents', () => {
     });
   });
 
+  it('expires pending approvals when a run is interrupted', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'run.started',
+        payload: { model: 'mock-model' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'tool.requested',
+        payload: { toolCallId: 'call-1', name: 'run_command', input: { command: 'ls' } }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'approval.requested',
+        payload: { approvalId: 'approval-1', toolCallId: 'call-1', scope: 'run_command' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 4,
+        type: 'run.interrupted',
+        payload: { reason: 'app_restart' }
+      })
+    ]);
+
+    expect(projection.approvals[0]?.status).toBe('expired');
+    expect(projection.messages[0]?.toolCalls[0]?.status).toBe('expired');
+  });
+
+  it('keeps structured file references on user messages', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: {
+          messageId: 'user-1',
+          role: 'user',
+          content: '看这个',
+          references: [{ path: '/workspace/a.ts', name: 'a.ts' }]
+        }
+      })
+    ]);
+
+    expect(projection.messages[0]?.content).toBe('看这个');
+    expect(projection.messages[0]?.references).toEqual([{ path: '/workspace/a.ts', name: 'a.ts' }]);
+  });
+
   it('tracks pending Ask User questions until they are answered', () => {
     const questions = [
       {
@@ -221,36 +276,6 @@ describe('projectEvents', () => {
 
     expect(projection.messages[0]?.files).toMatchObject([
       { id: 'file-1', name: 'report.md', source: 'generated' }
-    ]);
-  });
-
-  it('collects checkpoint changes and marks restored files', () => {
-    const projection = projectEvents([
-      event({
-        sessionId: 'session-1',
-        runId: 'run-1',
-        seq: 1,
-        type: 'checkpoint.created',
-        payload: { checkpointId: 'cp-1', label: 'write_file', path: '/tmp/a.txt' }
-      }),
-      event({
-        sessionId: 'session-1',
-        runId: 'run-1',
-        seq: 2,
-        type: 'checkpoint.restored',
-        payload: { checkpointId: 'cp-1' }
-      })
-    ]);
-
-    expect(projection.changes).toEqual([
-      {
-        checkpointId: 'cp-1',
-        path: '/tmp/a.txt',
-        label: 'write_file',
-        runId: 'run-1',
-        createdAt: 1,
-        restored: true
-      }
     ]);
   });
 

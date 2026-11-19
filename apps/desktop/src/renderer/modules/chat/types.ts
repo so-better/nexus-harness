@@ -7,9 +7,17 @@
  */
 import type { OutputFile } from '@shared/ipc/contracts';
 import type { AskQuestion, AskUserAnswer } from '@shared/ask-user';
+import type { MessageFileReference } from '@shared/events';
 
 export type ToolCallStatus =
-  'requested' | 'waiting_approval' | 'approved' | 'rejected' | 'running' | 'succeeded' | 'failed';
+  | 'requested'
+  | 'waiting_approval'
+  | 'approved'
+  | 'rejected'
+  | 'expired'
+  | 'running'
+  | 'succeeded'
+  | 'failed';
 
 /**
  * 单次工具调用展示数据。
@@ -39,6 +47,7 @@ export interface ChatMessageView {
   hidden?: boolean;
   runId?: string;
   files?: OutputFile[];
+  references?: MessageFileReference[];
 }
 
 /**
@@ -72,21 +81,10 @@ export interface ChatAskUser {
   runId?: string;
 }
 
-export interface ChatChange {
-  checkpointId: string;
-  path: string;
-  label: string;
-  existed?: boolean;
-  runId?: string;
-  createdAt: number;
-  restored: boolean;
-}
-
 export interface ChatProjection {
   messages: ChatMessageView[];
   approvals: ChatApproval[];
   askUsers: ChatAskUser[];
-  changes: ChatChange[];
   usage: ChatUsage;
   runId?: string;
   running: boolean;

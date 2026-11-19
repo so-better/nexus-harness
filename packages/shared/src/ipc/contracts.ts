@@ -3,7 +3,7 @@
  */
 
 import { z } from 'zod';
-import type { NexusEvent } from '../events';
+import { messageFileReferenceSchema, type NexusEvent } from '../events';
 import type { AskUserResolveInput, AskUserResolveResult } from '../ask-user';
 import type { Result } from './result';
 
@@ -200,7 +200,7 @@ export interface NexusBridge {
  */
 export const agentRunInputSchema = z.object({
   sessionId: z.string().min(1),
-  prompt: z.string().min(1),
+  prompt: z.string(),
   rootPaths: z.array(z.string().min(1)).default([]),
   providerId: z.string().min(1),
   modelId: z.string().min(1),
@@ -208,7 +208,8 @@ export const agentRunInputSchema = z.object({
   editMessageId: z.string().min(1).optional(),
   regenerateMessageId: z.string().min(1).optional(),
   maxSteps: z.number().int().positive().max(50).optional(),
-  imagePaths: z.array(z.string().min(1)).max(4).optional()
+  imagePaths: z.array(z.string().min(1)).max(4).optional(),
+  references: z.array(messageFileReferenceSchema).max(64).optional()
 });
 
 export const agentStartResultSchema = z.object({ runId: z.string().min(1) });

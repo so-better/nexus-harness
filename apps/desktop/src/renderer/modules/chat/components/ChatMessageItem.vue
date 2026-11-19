@@ -10,7 +10,11 @@
   </article>
   <article
     v-else-if="
-      message.content || displayToolCalls.length || askUsers.length || message.files?.length
+      message.content ||
+      message.references?.length ||
+      displayToolCalls.length ||
+      askUsers.length ||
+      message.files?.length
     "
     class="nh-message"
     :class="[
@@ -22,7 +26,11 @@
     <div class="nh-message__body" :class="{ 'nh-message__body--editing': editing }">
       <div
         v-if="
-          message.content || displayToolCalls.length || askUsers.length || message.files?.length
+          message.content ||
+          message.references?.length ||
+          displayToolCalls.length ||
+          askUsers.length ||
+          message.files?.length
         "
         class="nh-message__bubble"
         :class="{
@@ -58,7 +66,12 @@
             @submit="(answers) => submitAsk(ask, answers)"
             @cancel="cancelAsk(ask)"
           />
-          <p v-if="message.content" class="nh-message__content">
+          <UserMessageContent
+            v-if="message.role === 'user' && (message.content || message.references?.length)"
+            :content="message.content"
+            :references="message.references"
+          />
+          <p v-else-if="message.content" class="nh-message__content">
             {{ contentText }}<span v-if="isTyping" class="nh-message__caret" />
           </p>
           <div
@@ -74,13 +87,24 @@
             class="nh-message__tools"
             :class="{ 'nh-message__tools--after-content': Boolean(message.content) }"
           >
-            <ToolCallCard
+            <div
               v-for="tool in displayToolCalls"
               :key="tool.id"
-              :tool="tool"
-              flush
-              @authorize-root="emit('request-root')"
-            />
+              class="nh-message__tool-entry"
+              :data-tool-call-id="tool.id"
+            >
+              <ToolCallCard :tool="tool" flush @authorize-root="emit('request-root')" />
+              <ApprovalCard
+                v-for="approval in approvalForTool(tool)"
+                :key="approval.id"
+                inline
+                :approval="approval"
+                :tool="tool"
+                :data-approval-id="approval.id"
+                @approve="emit('approve', approval.id)"
+                @reject="emit('reject', approval.id)"
+              />
+            </div>
           </div>
 
           <AskUserCard
@@ -141,11 +165,15 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { NButton, NInput, useMessage, type InputInst } from 'naive-ui';
 import { t } from '@/app/i18n';
 import type { AskUserAnswer } from '@shared/ask-user';
-import type { ChatAskUser, ChatMessageView } from '../types';
+import type { MessageFileReference } from '@shared/events';
+import type { ChatApproval, ChatAskUser, ChatMessageView, ChatToolCall } from '../types';
 import AppIcon from '@/components/AppIcon.vue';
+import ApprovalCard from './ApprovalCard.vue';
 import AskUserCard from './AskUserCard.vue';
 import OutputFileCard from './OutputFileCard.vue';
 import ToolCallCard from './ToolCallCard.vue';
+import UserMessageContent from './UserMessageContent.vue';
+import { splitUserMessageReferences } from '../message-references';
 
 const props = withDefaults(
   defineProps<{
@@ -153,6 +181,7 @@ const props = withDefaults(
     grouped?: boolean;
     highlighted?: boolean;
     askUsers?: ChatAskUser[];
+    approvals?: ChatApproval[] | undefined;
     isLastAssistant?: boolean;
     actionsDisabled?: boolean;
   }>(),
@@ -160,6 +189,7 @@ const props = withDefaults(
     grouped: false,
     highlighted: false,
     askUsers: () => [],
+    approvals: () => [],
     isLastAssistant: false,
     actionsDisabled: false
   }
@@ -168,7 +198,9 @@ const props = withDefaults(
 const emit = defineEmits<{
   'content-growth': [];
   'answer-user': [requestId: string, answers: AskUserAnswer[] | undefined];
-  'edit-message': [content: string];
+  approve: [approvalId: string];
+  reject: [approvalId: string];
+  'edit-message': [content: string, references?: MessageFileReference[]];
   'regenerate-message': [];
   'request-root': [];
 }>();
@@ -176,6 +208,7 @@ const emit = defineEmits<{
 const messageApi = useMessage();
 const editing = ref(false);
 const draft = ref('');
+const editingReferences = ref<MessageFileReference[]>([]);
 const editInput = ref<InputInst | null>(null);
 const visibleContent = ref(props.message.content);
 let frameId: number | undefined;
@@ -231,7 +264,11 @@ const cancelAsk = (ask: ChatAskUser): void => {
  */
 const startEdit = async (): Promise<void> => {
   if (props.actionsDisabled || props.message.role !== 'user') return;
-  draft.value = props.message.content;
+  const parts = splitUserMessageReferences(props.message.content);
+  draft.value = props.message.references?.length ? props.message.content : parts.text;
+  editingReferences.value = props.message.references?.length
+    ? props.message.references
+    : parts.references;
   editing.value = true;
   await nextTick();
   editInput.value?.focus();
@@ -244,7 +281,12 @@ const saveEdit = (): void => {
   const content = draft.value.trim();
   if (!content) return;
   editing.value = false;
-  emit('edit-message', content);
+  emit(
+    'edit-message',
+    content,
+    editingReferences.value.length ? editingReferences.value : undefined
+  );
+  editingReferences.value = [];
 };
 
 /**
@@ -253,6 +295,7 @@ const saveEdit = (): void => {
 const cancelEdit = (): void => {
   editing.value = false;
   draft.value = '';
+  editingReferences.value = [];
 };
 
 /**
@@ -266,6 +309,14 @@ const copyMessage = async (): Promise<void> => {
     messageApi.error(t('chat.copyFailed'));
   }
 };
+
+const approvalForTool = (tool: ChatToolCall): ChatApproval[] =>
+  props.approvals.filter(
+    (approval) =>
+      approval.id === tool.approvalId &&
+      approval.toolCallId === tool.id &&
+      approval.status === 'pending'
+  );
 
 const resolvedAsks = computed(() => props.askUsers.filter((ask) => ask.status === 'resolved'));
 const otherAsks = computed(() => props.askUsers.filter((ask) => ask.status !== 'resolved'));
@@ -438,6 +489,12 @@ const timeLabel = computed(() =>
   flex-direction: column;
   gap: 2px;
   margin: 8px -5px -4px;
+}
+
+.nh-message__tool-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .nh-message__tools--after-content {

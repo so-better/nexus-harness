@@ -113,7 +113,11 @@ export const registerAgentIpc = (): void => {
                 sessionId: session.id,
                 seq: 1,
                 type: 'message.edited',
-                payload: { messageId: branchMessageId, content: parsed.data.prompt }
+                payload: {
+                  messageId: branchMessageId,
+                  content: parsed.data.prompt,
+                  ...(parsed.data.references?.length ? { references: parsed.data.references } : {})
+                }
               })
             );
           } else {
@@ -164,7 +168,9 @@ export const registerAgentIpc = (): void => {
           generateSessionTitle(
             createAgentProvider(provider),
             parsed.data.modelId,
-            parsed.data.prompt,
+            parsed.data.prompt.trim() ||
+              parsed.data.references?.map((reference) => reference.name).join(', ') ||
+              '',
             provider.extraParams
           )
             .then(({ title, usage }) => {

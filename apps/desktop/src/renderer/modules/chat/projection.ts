@@ -6,7 +6,6 @@ import type { EventPayloadMap, NexusEvent } from '@shared/events';
 import type {
   ChatAskUser,
   ChatApproval,
-  ChatChange,
   ChatMessageView,
   ChatProjection,
   ChatToolCall,
@@ -30,6 +29,19 @@ const finishAskUsers = (askUsers: ChatAskUser[]): void => {
 const finishStreaming = (messages: ChatMessageView[]): void => {
   for (const message of messages) {
     if (message.streaming) message.streaming = false;
+  }
+};
+
+/**
+ * Run 终止时让未决审批失效，避免历史会话继续显示可点击的审批。
+ */
+const finishApprovals = (approvals: ChatApproval[], messages: ChatMessageView[]): void => {
+  for (const approval of approvals) {
+    if (approval.status !== 'pending') continue;
+    approval.status = 'expired';
+    updateTool(messages, approval.toolCallId, (tool) => {
+      tool.status = 'expired';
+    });
   }
 };
 
@@ -74,7 +86,6 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
   const messages: ChatMessageView[] = [];
   const approvals: ChatApproval[] = [];
   const askUsers: ChatAskUser[] = [];
-  const changes: ChatChange[] = [];
   const usage = emptyUsage();
   let lastAssistant: ChatMessageView | undefined;
   let runId: string | undefined;
@@ -114,6 +125,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
         existing.content = payload.content;
         existing.streaming = false;
         if (event.runId) existing.runId = event.runId;
+        if (payload.references?.length) existing.references = payload.references;
         lastAssistant = payload.role === 'assistant' ? existing : undefined;
       } else {
         const message: ChatMessageView = {
@@ -124,6 +136,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
           createdAt: event.ts,
           streaming: false,
           files: [],
+          ...(payload.references?.length ? { references: payload.references } : {}),
           ...(event.runId ? { runId: event.runId } : {})
         };
         messages.push(message);
@@ -139,29 +152,6 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
         message.superseded = true;
         if (lastAssistant === message) lastAssistant = undefined;
       }
-      continue;
-    }
-
-    if (event.type === 'checkpoint.created') {
-      const payload = event.payload as EventPayloadMap['checkpoint.created'];
-      if (payload.path) {
-        changes.push({
-          checkpointId: payload.checkpointId,
-          path: payload.path,
-          label: payload.label,
-          ...(payload.existed === undefined ? {} : { existed: payload.existed }),
-          ...(event.runId ? { runId: event.runId } : {}),
-          createdAt: event.ts,
-          restored: false
-        });
-      }
-      continue;
-    }
-
-    if (event.type === 'checkpoint.restored') {
-      const payload = event.payload as EventPayloadMap['checkpoint.restored'];
-      const change = changes.find((item) => item.checkpointId === payload.checkpointId);
-      if (change) change.restored = true;
       continue;
     }
 
@@ -287,6 +277,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       status = 'completed';
       finishStreaming(messages);
       finishAskUsers(askUsers);
+      finishApprovals(approvals, messages);
       continue;
     }
 
@@ -321,6 +312,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       error = payload.error.message;
       finishStreaming(messages);
       finishAskUsers(askUsers);
+      finishApprovals(approvals, messages);
       messages.push(systemMessage(event, `${payload.error.code}: ${payload.error.message}`));
       continue;
     }
@@ -330,6 +322,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       status = 'cancelled';
       finishStreaming(messages);
       finishAskUsers(askUsers);
+      finishApprovals(approvals, messages);
       continue;
     }
 
@@ -338,6 +331,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       status = 'interrupted';
       finishStreaming(messages);
       finishAskUsers(askUsers);
+      finishApprovals(approvals, messages);
       continue;
     }
 
@@ -358,7 +352,6 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
     messages: messages.filter((message) => !message.superseded && !message.hidden),
     approvals,
     askUsers,
-    changes,
     usage,
     running,
     status,
@@ -375,8 +368,9 @@ const updateTool = (
   toolCallId: string,
   update: (tool: ChatToolCall) => void
 ): void => {
-  for (const message of messages) {
-    const tool = message.toolCalls.find((item) => item.id === toolCallId);
+  // 从最新消息向前查找，避免异常重复的工具调用 ID 更新到旧消息。
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const tool = messages[index]?.toolCalls.find((item) => item.id === toolCallId);
     if (tool) {
       update(tool);
       return;

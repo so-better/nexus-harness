@@ -10,16 +10,6 @@
           {{ sessionStatusLabel(session.status) }}
         </NTag>
       </div>
-      <NButton
-        v-if="changeCount > 0"
-        text
-        size="small"
-        class="nh-chat__changes"
-        @click="emit('toggle-changes')"
-      >
-        <template #icon><AppIcon name="file" :size="14" /></template>
-        {{ t('change.button') }} {{ changeCount }}
-      </NButton>
     </header>
 
     <SessionEmptyView
@@ -39,7 +29,7 @@
       @update-model="emit('update-model', $event)"
       @update-mode="emit('update-mode', $event)"
       @open-settings="emit('open-settings')"
-      @send="(prompt, images) => emit('send', prompt, images)"
+      @send="(prompt, images, references) => emit('send', prompt, images, references)"
       @stop="emit('stop')"
     />
 
@@ -51,24 +41,29 @@
         :focus-session-id="focusSessionId"
         :session-id="session?.id"
         :ask-users="projection.askUsers"
+        :approvals="projection.approvals"
         :actions-disabled="projection.running"
         @answer-user="(requestId, answers) => emit('answer-user', requestId, answers)"
-        @edit-message="(messageId, content) => emit('edit-message', messageId, content)"
+        @approve="emit('approve', $event)"
+        @reject="emit('reject', $event)"
+        @edit-message="
+          (messageId, content, references) => emit('edit-message', messageId, content, references)
+        "
         @regenerate-message="(messageId) => emit('regenerate-message', messageId)"
         @request-root="emit('request-root')"
       />
 
       <div class="nh-chat__bottom">
-        <div v-if="pendingApprovals.length" class="nh-chat__approvals">
-          <ApprovalCard
-            v-for="approval in pendingApprovals"
-            :key="approval.id"
-            :approval="approval"
-            @approve="emit('approve', approval.id)"
-            @reject="emit('reject', approval.id)"
-          />
-        </div>
-
+        <NButton
+          v-if="pendingApprovals.length"
+          size="small"
+          secondary
+          class="nh-chat__approval-jump"
+          @click="focusApproval"
+        >
+          <template #icon><AppIcon name="alert" :size="14" /></template>
+          {{ t('chat.approvalJump') }} {{ pendingApprovals.length }}
+        </NButton>
         <ComposerBox
           :disabled="Boolean(disabledReason)"
           :disabled-reason="disabledReason"
@@ -85,7 +80,7 @@
           @update-provider="emit('update-provider', $event)"
           @update-model="emit('update-model', $event)"
           @update-mode="emit('update-mode', $event)"
-          @send="(prompt, images) => emit('send', prompt, images)"
+          @send="(prompt, images, references) => emit('send', prompt, images, references)"
           @stop="emit('stop')"
         />
       </div>
@@ -108,10 +103,10 @@ import type {
   SessionSummary
 } from '@shared/ipc/contracts';
 import type { AskUserAnswer } from '@shared/ask-user';
+import type { MessageFileReference } from '@shared/events';
 import { t } from '@/app/i18n';
 import { sessionStatusLabel, sessionStatusTagColor } from '@/app/session-status';
 import AppIcon from '@/components/AppIcon.vue';
-import ApprovalCard from '../components/ApprovalCard.vue';
 import ComposerBox from '../components/ComposerBox.vue';
 import MessageList from '../components/MessageList.vue';
 import SessionEmptyView from '../components/SessionEmptyView.vue';
@@ -139,27 +134,34 @@ const emit = defineEmits<{
   'update-model': [id: string];
   'update-mode': [mode: AgentMode];
   'open-settings': [];
-  send: [prompt: string, imagePaths?: string[]];
+  send: [prompt: string, imagePaths?: string[], references?: MessageFileReference[]];
   stop: [];
   approve: [approvalId: string];
   reject: [approvalId: string];
   'answer-user': [requestId: string, answers: AskUserAnswer[] | undefined];
-  'edit-message': [messageId: string, content: string];
+  'edit-message': [messageId: string, content: string, references?: MessageFileReference[]];
   'regenerate-message': [messageId: string];
   'request-root': [];
-  'toggle-changes': [];
 }>();
 
 const isEmpty = computed(() => !props.session || props.projection.messages.length === 0);
-const changeCount = computed(
-  () =>
-    new Set(
-      props.projection.changes.filter((change) => !change.restored).map((change) => change.path)
-    ).size
-);
 const pendingApprovals = computed(() =>
   props.projection.approvals.filter((approval) => approval.status === 'pending')
 );
+
+/**
+ * 跳转到第一条待审批的工具卡片。
+ */
+const focusApproval = (): void => {
+  const approval = pendingApprovals.value[0];
+  if (!approval) return;
+  const node =
+    document.querySelector<HTMLElement>(`[data-approval-id="${approval.id}"]`) ??
+    [...document.querySelectorAll<HTMLElement>('[data-tool-call-id]')].find(
+      (element) => element.dataset['toolCallId'] === approval.toolCallId
+    );
+  node?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+};
 </script>
 
 <style scoped lang="less">
@@ -211,10 +213,6 @@ const pendingApprovals = computed(() =>
   white-space: nowrap;
 }
 
-.nh-chat__changes {
-  margin-left: auto;
-}
-
 .nh-chat__bottom {
   display: flex;
   flex: none;
@@ -222,12 +220,7 @@ const pendingApprovals = computed(() =>
   gap: 16px;
 }
 
-.nh-chat__approvals {
-  display: flex;
-  width: calc(100% - 64px);
-  max-width: 1040px;
-  flex-direction: column;
-  gap: 8px;
-  margin: 0 auto;
+.nh-chat__approval-jump {
+  align-self: center;
 }
 </style>

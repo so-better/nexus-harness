@@ -83,6 +83,8 @@ const statusLabel = computed(() => {
       return t('tool.approved');
     case 'rejected':
       return t('tool.rejected');
+    case 'expired':
+      return t('tool.expired');
     case 'running':
       return t('tool.running');
     case 'succeeded':

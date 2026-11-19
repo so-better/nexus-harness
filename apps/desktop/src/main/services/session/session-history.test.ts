@@ -183,4 +183,28 @@ describe('SessionHistoryService', () => {
     });
     expect(history.at(-1)?.content).toContain('TOOL_RESULT_MISSING');
   });
+
+  it('appends structured file references to replayed user messages', () => {
+    const events = [
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: {
+          messageId: 'user-1',
+          role: 'user',
+          content: '看这个',
+          references: [{ path: '/workspace/a.ts', name: 'a.ts' }]
+        }
+      })
+    ] as NexusEvent[];
+
+    const store = { list: () => events } as unknown as EventStore;
+    const history = new SessionHistoryService(store).load('session-1');
+
+    expect(history[0]).toMatchObject({
+      role: 'user',
+      content: '看这个\n\n@/workspace/a.ts'
+    });
+  });
 });

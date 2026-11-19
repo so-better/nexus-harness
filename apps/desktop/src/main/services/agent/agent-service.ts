@@ -23,7 +23,7 @@ import {
   type ProviderToolCall
 } from '@nexus/providers';
 import { createFileToolset, isSensitivePath } from '@nexus/tools';
-import { imageMimeForName } from '@shared/files';
+import { appendFileReferences, imageMimeForName } from '@shared/files';
 import { ArtifactService } from '../artifacts/artifact-service';
 import { FileService } from '../files/file-service';
 import { CheckpointService } from '../checkpoint/checkpoint-service';
@@ -474,7 +474,7 @@ export class AgentService {
         : [];
       const userMessage: ChatMessage = {
         role: 'user',
-        content: input.prompt,
+        content: appendFileReferences(input.prompt, input.references),
         ...(loadedImages.length ? { images: loadedImages.map((item) => item.image) } : {})
       };
       if (shouldAddUserMessage) {
@@ -488,6 +488,7 @@ export class AgentService {
               messageId: randomUUID(),
               role: 'user',
               content: input.prompt,
+              ...(input.references?.length ? { references: input.references } : {}),
               ...(loadedImages.length ? { images: loadedImages.map((item) => item.reference) } : {})
             }
           })

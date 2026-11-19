@@ -17,6 +17,7 @@ import { closeDatabase, initDatabase } from './services/storage/database';
 import { loadThemeSource } from './services/settings/theme-settings';
 import { EventStore } from './services/session/event-store';
 import { RunStore } from './services/session/run-store';
+import { expirePendingApprovals } from './services/session/approval-recovery';
 import { SessionService } from './services/session/session-service';
 import { syncBuiltinPlugins } from './services/plugins/builtin-plugin-service';
 import { initializeAutoLaunch } from './services/settings/startup-settings';
@@ -62,6 +63,7 @@ if (!hasSingleInstanceLock) {
             payload: { reason: 'app_restart' }
           })
         );
+        expirePendingApprovals(eventStore, run);
       }
 
       if (process.platform === 'darwin' && !app.isPackaged) {

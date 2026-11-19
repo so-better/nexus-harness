@@ -2,7 +2,7 @@
  * 聊天 API：事件、Provider 列表、目录选择与 Agent 运行。
  */
 
-import type { NexusEvent } from '@shared/events';
+import type { MessageFileReference, NexusEvent } from '@shared/events';
 import type { AskUserResolveInput, AskUserResolveResult } from '@shared/ask-user';
 import type { AgentCancelResult, AgentStartResult, ProviderPublic } from '@shared/ipc/contracts';
 import { unwrap } from '@/app/ipc';
@@ -37,6 +37,7 @@ export const runAgent = async (input: {
   editMessageId?: string;
   regenerateMessageId?: string;
   imagePaths?: string[];
+  references?: MessageFileReference[];
 }): Promise<AgentStartResult> => unwrap(await window.nexus.agent.run(input));
 
 /**

@@ -30,7 +30,7 @@
         @update-model="emit('update-model', $event)"
         @update-mode="emit('update-mode', $event)"
         @open-settings="emit('open-settings')"
-        @send="(prompt, images) => emit('send', prompt, images)"
+        @send="(prompt, images, references) => emit('send', prompt, images, references)"
         @stop="emit('stop')"
       />
     </div>
@@ -43,6 +43,7 @@
  */
 
 import type { AgentMode, ProviderModel, ProviderPublic, SessionRoot } from '@shared/ipc/contracts';
+import type { MessageFileReference } from '@shared/events';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import ComposerBox from './ComposerBox.vue';
@@ -60,7 +61,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  send: [prompt: string, imagePaths?: string[]];
+  send: [prompt: string, imagePaths?: string[], references?: MessageFileReference[]];
   stop: [];
   'choose-root': [];
   'remove-root': [rootId: string];

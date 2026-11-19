@@ -5,6 +5,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import type { ChatImage, ChatMessage, ProviderToolCall } from '@nexus/providers';
 import type { EventPayloadMap } from '@shared/events';
+import { appendFileReferences } from '@shared/files';
 import type { EventStore } from './event-store';
 
 const MAX_HISTORY_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -93,7 +94,7 @@ export class SessionHistoryService {
           const images = loadHistoryImages(payload.images);
           messages.push({
             role: 'user',
-            content: payload.content,
+            content: appendFileReferences(payload.content, payload.references),
             ...(images.length ? { images } : {})
           });
           lastAssistant = undefined;

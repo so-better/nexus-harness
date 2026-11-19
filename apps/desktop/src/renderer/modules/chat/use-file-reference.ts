@@ -15,6 +15,7 @@ interface FileReferenceOptions {
   enabled: Ref<boolean>;
   inputRef: Ref<InputInst | null>;
   onSelect?: (reference: WorkspaceFileReference) => void;
+  formatReference?: (reference: WorkspaceFileReference) => string;
   submit: () => void;
   toggleMode: (event: KeyboardEvent) => void;
 }
@@ -87,7 +88,8 @@ export const useFileReference = (options: FileReferenceOptions) => {
 
   const select = (reference: WorkspaceFileReference): void => {
     if (start < 0 || end < 0) return;
-    options.draft.value = `${options.draft.value.slice(0, start)}@${reference.path} ${options.draft.value.slice(end)}`;
+    const replacement = options.formatReference?.(reference) ?? `@${reference.path} `;
+    options.draft.value = `${options.draft.value.slice(0, start)}${replacement}${options.draft.value.slice(end)}`;
     options.onSelect?.(reference);
     close();
     options.inputRef.value?.focus();

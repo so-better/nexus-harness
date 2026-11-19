@@ -1,6 +1,6 @@
 <template>
   <div class="nh-layout">
-    <div class="nh-layout__body" :class="{ 'nh-layout__body--inspector': changesOpen }">
+    <div class="nh-layout__body">
       <SessionSidebar
         :sessions="sessions.sessions"
         :active-id="sessions.activeId"
@@ -41,15 +41,6 @@
         @answer-user="answerUser"
         @edit-message="editMessage"
         @regenerate-message="regenerateMessage"
-        @toggle-changes="changesOpen = !changesOpen"
-      />
-
-      <ChangeReviewPanel
-        v-if="changesOpen"
-        :changes="projection.changes"
-        :session-id="activeId"
-        @close="changesOpen = false"
-        @open-file="openFile"
       />
     </div>
 
@@ -81,9 +72,8 @@ import { storeToRefs } from 'pinia';
 import type { AgentMode, ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
 import type { AskUserAnswer } from '@shared/ask-user';
 import { setLocale, t } from '@/app/i18n';
+import type { MessageFileReference } from '@shared/events';
 import ChatView from '@/modules/chat/views/ChatView.vue';
-import ChangeReviewPanel from '@/modules/chat/components/ChangeReviewPanel.vue';
-import { openCheckpointFile } from '@/modules/chat/api/checkpoint.api';
 import { projectEvents } from '@/modules/chat/projection';
 import { useChatStore } from '@/modules/chat/stores/chat.store';
 import SessionSidebar from '@/modules/session/components/SessionSidebar.vue';
@@ -103,7 +93,6 @@ const { providers, providerId, modelId, models, roots, runningBySession } = stor
 
 const { version, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
 const focusMessage = ref<{ id: string; token: number; sessionId: string }>();
-const changesOpen = ref(false);
 let unsubscribeSessionChanges: (() => void) | undefined;
 let focusSequence = 0;
 
@@ -166,18 +155,6 @@ const createSession = async (): Promise<void> => {
  */
 const selectSession = (id: string): void => {
   sessions.select(id);
-};
-
-/**
- * 用系统默认应用打开变更文件。
- */
-const openFile = async (checkpointId: string): Promise<void> => {
-  if (!activeId.value) return;
-  try {
-    await openCheckpointFile(activeId.value, checkpointId);
-  } catch (error) {
-    message.error(error instanceof Error ? error.message : t('change.openFailed'));
-  }
 };
 
 /**
@@ -277,7 +254,11 @@ const removeRoot = async (rootId: string): Promise<void> => {
 /**
  * 发送消息；没有会话时先创建。
  */
-const send = async (prompt: string, imagePaths?: string[]): Promise<void> => {
+const send = async (
+  prompt: string,
+  imagePaths?: string[],
+  references?: MessageFileReference[]
+): Promise<void> => {
   if (!activeId.value) {
     const created = await sessions.create(providerId.value, modelId.value);
     if (!created) {
@@ -286,7 +267,7 @@ const send = async (prompt: string, imagePaths?: string[]): Promise<void> => {
     }
   }
   if (activeId.value) {
-    const started = await chat.send(activeId.value, prompt, imagePaths);
+    const started = await chat.send(activeId.value, prompt, imagePaths, references);
     if (!started) message.error(chat.error ?? t('chat.sendFailed'));
   }
 };
@@ -332,9 +313,13 @@ const answerUser = async (
 /**
  * 编辑用户消息并重发。
  */
-const editMessage = async (messageId: string, content: string): Promise<void> => {
+const editMessage = async (
+  messageId: string,
+  content: string,
+  references?: MessageFileReference[]
+): Promise<void> => {
   if (!activeId.value || activeRunning.value) return;
-  const started = await chat.editMessage(activeId.value, messageId, content);
+  const started = await chat.editMessage(activeId.value, messageId, content, references);
   if (!started) message.error(chat.error ?? t('chat.editFailed'));
 };
 
@@ -343,11 +328,11 @@ const editMessage = async (messageId: string, content: string): Promise<void> =>
  */
 const regenerateMessage = async (messageId: string): Promise<void> => {
   if (!activeId.value || activeRunning.value) return;
-  const prompt = [...projection.value.messages]
+  const lastUser = [...projection.value.messages]
     .reverse()
-    .find((message) => message.role === 'user')?.content;
-  if (!prompt) return;
-  const started = await chat.regenerateMessage(activeId.value, messageId, prompt);
+    .find((message) => message.role === 'user');
+  if (!lastUser) return;
+  const started = await chat.regenerateMessage(activeId.value, messageId, lastUser.content);
   if (!started) message.error(chat.error ?? t('chat.regenerateFailed'));
 };
 
@@ -403,17 +388,9 @@ onBeforeUnmount(() => {
   grid-template-columns: 288px minmax(0, 1fr);
 }
 
-.nh-layout__body--inspector {
-  grid-template-columns: 288px minmax(0, 1fr) 520px;
-}
-
 @media (width <= 1024px) {
   .nh-layout__body {
     grid-template-columns: 268px minmax(0, 1fr);
-  }
-
-  .nh-layout__body--inspector {
-    grid-template-columns: 268px minmax(0, 1fr) 460px;
   }
 }
 </style>

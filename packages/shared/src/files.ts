@@ -20,3 +20,15 @@ export const imageMimeForName = (name: string): string | undefined =>
  * 根据文件名判断是否为可发送给视觉模型的图片。
  */
 export const isImageFile = (name: string): boolean => imageMimeForName(name) !== undefined;
+
+/**
+ * 把结构化文件引用追加到模型提示词；正文与引用路径保持分离。
+ */
+export const appendFileReferences = (
+  prompt: string,
+  references: readonly { path: string }[] | undefined
+): string => {
+  if (!references?.length) return prompt;
+  const lines = references.map((reference) => `@${reference.path}`).join('\n');
+  return prompt ? `${prompt}\n\n${lines}` : lines;
+};

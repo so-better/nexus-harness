@@ -34,12 +34,13 @@
       @keydown="onKeydown"
       @blur="closeReferences"
     />
+    <ComposerFileChips :files="selectedReferences" @remove="removeReference" />
     <ComposerActions
       :disabled="disabled"
       :disabled-reason="disabledReason"
       :running="running"
       :mode="mode"
-      :can-send="Boolean(draft.trim())"
+      :can-send="Boolean(draft.trim() || selectedReferences.length)"
       @stop="emit('stop')"
       @update-mode="emit('update-mode', $event)"
     />
@@ -53,10 +54,13 @@
 
 import { computed, ref, toRef } from 'vue';
 import { NInput, type InputInst } from 'naive-ui';
+import type { MessageFileReference } from '@shared/events';
 import type { AgentMode, ProviderModel, ProviderPublic, SessionRoot } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
+import { useComposerReferences } from '../use-composer-references';
 import { useFileReference } from '../use-file-reference';
 import ComposerActions from './ComposerActions.vue';
+import ComposerFileChips from './ComposerFileChips.vue';
 import ComposerFileReference from './ComposerFileReference.vue';
 import ComposerModelPicker from './ComposerModelPicker.vue';
 import ComposerRootPicker from './ComposerRootPicker.vue';
@@ -76,7 +80,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  send: [prompt: string, imagePaths?: string[]];
+  send: [prompt: string, imagePaths?: string[], references?: MessageFileReference[]];
   stop: [];
   'choose-root': [];
   'remove-root': [rootId: string];
@@ -87,21 +91,22 @@ const emit = defineEmits<{
 }>();
 
 const draft = ref('');
-const imagePaths = ref<string[]>([]);
 const inputRef = ref<InputInst | null>(null);
 const placeholder = computed(() => t('chat.composerPlaceholder'));
+const { selectedReferences, addReference, removeReference, send } = useComposerReferences({
+  draft,
+  sessionId: computed(() => props.sessionId),
+  disabled: computed(() => props.disabled),
+  running: computed(() => props.running),
+  send: (prompt, imagePaths, references) => emit('send', prompt, imagePaths, references)
+});
 
 /**
- * 提交非空消息并清空输入。
+ * 关闭候选列表后提交消息。
  */
 const submit = (): void => {
-  const prompt = draft.value.trim();
-  if (!prompt || props.disabled || props.running) return;
   closeReferences();
-  const attachments = imagePaths.value.filter((path) => draft.value.includes(`@${path}`));
-  imagePaths.value = [];
-  draft.value = '';
-  emit('send', prompt, attachments);
+  send();
 };
 
 /**
@@ -137,11 +142,8 @@ const {
   running: computed(() => props.running),
   enabled: computed(() => props.roots.length > 0),
   inputRef,
-  onSelect: (reference) => {
-    if (reference.isImage && imagePaths.value.length < 4) {
-      imagePaths.value = [...new Set([...imagePaths.value, reference.path])];
-    }
-  },
+  formatReference: () => '',
+  onSelect: addReference,
   submit,
   toggleMode: onTab
 });

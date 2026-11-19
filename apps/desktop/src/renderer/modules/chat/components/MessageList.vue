@@ -8,11 +8,16 @@
         :grouped="isGrouped(index)"
         :highlighted="message.id === highlightedId"
         :ask-users="askForMessage(message.id)"
+        :approvals="approvals"
         :is-last-assistant="message.id === lastAssistantId"
         :actions-disabled="actionsDisabled"
         @content-growth="handleContentGrowth"
         @answer-user="(requestId, answers) => emit('answer-user', requestId, answers)"
-        @edit-message="(content) => emit('edit-message', message.id, content)"
+        @approve="emit('approve', $event)"
+        @reject="emit('reject', $event)"
+        @edit-message="
+          (content, references) => emit('edit-message', message.id, content, references)
+        "
         @regenerate-message="emit('regenerate-message', message.id)"
         @request-root="emit('request-root')"
       />
@@ -27,13 +32,16 @@
 
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import type { AskUserAnswer } from '@shared/ask-user';
+import type { MessageFileReference } from '@shared/events';
 import { indexAskUsersByMessage } from '../ask-user-index';
-import type { ChatAskUser, ChatMessageView } from '../types';
+import type { ChatApproval, ChatAskUser, ChatMessageView } from '../types';
 import ChatMessageItem from './ChatMessageItem.vue';
 
 const emit = defineEmits<{
   'answer-user': [requestId: string, answers: AskUserAnswer[] | undefined];
-  'edit-message': [messageId: string, content: string];
+  approve: [approvalId: string];
+  reject: [approvalId: string];
+  'edit-message': [messageId: string, content: string, references?: MessageFileReference[]];
   'regenerate-message': [messageId: string];
   'request-root': [];
 }>();
@@ -45,6 +53,7 @@ const props = defineProps<{
   focusSessionId?: string | undefined;
   sessionId?: string | undefined;
   askUsers?: ChatAskUser[] | undefined;
+  approvals?: ChatApproval[] | undefined;
   actionsDisabled?: boolean | undefined;
 }>();
 

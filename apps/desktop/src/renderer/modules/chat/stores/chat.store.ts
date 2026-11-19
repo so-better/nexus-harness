@@ -6,7 +6,7 @@ import { computed, reactive, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { t } from '@/app/i18n';
 import { appendAgentEvent } from '../event-cache';
-import type { NexusEvent } from '@shared/events';
+import type { MessageFileReference, NexusEvent } from '@shared/events';
 import type { SessionRoot } from '@shared/ipc/contracts';
 import type { AskUserAnswer } from '@shared/ask-user';
 import {
@@ -88,7 +88,12 @@ export const useChatStore = defineStore('chat', () => {
   const dispatchRun = async (
     sessionId: string,
     prompt: string,
-    extra: { editMessageId?: string; regenerateMessageId?: string; imagePaths?: string[] } = {}
+    extra: {
+      editMessageId?: string;
+      regenerateMessageId?: string;
+      imagePaths?: string[];
+      references?: MessageFileReference[];
+    } = {}
   ): Promise<boolean> => {
     if (!providerId.value) {
       error.value = t('chat.needsProvider');
@@ -121,8 +126,16 @@ export const useChatStore = defineStore('chat', () => {
   /**
    * 发送新消息。
    */
-  const send = async (sessionId: string, prompt: string, imagePaths?: string[]): Promise<boolean> =>
-    dispatchRun(sessionId, prompt, imagePaths ? { imagePaths } : {});
+  const send = async (
+    sessionId: string,
+    prompt: string,
+    imagePaths?: string[],
+    references?: MessageFileReference[]
+  ): Promise<boolean> =>
+    dispatchRun(sessionId, prompt, {
+      ...(imagePaths ? { imagePaths } : {}),
+      ...(references ? { references } : {})
+    });
 
   /**
    * 编辑用户消息并重新发送。
@@ -130,8 +143,13 @@ export const useChatStore = defineStore('chat', () => {
   const editMessage = async (
     sessionId: string,
     messageId: string,
-    prompt: string
-  ): Promise<boolean> => dispatchRun(sessionId, prompt, { editMessageId: messageId });
+    prompt: string,
+    references?: MessageFileReference[]
+  ): Promise<boolean> =>
+    dispatchRun(sessionId, prompt, {
+      editMessageId: messageId,
+      ...(references ? { references } : {})
+    });
 
   /**
    * 基于当前上下文重新生成指定助手回复。

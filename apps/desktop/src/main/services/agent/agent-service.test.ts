@@ -52,7 +52,8 @@ describe('AgentService', () => {
         prompt: '继续',
         rootPaths: [root],
         providerId: providerConfig.id,
-        modelId: 'mock-model'
+        modelId: 'mock-model',
+        references: [{ path: join(root, 'a.txt'), name: 'a.txt' }]
       },
       providerConfig,
       {
@@ -71,11 +72,15 @@ describe('AgentService', () => {
     expect(requests[0]?.messages.slice(1).map((message) => message.content)).toEqual([
       '之前的问题',
       '之前的回答',
-      '继续'
+      `继续\n\n@${join(root, 'a.txt')}`
     ]);
     expect(events[0]).toMatchObject({
       type: 'message.completed',
-      payload: { role: 'user', content: '继续' }
+      payload: {
+        role: 'user',
+        content: '继续',
+        references: [{ path: join(root, 'a.txt'), name: 'a.txt' }]
+      }
     });
   });
 

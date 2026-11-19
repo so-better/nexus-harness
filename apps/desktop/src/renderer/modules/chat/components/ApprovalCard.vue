@@ -1,11 +1,22 @@
 <template>
-  <section class="nh-approval">
-    <span class="nh-approval__icon">
+  <section class="nh-approval" :class="{ 'nh-approval--inline': inline }">
+    <span v-if="!inline" class="nh-approval__icon">
       <AppIcon name="alert" :size="18" />
     </span>
     <div class="nh-approval__body">
-      <p class="nh-approval__title">{{ t('chat.approvalTitle') }}</p>
-      <p class="nh-approval__scope">{{ approval.scope }}</p>
+      <template v-if="!inline">
+        <div class="nh-approval__heading">
+          <p class="nh-approval__title">{{ t('chat.approvalTitle') }}</p>
+          <code v-if="tool" class="nh-approval__tool">{{ tool.name }}</code>
+        </div>
+        <p v-if="!tool || approval.scope !== tool.name" class="nh-approval__scope">
+          {{ approval.scope }}
+        </p>
+      </template>
+
+      <ApprovalDetails v-if="tool" :tool="tool" />
+
+      <p class="nh-approval__warning">{{ t('chat.approvalWarning') }}</p>
     </div>
     <div class="nh-approval__actions">
       <NButton size="small" secondary @click="emit('reject')">
@@ -26,15 +37,20 @@
 
 <script setup lang="ts">
 /**
- * 审批卡片：只对 pending 审批展示允许/拒绝操作。
+ * 审批卡片：展示将要执行的路径、命令、内容或补丁，再允许/拒绝。
  */
 
 import { NButton } from 'naive-ui';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
-import type { ChatApproval } from '../types';
+import ApprovalDetails from './ApprovalDetails.vue';
+import type { ChatApproval, ChatToolCall } from '../types';
 
-defineProps<{ approval: ChatApproval }>();
+defineProps<{
+  approval: ChatApproval;
+  tool?: ChatToolCall | undefined;
+  inline?: boolean;
+}>();
 
 const emit = defineEmits<{ approve: []; reject: [] }>();
 </script>
@@ -42,13 +58,19 @@ const emit = defineEmits<{ approve: []; reject: [] }>();
 <style scoped lang="less">
 .nh-approval {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   padding: 12px 14px;
   border: 1px solid color-mix(in srgb, var(--nh-color-warning) 28%, var(--nh-color-border));
   border-radius: var(--nh-radius-md);
   background: var(--nh-color-bg-base);
   box-shadow: var(--nh-shadow-card);
+}
+
+.nh-approval--inline {
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: none;
 }
 
 .nh-approval__icon {
@@ -67,14 +89,28 @@ const emit = defineEmits<{ approve: []; reject: [] }>();
   flex: 1;
 }
 
+.nh-approval__heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .nh-approval__title,
-.nh-approval__scope {
+.nh-approval__scope,
+.nh-approval__warning {
   margin: 0;
 }
 
 .nh-approval__title {
   font-size: 14px;
   font-weight: 500;
+}
+
+.nh-approval__tool,
+.nh-approval__value {
+  color: var(--nh-color-text-secondary);
+  font-family: var(--nh-font-mono);
+  font-size: 11px;
 }
 
 .nh-approval__scope {
@@ -84,6 +120,12 @@ const emit = defineEmits<{ approve: []; reject: [] }>();
   font-size: 12px;
   line-height: 1.6;
   overflow-wrap: anywhere;
+}
+
+.nh-approval__warning {
+  margin-top: 9px;
+  color: var(--nh-color-warning);
+  font-size: 11px;
 }
 
 .nh-approval__actions {

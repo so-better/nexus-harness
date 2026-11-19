@@ -6,6 +6,16 @@ import { z } from 'zod';
 import { askQuestionSchema, askUserAnswerSchema } from './ask-user';
 
 /**
+ * 用户消息附带的文件引用；正文保持干净，路径由元数据提供。
+ */
+export const messageFileReferenceSchema = z.object({
+  path: z.string().min(1),
+  name: z.string().min(1)
+});
+
+export type MessageFileReference = z.infer<typeof messageFileReferenceSchema>;
+
+/**
  * 事件 payload 映射；新增事件时先在此登记，再实现发布与订阅。
  */
 export const eventPayloadSchemas = {
@@ -59,11 +69,13 @@ export const eventPayloadSchemas = {
     messageId: z.string(),
     role: z.enum(['user', 'assistant']),
     content: z.string(),
-    images: z.array(z.object({ path: z.string(), mime: z.string() })).optional()
+    images: z.array(z.object({ path: z.string(), mime: z.string() })).optional(),
+    references: z.array(messageFileReferenceSchema).max(64).optional()
   }),
   'message.edited': z.object({
     messageId: z.string(),
-    content: z.string()
+    content: z.string(),
+    references: z.array(messageFileReferenceSchema).max(64).optional()
   }),
   'message.regenerated': z.object({
     messageId: z.string(),
