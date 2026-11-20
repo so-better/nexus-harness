@@ -155,6 +155,7 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
   const active = new Map<string, ActivePlugin>();
   const eventHandlers = new Map<string, Set<(payload: unknown) => void>>();
   const activating = new Set<string>();
+  const activationWaiters = new Map<string, Array<() => void>>();
   let initialized = false;
   let unsubscribeChanges: (() => void) | undefined;
   let unsubscribeEvents: (() => void) | undefined;
@@ -204,17 +205,22 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
   };
 
   const activatePlugin = async (plugin: PluginPublic): Promise<void> => {
-    if (
-      !plugin.enabled ||
-      !plugin.rendererUrl ||
-      active.has(plugin.id) ||
-      activating.has(plugin.id)
-    )
+    if (!plugin.enabled || !plugin.rendererUrl || active.has(plugin.id)) return;
+    if (activating.has(plugin.id)) {
+      // 同一插件的并发激活必须等待首个激活完成，否则调用方会误判挂载尚未注册
+      await new Promise<void>((resolve) => {
+        const waiters = activationWaiters.get(plugin.id) ?? [];
+        waiters.push(resolve);
+        activationWaiters.set(plugin.id, waiters);
+      });
       return;
+    }
     activating.add(plugin.id);
     let disposable: ActivePlugin | undefined;
     try {
-      const url = `${plugin.rendererUrl}?v=${plugin.version}-${activationNonce}`;
+      const url = plugin.rendererUrl.startsWith('nexus-plugin://')
+        ? `${plugin.rendererUrl}?v=${plugin.version}-${activationNonce}`
+        : plugin.rendererUrl;
       const module = (await import(/* @vite-ignore */ url)) as {
         activate?: (ctx: PluginContext) => void | Promise<void>;
         deactivate?: () => void | Promise<void>;
@@ -239,10 +245,14 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
               ...(contribution?.shortcut ? { shortcut: contribution.shortcut } : {}),
               handler
             };
-            commands.value.set(id, command);
+            const next = new Map(commands.value);
+            next.set(id, command);
+            commands.value = next;
             bump();
             const dispose = (): void => {
-              commands.value.delete(id);
+              const next = new Map(commands.value);
+              next.delete(id);
+              commands.value = next;
               bump();
             };
             currentDisposable.disposables.push(dispose);
@@ -417,6 +427,9 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
       reportPluginError(plugin.id, message).catch(() => undefined);
     } finally {
       activating.delete(plugin.id);
+      const waiters = activationWaiters.get(plugin.id);
+      activationWaiters.delete(plugin.id);
+      for (const resolve of waiters ?? []) resolve();
     }
   };
 
@@ -433,7 +446,7 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     active.clear();
     eventHandlers.clear();
     statusItems.value = [];
-    commands.value.clear();
+    commands.value = new Map();
     views.value.clear();
     slotRegistry.clear();
     skinMounts.value = new Map();
