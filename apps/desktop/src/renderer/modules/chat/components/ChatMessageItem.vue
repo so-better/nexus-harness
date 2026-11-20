@@ -698,18 +698,18 @@ const timeLabel = computed(() =>
 .nh-message__flow {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 15px;
 }
 
 .nh-message__files {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 15px;
 }
 
 .nh-message__files--after-content,
 .nh-message__tools--after-content {
-  margin-top: 10px;
+  margin-top: 15px;
 }
 
 .nh-message__tools {

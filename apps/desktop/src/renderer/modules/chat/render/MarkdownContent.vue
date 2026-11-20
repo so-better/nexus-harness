@@ -10,6 +10,7 @@
 import { onMounted, ref, watch } from 'vue';
 import { useMessage } from 'naive-ui';
 import { t } from '@/app/i18n';
+import { enhanceMarkdownImages } from './markdown-images';
 import { renderMarkdown } from './markdown';
 
 const props = defineProps<{
@@ -21,7 +22,9 @@ const root = ref<HTMLElement>();
 const message = useMessage();
 
 const apply = (): void => {
-  if (root.value) root.value.innerHTML = renderMarkdown(props.content);
+  if (!root.value) return;
+  root.value.innerHTML = renderMarkdown(props.content);
+  enhanceMarkdownImages(root.value);
 };
 
 watch(() => props.content, apply);
@@ -49,47 +52,61 @@ const handleClick = async (event: MouseEvent): Promise<void> => {
   min-width: 0;
   color: var(--nh-color-text-primary);
   font-size: 14px;
-  line-height: 1.7;
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
 .nh-markdown h1,
 .nh-markdown h2,
 .nh-markdown h3,
-.nh-markdown h4 {
-  margin: 14px 0 8px;
+.nh-markdown h4,
+.nh-markdown h5,
+.nh-markdown h6 {
+  margin: 0 0 15px;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.5;
 }
 
 .nh-markdown h1 {
-  font-size: 20px;
+  font-size: 28px;
 }
 
 .nh-markdown h2 {
-  font-size: 17px;
+  font-size: 24px;
 }
 
 .nh-markdown h3 {
-  font-size: 15px;
+  font-size: 20px;
+}
+
+.nh-markdown h4 {
+  font-size: 18px;
+}
+
+.nh-markdown h5 {
+  font-size: 16px;
+}
+
+.nh-markdown h6 {
+  font-size: 14px;
 }
 
 .nh-markdown p {
-  margin: 0 0 10px;
+  margin: 0 0 15px;
 }
 
 .nh-markdown ul,
 .nh-markdown ol {
-  margin: 6px 0 12px;
+  margin: 0 0 15px;
   padding-left: 22px;
 }
 
 .nh-markdown li {
-  margin: 3px 0;
+  margin: 0 0 4px;
 }
 
 .nh-markdown blockquote {
-  margin: 10px 0;
+  margin: 0 0 15px;
   padding: 6px 12px;
   border-left: 3px solid var(--nh-color-accent);
   color: var(--nh-color-text-secondary);
@@ -113,12 +130,18 @@ const handleClick = async (event: MouseEvent): Promise<void> => {
   font-size: 0.92em;
 }
 
+.nh-markdown hr {
+  margin: 0 0 15px;
+  border: 0;
+  border-top: 1px solid var(--nh-border-subtle);
+}
+
 .nh-markdown table {
   display: block;
   max-width: 100%;
   overflow-x: auto;
   border-collapse: collapse;
-  margin: 10px 0;
+  margin: 0 0 15px;
 }
 
 .nh-markdown th,
@@ -139,33 +162,149 @@ const handleClick = async (event: MouseEvent): Promise<void> => {
   border-radius: 8px;
 }
 
+
+.nh-md-image {
+  position: relative;
+  display: inline-block;
+  width: min(480px, 100%);
+  max-width: 100%;
+  vertical-align: top;
+}
+
+.nh-md-image.is-loaded {
+  width: max-content;
+  max-width: min(480px, 100%);
+}
+
+.nh-md-image.is-error {
+  width: 100%;
+}
+
+.nh-md-image .nh-md-image__img {
+  display: block;
+  max-width: min(480px, 100%);
+  height: auto;
+  border-radius: 8px;
+}
+
+.nh-md-image.is-loading .nh-md-image__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+}
+
+.nh-md-image.is-error .nh-md-image__img {
+  display: none;
+}
+
+.nh-md-image__error {
+  display: none;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--nh-border-subtle);
+  border-radius: 10px;
+  background: var(--nh-color-bg-hover);
+  color: var(--nh-color-danger);
+}
+
+.nh-md-image.is-loaded .nh-preview-loading,
+.nh-md-image.is-error .nh-preview-loading {
+  display: none;
+}
+
+.nh-md-image.is-error .nh-md-image__error {
+  display: flex;
+}
+
+.nh-md-image__alert {
+  display: grid;
+  flex: none;
+  color: var(--nh-color-danger);
+}
+
+.nh-md-image__error-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nh-md-image__error-name {
+  overflow: hidden;
+  color: var(--nh-color-text-primary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nh-md-image__error-text {
+  overflow: hidden;
+  color: var(--nh-color-text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nh-md-image__retry {
+  display: inline-flex;
+  height: 28px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--nh-color-accent) 16%, transparent);
+  color: var(--nh-color-accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.nh-md-image__retry:hover {
+  background: color-mix(in srgb, var(--nh-color-accent) 24%, transparent);
+}
+
+.nh-md-image__retry:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--nh-color-accent) 45%, transparent);
+  outline-offset: 1px;
+}
+
 .nh-markdown video {
   display: block;
   max-width: 100%;
   height: auto;
-  margin: 10px 0;
+  margin: 0 0 15px;
   border-radius: 8px;
   background: var(--nh-color-code-bg);
 }
 
 .nh-markdown figure {
-  margin: 10px 0;
+  margin: 0 0 15px;
 }
 
 .nh-markdown figcaption {
-  margin-top: 6px;
+  margin: 0;
   color: var(--nh-color-text-secondary);
   font-size: 12px;
 }
 
 .nh-markdown .katex-display {
-  margin: 12px 0;
+  margin: 0 0 15px;
   overflow: hidden auto;
 }
 
 .nh-markdown .md-code-block {
   position: relative;
-  margin: 10px 0;
+  margin: 0 0 15px;
   overflow: hidden;
   border: 1px solid var(--nh-border-subtle);
   border-radius: 9px;
@@ -197,7 +336,7 @@ const handleClick = async (event: MouseEvent): Promise<void> => {
   padding: 14px 16px;
   overflow-x: auto;
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .nh-markdown .md-code-block code {

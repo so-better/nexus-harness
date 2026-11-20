@@ -1,5 +1,10 @@
 <template>
-  <div class="nh-preview-loading" role="status" aria-live="polite">
+  <div
+    class="nh-preview-loading"
+    role="status"
+    aria-live="polite"
+    :aria-label="kind === 'text' ? undefined : t('common.loading')"
+  >
     <div class="nh-preview-loading__surface" :class="`nh-preview-loading__surface--${kind}`">
       <template v-if="kind === 'text'">
         <div class="nh-preview-loading__gutter" aria-hidden="true">
@@ -15,7 +20,7 @@
       <span class="nh-preview-loading__shimmer" aria-hidden="true" />
       <span class="nh-preview-loading__progress" aria-hidden="true" />
     </div>
-    <div class="nh-preview-loading__status">
+    <div v-if="kind === 'text'" class="nh-preview-loading__status">
       <span class="nh-preview-loading__dot" aria-hidden="true" />
       <span>{{ t('common.loading') }}</span>
     </div>
