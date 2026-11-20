@@ -165,11 +165,6 @@ onMounted(load);
   background: color-mix(in srgb, var(--nh-color-accent) 3%, var(--nh-color-bg-base));
 }
 
-.nh-theme-option:focus-visible {
-  outline: 2px solid var(--nh-color-accent);
-  outline-offset: 2px;
-}
-
 .nh-theme-option--selected {
   border-color: var(--nh-color-accent);
   background: color-mix(in srgb, var(--nh-color-accent) 6%, var(--nh-color-bg-base));

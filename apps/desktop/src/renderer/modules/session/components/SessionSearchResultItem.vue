@@ -65,11 +65,6 @@ const roleLabel = computed(() =>
   background: color-mix(in srgb, var(--nh-color-accent) 10%, transparent);
 }
 
-.nh-search-result:focus-visible {
-  outline: 2px solid var(--nh-color-accent);
-  outline-offset: -2px;
-}
-
 .nh-search-result__head {
   display: flex;
   min-width: 0;

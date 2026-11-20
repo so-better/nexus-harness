@@ -127,11 +127,6 @@ const onModelChange = (key: string | number): void => {
   opacity: 0.55;
 }
 
-.nh-composer__selector:focus-visible {
-  outline: 2px solid var(--nh-color-accent);
-  outline-offset: 1px;
-}
-
 .nh-composer__selector:hover:not(:disabled) {
   background: var(--nh-color-bg-hover);
   color: var(--nh-color-text-primary);

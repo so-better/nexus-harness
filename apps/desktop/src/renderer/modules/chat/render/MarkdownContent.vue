@@ -162,7 +162,6 @@ const handleClick = async (event: MouseEvent): Promise<void> => {
   border-radius: 8px;
 }
 
-
 .nh-md-image {
   position: relative;
   display: inline-block;
@@ -271,11 +270,6 @@ const handleClick = async (event: MouseEvent): Promise<void> => {
 
 .nh-md-image__retry:hover {
   background: color-mix(in srgb, var(--nh-color-accent) 24%, transparent);
-}
-
-.nh-md-image__retry:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--nh-color-accent) 45%, transparent);
-  outline-offset: 1px;
 }
 
 .nh-markdown video {

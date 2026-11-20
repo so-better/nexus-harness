@@ -81,11 +81,6 @@ const choose = (mode: AgentMode): void => {
     color var(--nh-duration-fast) var(--nh-ease-standard);
 }
 
-.nh-mode-select:focus-visible {
-  outline: 2px solid var(--nh-color-accent);
-  outline-offset: 1px;
-}
-
 .nh-mode-select:disabled {
   cursor: default;
   opacity: 0.55;

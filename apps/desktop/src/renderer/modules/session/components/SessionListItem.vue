@@ -243,11 +243,6 @@ const relativeTime = computed(() => {
   box-shadow: var(--nh-highlight);
 }
 
-.nh-session-item:focus-visible {
-  outline: 2px solid var(--nh-color-accent);
-  outline-offset: -2px;
-}
-
 .nh-session-item__icon {
   display: grid;
   width: 28px;

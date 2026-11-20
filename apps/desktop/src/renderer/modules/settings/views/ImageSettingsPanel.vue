@@ -236,11 +236,6 @@ onMounted(load);
   background: color-mix(in srgb, var(--nh-color-accent) 3%, var(--nh-color-bg-base));
 }
 
-.nh-image-card:focus-visible {
-  outline: 2px solid var(--nh-color-accent);
-  outline-offset: 2px;
-}
-
 .nh-image-card__avatar {
   display: grid;
   width: 40px;
