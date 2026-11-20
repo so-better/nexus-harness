@@ -7,6 +7,9 @@ import type { ImageSettings } from '@shared/image';
 import type { SearchSettings } from '@shared/search';
 import type {
   AppInfo,
+  BackupExportResult,
+  BackupImportResult,
+  BackupStatus,
   CacheInfo,
   CacheTarget,
   AppLanguage,
@@ -61,6 +64,10 @@ export const setSearchSettings = async (value: SearchSettings): Promise<SearchSe
 export const openExternalLink = async (url: string): Promise<boolean> =>
   unwrap(await nexus.app.openExternal(url)).opened;
 
+export const relaunchApp = async (): Promise<void> => {
+  unwrap(await nexus.app.relaunch());
+};
+
 export const getThemeInfo = async (): Promise<ThemeInfo> => unwrap(await nexus.theme.getInfo());
 
 /**
@@ -109,6 +116,21 @@ export const getLanguage = async (): Promise<AppLanguage> =>
  */
 export const setLanguage = async (language: AppLanguage): Promise<AppLanguage> =>
   unwrap(await nexus.settings.setLanguage(language));
+
+/**
+ * 导出完整数据备份；返回备份目录路径。
+ */
+export const exportBackup = async (): Promise<BackupExportResult | null> =>
+  unwrap(await nexus.settings.exportBackup());
+
+/**
+ * 导入数据备份；恢复在下次启动时生效。
+ */
+export const importBackup = async (): Promise<BackupImportResult | null> =>
+  unwrap(await nexus.settings.importBackup());
+
+export const getBackupStatus = async (): Promise<BackupStatus> =>
+  unwrap(await nexus.settings.backupStatus());
 
 import type {
   NotificationBadgeStyle,

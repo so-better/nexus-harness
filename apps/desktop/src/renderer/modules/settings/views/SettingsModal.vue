@@ -34,6 +34,10 @@
       <NTabPane name="cache" :tab="t('settings.cache')">
         <CacheSettings :busy="busy" />
       </NTabPane>
+
+      <NTabPane name="migration" :tab="t('settings.migration')">
+        <MigrationSettings :busy="busy" />
+      </NTabPane>
     </NTabs>
   </NModal>
 </template>
@@ -51,6 +55,7 @@ import GeneralSettings from './GeneralSettings.vue';
 import ProviderSettingsPanel from './ProviderSettingsPanel.vue';
 import TerminalSettingsPanel from './TerminalSettingsPanel.vue';
 import ImageSettingsPanel from './ImageSettingsPanel.vue';
+import MigrationSettings from './MigrationSettings.vue';
 
 defineProps<{
   show: boolean;

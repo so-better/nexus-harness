@@ -2,7 +2,7 @@
  * 设置 IPC：开机自启、缓存统计与清理。
  */
 
-import { ipcMain, session } from 'electron';
+import { BrowserWindow, dialog, ipcMain, session } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import {
   cacheInfoSchema,
@@ -38,6 +38,7 @@ import { clearCache, getCacheInfo } from '../services/cache/cache-service';
 import { getAppDataPaths } from '../services/storage/paths';
 import { hasActiveRuns } from '../services/agent/run-registry';
 import { getDatabase } from '../services/storage/database';
+import { createBackup, getBackupStatus, stageBackup } from '../services/settings/backup-service';
 
 /**
  * 注册设置与缓存处理器。
@@ -216,6 +217,85 @@ export const registerSettingsIpc = (): void => {
         return fail(
           'SETTINGS_WRITE_FAILED',
           error instanceof Error ? error.message : '保存皮肤设置失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.settingsExportBackup,
+    async (event): Promise<Result<{ path: string } | null>> => {
+      if (hasActiveRuns()) return fail('BACKUP_BUSY', '有运行中的任务，暂不能导出数据');
+      const window = BrowserWindow.fromWebContents(event.sender);
+      const defaultPath = `nexus-backup-${new Date().toISOString().slice(0, 10)}.zip`;
+      const selected = window
+        ? await dialog.showSaveDialog(window, {
+            title: '导出 Nexus 数据备份',
+            defaultPath,
+            filters: [{ name: 'Nexus 备份', extensions: ['zip'] }]
+          })
+        : await dialog.showSaveDialog({
+            title: '导出 Nexus 数据备份',
+            defaultPath,
+            filters: [{ name: 'Nexus 备份', extensions: ['zip'] }]
+          });
+      if (selected.canceled || !selected.filePath) {
+        return ok(null);
+      }
+      const destination = selected.filePath.toLowerCase().endsWith('.zip')
+        ? selected.filePath
+        : `${selected.filePath}.zip`;
+      try {
+        return ok(await createBackup(db, destination, paths));
+      } catch (error) {
+        return fail(
+          'BACKUP_EXPORT_FAILED',
+          error instanceof Error ? error.message : '导出数据失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.settingsBackupStatus,
+    async (): Promise<Result<{ pendingRestore: boolean }>> => {
+      try {
+        return ok(await getBackupStatus(paths));
+      } catch (error) {
+        return fail(
+          'BACKUP_STATUS_FAILED',
+          error instanceof Error ? error.message : '读取备份状态失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.settingsImportBackup,
+    async (event): Promise<Result<{ path: string; restartRequired: true } | null>> => {
+      if (hasActiveRuns()) return fail('BACKUP_BUSY', '有运行中的任务，暂不能导入数据');
+      const window = BrowserWindow.fromWebContents(event.sender);
+      const selected = window
+        ? await dialog.showOpenDialog(window, {
+            title: '选择 Nexus 数据备份',
+            properties: ['openFile'],
+            filters: [{ name: 'Nexus 备份', extensions: ['zip'] }]
+          })
+        : await dialog.showOpenDialog({
+            title: '选择 Nexus 数据备份',
+            properties: ['openFile'],
+            filters: [{ name: 'Nexus 备份', extensions: ['zip'] }]
+          });
+      if (selected.canceled || !selected.filePaths[0]) {
+        return ok(null);
+      }
+      try {
+        const result = await stageBackup(selected.filePaths[0], paths);
+        return ok({ path: result.path, restartRequired: true });
+      } catch (error) {
+        return fail(
+          'BACKUP_IMPORT_FAILED',
+          error instanceof Error ? error.message : '导入数据失败'
         );
       }
     }

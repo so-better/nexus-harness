@@ -139,11 +139,31 @@ export type Unsubscribe = () => void;
 /**
  * preload 暴露到 window.nexus 的桥接接口。
  */
+/**
+ * 数据迁移备份导出结果。
+ */
+export interface BackupExportResult {
+  path: string;
+}
+
+/**
+ * 数据迁移备份导入结果；恢复在下次启动时执行。
+ */
+export interface BackupImportResult {
+  path: string;
+  restartRequired: true;
+}
+
+export interface BackupStatus {
+  pendingRestore: boolean;
+}
+
 export interface NexusBridge {
   app: {
     getInfo: () => Promise<Result<AppInfo>>;
     openExternal: (url: string) => Promise<Result<{ opened: boolean }>>;
     openPath: (path: string) => Promise<Result<{ opened: boolean }>>;
+    relaunch: () => Promise<Result<{ relaunched: boolean }>>;
     consumePendingSession: () => Promise<Result<string | null>>;
   };
   window: {
@@ -173,6 +193,9 @@ export interface NexusBridge {
     setAutoLaunch: (enabled: boolean) => Promise<Result<boolean>>;
     getLanguage: () => Promise<Result<AppLanguage>>;
     setLanguage: (language: AppLanguage) => Promise<Result<AppLanguage>>;
+    exportBackup: () => Promise<Result<BackupExportResult | null>>;
+    importBackup: () => Promise<Result<BackupImportResult | null>>;
+    backupStatus: () => Promise<Result<BackupStatus>>;
   };
   cache: {
     getInfo: () => Promise<Result<CacheInfo>>;

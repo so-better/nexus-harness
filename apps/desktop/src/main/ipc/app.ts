@@ -40,6 +40,15 @@ export const registerAppIpc = (): void => {
     }
   );
 
+  ipcMain.handle(IPC_CHANNELS.appRelaunch, (): Result<{ relaunched: boolean }> => {
+    // 等 IPC 响应返回后再重启，避免渲染层看到连接被提前关闭
+    setTimeout(() => {
+      app.relaunch();
+      app.quit();
+    }, 50);
+    return ok({ relaunched: true });
+  });
+
   ipcMain.handle(IPC_CHANNELS.appConsumePendingSession, (): Result<string | null> =>
     ok(consumePendingSession())
   );

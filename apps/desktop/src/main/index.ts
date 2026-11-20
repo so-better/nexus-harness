@@ -30,6 +30,7 @@ import { SessionService } from './services/session/session-service';
 import { syncBuiltinPlugins } from './services/plugins/builtin-plugin-service';
 import { disposeMcpService } from './services/mcp/mcp-service-instance';
 import { initializeAutoLaunch } from './services/settings/startup-settings';
+import { applyPendingRestore } from './services/settings/backup-service';
 import { terminalService } from './services/terminal/terminal-service';
 import { PluginHost } from './services/plugins/plugin-host';
 import { getPluginHost, setPluginHost } from './services/plugins/plugin-host-instance';
@@ -101,6 +102,7 @@ if (!hasSingleInstanceLock) {
     .whenReady()
     .then(async () => {
       await ensureAppDataDirectories();
+      await applyPendingRestore(getAppDataPaths());
       const builtinIds = new Set(
         await syncBuiltinPlugins({
           sourceDir: getBuiltinPluginsDirectory(),

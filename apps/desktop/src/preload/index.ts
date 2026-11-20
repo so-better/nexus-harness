@@ -31,6 +31,7 @@ const bridge: NexusBridge = {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo),
     openExternal: (url) => ipcRenderer.invoke(IPC_CHANNELS.appOpenExternal, url),
     openPath: (path) => ipcRenderer.invoke(IPC_CHANNELS.appOpenPath, path),
+    relaunch: () => ipcRenderer.invoke(IPC_CHANNELS.appRelaunch),
     consumePendingSession: () => ipcRenderer.invoke(IPC_CHANNELS.appConsumePendingSession)
   },
   session: {
@@ -70,6 +71,9 @@ const bridge: NexusBridge = {
     setAutoLaunch: (enabled) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetAutoLaunch, enabled),
     getLanguage: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetLanguage),
     setLanguage: (language) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetLanguage, language),
+    exportBackup: () => ipcRenderer.invoke(IPC_CHANNELS.settingsExportBackup),
+    importBackup: () => ipcRenderer.invoke(IPC_CHANNELS.settingsImportBackup),
+    backupStatus: () => ipcRenderer.invoke(IPC_CHANNELS.settingsBackupStatus),
     getNotificationBadge: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetNotificationBadge),
     setNotificationBadge: (style) =>
       ipcRenderer.invoke(IPC_CHANNELS.settingsSetNotificationBadge, style),
