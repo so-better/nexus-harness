@@ -6,7 +6,7 @@
       </span>
       <span class="nh-output-file__copy">
         <span class="nh-output-file__name">{{ file.name }}</span>
-        <span class="nh-output-file__meta">{{ formatBytes(file.bytes) }} · {{ file.mime }}</span>
+        <span class="nh-output-file__meta">{{ formatFileBytes(file.bytes) }} · {{ file.mime }}</span>
       </span>
       <PluginSlot
         location="filecard.actions"
@@ -17,12 +17,20 @@
           fileId: file.id
         }"
       />
-      <NButton v-if="canPreview" text size="tiny" @click="previewOpen = true">
-        {{ t('file.preview') }}
-      </NButton>
-      <NButton text size="tiny" :loading="saving" @click="saveAs">
-        {{ t('file.saveAs') }}
-      </NButton>
+      <span class="nh-output-file__actions">
+        <NButton v-if="canPreview" quaternary size="small" @click="previewOpen = true">
+          <template #icon>
+            <AppIcon name="eye" :size="14" />
+          </template>
+          {{ t('file.preview') }}
+        </NButton>
+        <NButton type="primary" quaternary size="small" :loading="saving" @click="saveAs(file)">
+          <template #icon>
+            <AppIcon name="download" :size="14" />
+          </template>
+          {{ t('file.saveAs') }}
+        </NButton>
+      </span>
     </div>
     <PluginSlot
       location="filecard.footer"
@@ -39,55 +47,34 @@
 
 <script setup lang="ts">
 /**
- * 输出文件卡片：仅负责另存，文件由用户用专业软件打开。
+ * 输出文件卡片：可按类型预览可读内容，另存为通过系统对话框。
  */
 
 import { computed, ref } from 'vue';
-import { NButton, useMessage } from 'naive-ui';
+import { NButton } from 'naive-ui';
 import type { OutputFile } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
-import { saveOutputFileAs } from '../api/files.api';
+import { formatFileBytes } from '../file-format';
+import { useOutputFileSave } from '../use-output-file-save';
 import FilePreviewModal from './FilePreviewModal.vue';
 
 const props = defineProps<{ file: OutputFile }>();
-const message = useMessage();
-const saving = ref(false);
+const { saving, saveAs } = useOutputFileSave();
 const previewOpen = ref(false);
-const canPreview = computed(
-  () =>
-    props.file.mime.startsWith('image/') ||
-    props.file.mime === 'text/html' ||
-    props.file.mime === 'application/xhtml+xml' ||
-    props.file.mime.startsWith('text/') ||
-    props.file.mime === 'application/json' ||
-    props.file.mime === 'application/xml'
-);
+const canPreview = computed(() => {
+  const mime = props.file.mime.toLowerCase();
+  return (
+    mime === 'image/svg+xml' ||
+    mime === 'text/html' ||
+    mime === 'application/xhtml+xml' ||
+    mime.startsWith('text/') ||
+    mime === 'application/json' ||
+    mime === 'application/xml'
+  );
+});
 
-/**
- * 格式化文件体积。
- */
-const formatBytes = (bytes: number): string => {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-};
-
-/**
- * 打开系统保存对话框，由用户决定后续用哪个软件打开。
- */
-const saveAs = async (): Promise<void> => {
-  saving.value = true;
-  try {
-    const result = await saveOutputFileAs(props.file.sessionId, props.file.id);
-    if (result.saved) message.success(t('file.saved'));
-  } catch (error) {
-    message.error(error instanceof Error ? error.message : t('file.saveFailed'));
-  } finally {
-    saving.value = false;
-  }
-};
 </script>
 
 <style scoped lang="less">
@@ -105,6 +92,13 @@ const saveAs = async (): Promise<void> => {
   display: flex;
   align-items: center;
   gap: 9px;
+}
+
+.nh-output-file__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
 }
 
 .nh-output-file__icon {

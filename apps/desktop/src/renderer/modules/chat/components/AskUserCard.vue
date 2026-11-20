@@ -170,7 +170,7 @@ const submitAnswers = (): void => {
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--nh-border-subtle) 55%, transparent);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--nh-color-bg-elevated) 55%, transparent);
+  background: color-mix(in srgb, var(--nh-color-bg-elevated) 70%, transparent);
   box-shadow: none;
 }
 

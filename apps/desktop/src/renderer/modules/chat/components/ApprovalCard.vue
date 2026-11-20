@@ -38,10 +38,13 @@ const emit = defineEmits<{ approve: []; reject: [] }>();
  * 审批标题直接说明将要发生什么，避免所有工具都只显示泛化的“需要审批”。
  */
 const title = computed(() => {
-  if (props.tool?.name === 'run_command') return t('chat.approvalCommandTitle');
-  if (props.tool?.name === 'write_file' || props.tool?.name === 'apply_patch') {
-    return t('chat.approvalWriteTitle');
-  }
+  const name = props.tool?.name;
+  if (name === 'run_command') return t('chat.approvalCommandTitle');
+  if (name === 'write_file' || name === 'apply_patch') return t('chat.approvalWriteTitle');
+  if (name === 'generate_image') return t('chat.approvalImageTitle');
+  if (name === 'search_images' || name === 'search_videos') return t('chat.approvalSearchTitle');
+  if (name?.startsWith('mcp_')) return t('chat.approvalMcpTitle');
+  if (name === 'run_skill_script') return t('chat.approvalSkillScriptTitle');
   return t('chat.approvalTitle');
 });
 </script>

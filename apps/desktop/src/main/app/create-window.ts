@@ -62,6 +62,29 @@ export const createMainWindow = (): BrowserWindow => {
     return { action: 'deny' };
   });
 
+  // 兜底阻止同窗口导航：媒体 blob/data 和外部链接都不能把应用页面带走
+  window.webContents.on('will-navigate', (event, url) => {
+    if (url.startsWith('blob:') || url.startsWith('data:')) {
+      event.preventDefault();
+      return;
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      event.preventDefault();
+      return;
+    }
+    try {
+      const currentOrigin = new URL(window.webContents.getURL()).origin;
+      if (new URL(url).origin === currentOrigin) return;
+    } catch {
+      event.preventDefault();
+      return;
+    }
+    event.preventDefault();
+    shell.openExternal(url).catch((error: unknown) => {
+      console.error('打开外部链接失败', error);
+    });
+  });
+
   const devServerUrl = process.env['ELECTRON_RENDERER_URL'];
   if (devServerUrl) {
     window.loadURL(devServerUrl).catch((error: unknown) => {

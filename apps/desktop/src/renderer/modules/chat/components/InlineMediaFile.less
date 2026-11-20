@@ -1,0 +1,86 @@
+// AI 回复内联媒体样式。
+.nh-inline-media {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+}
+
+.nh-inline-media__loading {
+  width: min(420px, 100%);
+}
+
+.nh-inline-media--video .nh-inline-media__loading {
+  width: min(520px, 100%);
+}
+
+.nh-inline-media__image {
+  display: block;
+  width: auto;
+  max-width: min(420px, 100%);
+}
+
+.nh-inline-media__image :deep(.n-image) {
+  display: block;
+  width: auto;
+  max-width: 100%;
+}
+
+.nh-inline-media__image :deep(img) {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.nh-inline-media__video {
+  display: block;
+  width: auto;
+  max-width: min(520px, 100%);
+  height: auto;
+  border-radius: 8px;
+  background: var(--nh-color-code-bg);
+}
+
+.nh-inline-media__error {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--nh-border-subtle);
+  border-radius: 10px;
+  background: var(--nh-color-bg-hover);
+  color: var(--nh-color-danger);
+}
+
+.nh-inline-media__error-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nh-inline-media__error-name {
+  overflow: hidden;
+  color: var(--nh-color-text-primary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nh-inline-media__error-text {
+  overflow: hidden;
+  color: var(--nh-color-text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nh-inline-media__error-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}

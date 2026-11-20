@@ -1,5 +1,5 @@
 <template>
-  <div class="nh-references" role="listbox" :aria-label="t('chat.fileReferenceTitle')">
+  <div ref="listRef" class="nh-references" role="listbox" :aria-label="t('chat.fileReferenceTitle')">
     <div class="nh-references__header">
       <span>{{ t('chat.fileReferenceTitle') }}</span>
       <span v-if="searching" class="nh-references__hint">
@@ -37,17 +37,29 @@
  * @ 文件引用候选列表。
  */
 
+import { nextTick, ref, watch } from 'vue';
 import type { WorkspaceFileReference } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 
-defineProps<{
+const props = defineProps<{
   references: WorkspaceFileReference[];
   activeIndex: number;
   searching: boolean;
 }>();
 
 const emit = defineEmits<{ select: [reference: WorkspaceFileReference] }>();
+const listRef = ref<HTMLElement | null>(null);
+
+// 键盘上下移动时保持选中项在列表可视范围内
+watch(
+  () => props.activeIndex,
+  async () => {
+    await nextTick();
+    const buttons = listRef.value?.querySelectorAll<HTMLElement>('.nh-reference');
+    buttons?.[props.activeIndex]?.scrollIntoView({ block: 'nearest' });
+  }
+);
 
 const rootName = (path: string): string => path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 </script>
@@ -55,16 +67,12 @@ const rootName = (path: string): string => path.split(/[\\/]/).filter(Boolean).a
 <style scoped lang="less">
 .nh-references {
   display: flex;
-  max-height: 240px;
+  max-height: 280px;
   flex-direction: column;
   gap: 1px;
-  overflow: auto;
+  overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 6px;
-  border: 1px solid var(--nh-border-subtle);
-  border-radius: 12px;
-  background: var(--nh-surface-elevated);
-  box-shadow: var(--nh-shadow-float);
+  padding: 2px;
 }
 
 .nh-references__header {

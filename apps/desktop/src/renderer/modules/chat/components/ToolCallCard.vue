@@ -149,7 +149,7 @@ const copyText = async (kind: 'input' | 'output', text: string): Promise<void> =
 };
 
 const toolIcon = computed<
-  'file' | 'edit' | 'terminal' | 'globe' | 'spark' | 'settings' | 'history'
+  'file' | 'edit' | 'terminal' | 'globe' | 'image' | 'spark' | 'settings' | 'history'
 >(() => {
   if (
     [
@@ -167,14 +167,10 @@ const toolIcon = computed<
     return 'file';
   if (['write_file', 'apply_patch'].includes(props.tool.name)) return 'edit';
   if (props.tool.name === 'run_command') return 'terminal';
-  if (
-    props.tool.name === 'fetch' ||
-    props.tool.name.startsWith('search_') ||
-    props.tool.name === 'generate_image'
-  )
-    return 'globe';
+  if (props.tool.name === 'generate_image') return 'image';
   if (props.tool.name.startsWith('search_skill') || props.tool.name === 'read_skill')
     return 'spark';
+  if (props.tool.name === 'fetch' || props.tool.name.startsWith('search_')) return 'globe';
   if (props.tool.name === 'checkpoint') return 'history';
   return 'settings';
 });

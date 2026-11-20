@@ -7,16 +7,10 @@
     style="width: min(920px, calc(100vw - 48px))"
     @update:show="emit('update:show', $event)"
   >
-    <div v-if="loading" class="nh-file-preview__state">{{ t('common.loading') }}</div>
+    <FilePreviewLoading v-if="loading" kind="text" />
     <div v-else-if="error" class="nh-file-preview__state nh-file-preview__state--error">
       {{ error }}
     </div>
-    <img
-      v-else-if="kind === 'image'"
-      class="nh-file-preview__image"
-      :src="dataUrl"
-      :alt="file?.name ?? ''"
-    />
     <MonacoEditor
       v-else
       class="nh-file-preview__editor"
@@ -30,7 +24,8 @@
 
 <script setup lang="ts">
 /**
- * 输出文件预览：图片、HTML 沙箱和纯文本，不把文件路径暴露给渲染层。
+ * 文本类输出文件预览：Markdown、JSON、XML、HTML、SQL 等统一用只读 Monaco 源码展示；
+ * HTML/SVG 不执行，不把文件路径暴露给渲染层。
  */
 
 import { computed, defineAsyncComponent, ref, watch } from 'vue';
@@ -38,6 +33,7 @@ import { NModal } from 'naive-ui';
 import type { OutputFile } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import { readOutputFile } from '../api/files.api';
+import FilePreviewLoading from './FilePreviewLoading.vue';
 
 const MonacoEditor = defineAsyncComponent(() => import('@/components/MonacoEditor.vue'));
 
@@ -50,17 +46,7 @@ const emit = defineEmits<{ 'update:show': [show: boolean] }>();
 const MAX_TEXT_PREVIEW_BYTES = 5 * 1024 * 1024;
 const loading = ref(false);
 const error = ref('');
-const base64 = ref('');
 const text = ref('');
-
-const kind = computed<'image' | 'text'>(() => {
-  const mime = props.file?.mime ?? '';
-  return mime.startsWith('image/') && mime !== 'image/svg+xml' ? 'image' : 'text';
-});
-
-const dataUrl = computed(() =>
-  props.file ? `data:${props.file.mime};base64,${base64.value}` : ''
-);
 
 const language = computed(() => {
   const mime = props.file?.mime ?? '';
@@ -79,34 +65,36 @@ const language = computed(() => {
   return 'plaintext';
 });
 
+let request = 0;
+
 const load = async (): Promise<void> => {
   if (!props.show || !props.file) return;
-  if (kind.value === 'text' && props.file.bytes > MAX_TEXT_PREVIEW_BYTES) {
+  const current = ++request;
+  const file = props.file;
+  if (file.bytes > MAX_TEXT_PREVIEW_BYTES) {
     error.value = t('file.previewTooLarge');
-    base64.value = '';
     text.value = '';
     loading.value = false;
     return;
   }
   loading.value = true;
   error.value = '';
-  base64.value = '';
   text.value = '';
   try {
-    const result = await readOutputFile(props.file.sessionId, props.file.id);
-    base64.value = result.base64;
-    if (kind.value === 'text') {
-      const bytes = Uint8Array.from(atob(result.base64), (char) => char.charCodeAt(0));
-      text.value = new TextDecoder().decode(bytes);
-    }
+    const result = await readOutputFile(file.sessionId, file.id);
+    // 用户在加载期间切换文件时，丢弃旧请求的结果
+    if (current !== request) return;
+    const bytes = Uint8Array.from(atob(result.base64), (char) => char.charCodeAt(0));
+    text.value = new TextDecoder().decode(bytes);
   } catch (reason) {
+    if (current !== request) return;
     error.value = reason instanceof Error ? reason.message : t('file.previewLoadFailed');
   } finally {
-    loading.value = false;
+    if (current === request) loading.value = false;
   }
 };
 
-watch(() => [props.show, props.file?.id] as const, load);
+watch(() => [props.show, props.file?.id] as const, load, { immediate: true });
 </script>
 
 <style scoped lang="less">
@@ -118,14 +106,6 @@ watch(() => [props.show, props.file?.id] as const, load);
 
 .nh-file-preview__state--error {
   color: var(--nh-color-danger);
-}
-
-.nh-file-preview__image {
-  display: block;
-  max-width: 100%;
-  max-height: 70vh;
-  margin: 0 auto;
-  object-fit: contain;
 }
 
 .nh-file-preview__editor {

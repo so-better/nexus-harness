@@ -582,6 +582,7 @@ interface ProviderCapabilities {
 
 #### 提示词行为约束
 
+- **媒体输出**：图片/视频链接必须直接嵌入，图片用 Markdown 图片语法，视频用 `<video controls>`；不得只输出裸链接、“查看”链接或链接表格。外部链接不得在应用窗口内导航，统一交给系统浏览器。
 - **反幻觉**：不得编造数据、事实、引用、链接、文件名、命令或 API；信息只能来自用户、工具返回或可靠常识，不确定时明确说明。
 - **工具诚实**：没有实际调用工具时不得声称已调用或已执行；工具失败时如实说明，不编造结果。
 - **链接真实性**：只使用用户提供或工具返回的链接，不自行构造或猜测 URL。
@@ -1642,6 +1643,49 @@ pnpm rebuild:native # 为 Electron 重建 node-pty
 - 每次发布必须更新 CHANGELOG 与迁移说明；重大变更先在 beta 通道验证。
 - 发布脚本、证书与签名密钥不得入库。
 
+### 6.13 UI Mock 预览（评审真实组件）
+
+需要快速审查真实组件、交互与样式时，使用「仓库外 mock」：不修改生产代码，用 Node 脚本临时启动 Vite + Electron，直接 import 真实组件。当前会话的示例脚本位于系统临时目录，不要依赖其长期存在；需要保留时复制到 `apps/desktop/scripts/preview/`。
+
+原则：
+
+- 不为 mock 修改 `src/**`，不向生产组件添加仅为 mock 服务的入口或假数据。
+- 真实优先：import 真实组件、真实 `projectEvents`、`theme-palette` 与 `global.less`；不要复制旧样式做复刻。
+- 对话类优先构造 `NexusEvent[]` 再走 `projectEvents`，而不是手工拼 DOM。
+- 进程、端口、临时文件全部隔离；退出时关闭 Vite、结束 Electron 并删除临时目录。
+- 需要验证渲染结果时，给 Electron 加 `--remote-debugging-port=<port>`，用 CDP 查询 DOM、计算样式与滚动。
+
+启动脚本（单个 `.mjs`，放在仓库外或 `apps/desktop/scripts/preview/`）：
+
+1. 从 `apps/desktop/package.json` 解析依赖：`createRequire` 后 `resolve('vite')`、`resolve('@vitejs/plugin-vue')`、`require('electron')`。
+2. 启动 Vite：`root = apps/desktop/src/renderer`，alias `@` → renderer、`@shared` → `packages/shared/src`，插件用 `vuePlugin()`。
+3. 用虚拟插件提供 `/__preview_entry.ts` 与 `/__preview.html`；entry 安装 Pinia、import `@/styles/global.less` 与预览 SFC。
+4. 预览 SFC 与 mock 数据写到临时目录；`server.fs.allow` 必须包含 `repoRoot` 与临时目录，alias `@preview` → 临时 SFC。
+5. 临时 `main.cjs` 创建 `BrowserWindow` 加载 Vite URL；Electron 退出或 SIGINT 时关闭 server 并清理临时目录。
+6. 固定/可配置端口（如 5199/5299/9399），避免与开发服务器冲突。
+
+渲染外壳：
+
+- 用 `NConfigProvider`（`darkTheme` + `getNaiveOverrides(getPalette(mode))` + `zhCN`）和 `NMessageProvider`；需要 `PluginSlot` 时安装 Pinia。
+- 预览根节点设置 `height: 100vh; overflow-y: auto`，因为 `global.less` 把 `html/body/#app` 设为 `overflow: hidden`。
+- `index.html` 最前面 stub IPC：`window.takeNexusBridge = () => ({})`；需要具体 API 时返回 `{ ok: true, data }` 的 mock 对象（如 `artifact.meta`、`artifact.saveAs`）。
+- 评审组件颜色时使用真实对话背景 `var(--nh-color-bg-base)`，不要放在 elevated 的 mock 卡片里判断。
+
+数据构造：
+
+- 对话：构造 `message.delta` / `message.reasoning.delta` / `message.completed` / `tool.requested` / `tool.completed` / `approval.requested` / `ask_user.requested` 等事件，`runId`、`seq`、`ts` 递增，再 `projectEvents(events)`；用真实 `ChatMessageItem` 渲染，并按 `messageId` 过滤 `askUsers`。
+- 工具卡：覆盖 `requested`、`running`、`waiting_approval`、`approved`、`rejected`、`expired`、`succeeded`、`failed`；展开态用 `defaultExpanded`。
+- 审批：等待审批时工具行会被审批卡替换；目录授权使用 `workspaceAuth` prop，并放在包含对应 `toolCallId` 的消息上。
+- 产物：卡片用 `artifact.meta` 只读元信息，另存为走 `artifact.saveAs`，不要为了展示读取完整内容。
+
+常见坑：
+
+- 生成 SFC 的模板字符串里避免 `\n` 被二次解释；需要换行时用 `String.fromCharCode(10)` 或正确转义。
+- 不要让虚拟入口 import 以 `/` 开头的绝对路径（会被当作 root URL）；改用 alias。
+- 只检查浅色会漏掉深色对比度；两种主题都要看。
+- 用 CDP 验证 `vite-error-overlay` 不存在、滚动正常、关键元素的 computed style 与结构符合预期。
+- mock 脚本、快照和临时数据不得写入 `src/**`；不得提交到仓库。
+
 ---
 
 ## 7. 路线图与验收
@@ -1820,6 +1864,7 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 插件新增能力已声明权限，未绕过宿主 API 直接访问系统资源。
 - [ ] 副作用有清理逻辑，错误被处理且不泄露敏感信息。
 - [ ] 新增逻辑有测试，`typecheck`、`lint`、`test` 全部通过。
+- [ ] 需要 UI 预览时使用 6.13 的独立 mock（仓库外 Node 脚本），不在生产代码里添加 mock 入口或临时数据。
 - [ ] 提交信息符合 Conventional Commits，提交内容单一。
 
 ---

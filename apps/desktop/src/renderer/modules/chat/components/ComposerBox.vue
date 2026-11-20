@@ -23,20 +23,13 @@
         />
       </div>
     </div>
-    <ComposerFileReference
-      v-if="referenceOpen"
-      :references="references"
-      :active-index="activeIndex"
-      :searching="searching"
-      @select="selectReference"
-    />
     <PluginSlot
       v-if="sessionId"
       location="composer.above"
       :context="{ location: 'composer.above', sessionId, usage }"
     />
     <NPopover
-      :show="skillOpen && skillItems.length > 0"
+      :show="(skillOpen && skillItems.length > 0) || referenceOpen"
       trigger="manual"
       placement="top-start"
       :show-arrow="false"
@@ -55,31 +48,20 @@
           @blur="onInputBlur"
         />
       </template>
-      <div ref="skillListRef" class="nh-composer__skills" role="listbox">
-        <div class="nh-composer__skills-header">
-          <span>{{ t('chat.skillTitle') }}</span>
-          <span class="nh-composer__skills-count">{{ skillItems.length }}</span>
-        </div>
-        <button
-          v-for="(skill, index) in skillItems"
-          :key="skill.id"
-          type="button"
-          class="nh-composer__skill"
-          :class="{ 'nh-composer__skill--active': index === skillActiveIndex }"
-          role="option"
-          :aria-selected="index === skillActiveIndex"
-          @mouseenter="skillActiveIndex = index"
-          @mousedown.prevent="chooseSkill(skill.id)"
-        >
-          <span class="nh-composer__skill-icon">
-            <AppIcon name="spark" :size="14" />
-          </span>
-          <span class="nh-composer__skill-copy">
-            <span class="nh-composer__skill-name">/{{ skill.id }}</span>
-            <span class="nh-composer__skill-description">{{ skill.description }}</span>
-          </span>
-        </button>
-      </div>
+      <SkillPalette
+        v-if="skillOpen && skillItems.length > 0"
+        :items="skillItems"
+        :active-index="skillActiveIndex"
+        @select="chooseSkill"
+        @hover="skillActiveIndex = $event"
+      />
+      <ComposerFileReference
+        v-else-if="referenceOpen"
+        :references="references"
+        :active-index="activeIndex"
+        :searching="searching"
+        @select="selectReference"
+      />
     </NPopover>
     <ComposerFileChips :files="selectedReferences" @remove="removeReference" />
     <PluginSlot
@@ -105,7 +87,7 @@
  * 输入区：消息发送、文件引用和模型/工作区选择。
  */
 
-import { computed, nextTick, ref, toRef, watch } from 'vue';
+import { computed, ref, toRef } from 'vue';
 import { NInput, NPopover, type InputInst } from 'naive-ui';
 import type { MessageFileReference } from '@shared/events';
 import type { AgentMode, ProviderModel, ProviderPublic, SessionRoot } from '@shared/ipc/contracts';
@@ -117,10 +99,10 @@ import ComposerFileChips from './ComposerFileChips.vue';
 import ComposerFileReference from './ComposerFileReference.vue';
 import ComposerModelPicker from './ComposerModelPicker.vue';
 import ComposerRootPicker from './ComposerRootPicker.vue';
+import SkillPalette from './SkillPalette.vue';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import type { ChatUsage } from '../types';
-import type { SkillSummary } from '@shared/skills';
-import { listSkills } from '../api/skills.api';
+import { useSkillPalette } from '../use-skill-palette';
 
 const props = defineProps<{
   disabled: boolean;
@@ -149,91 +131,21 @@ const emit = defineEmits<{
 }>();
 
 const draft = ref('');
-const skillOpen = ref(false);
-const skillItems = ref<SkillSummary[]>([]);
-const skillActiveIndex = ref(0);
-const skillListRef = ref<HTMLElement | null>(null);
-let skillRequest = 0;
 const inputRef = ref<InputInst | null>(null);
 const placeholder = computed(() => t('chat.composerPlaceholder'));
 
-/**
- * 输入 / 时展示 Skill；选中后由 Agent 以显式 Skill 方式激活。
- */
-watch(draft, async (value) => {
-  const match = /^\/([a-zA-Z0-9._-]*)$/.exec(value);
-  if (!match) {
-    skillOpen.value = false;
-    return;
-  }
-  const query = (match[1] ?? '').toLowerCase();
-  const request = ++skillRequest;
-  try {
-    const skills = await listSkills();
-    if (request !== skillRequest) return;
-    const filtered = skills
-      .filter(
-        (skill) =>
-          !query ||
-          skill.id.toLowerCase().includes(query) ||
-          skill.name.toLowerCase().includes(query) ||
-          skill.description.toLowerCase().includes(query) ||
-          skill.tags.some((tag) => tag.toLowerCase().includes(query))
-      )
-      .sort((a, b) => {
-        const aPrefix = a.id.toLowerCase().startsWith(query) ? 0 : 1;
-        const bPrefix = b.id.toLowerCase().startsWith(query) ? 0 : 1;
-        return aPrefix - bPrefix || a.id.localeCompare(b.id);
-      });
-    skillItems.value = filtered.slice(0, 8);
-    skillActiveIndex.value = 0;
-    skillOpen.value = skillItems.value.length > 0;
-  } catch {
-    if (request !== skillRequest) return;
-    skillItems.value = [];
-    skillOpen.value = false;
-  }
-});
-
-const chooseSkill = (id: string): void => {
-  draft.value = `/${id} `;
-  skillOpen.value = false;
-  inputRef.value?.focus();
-};
+const {
+  open: skillOpen,
+  items: skillItems,
+  activeIndex: skillActiveIndex,
+  choose: chooseSkill,
+  handleKeydown: handleSkillKeydown
+} = useSkillPalette(draft, inputRef);
 
 const onComposerKeydown = (event: KeyboardEvent): void => {
-  if (skillOpen.value && skillItems.value.length) {
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      skillActiveIndex.value = (skillActiveIndex.value + 1) % skillItems.value.length;
-      return;
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      skillActiveIndex.value =
-        (skillActiveIndex.value - 1 + skillItems.value.length) % skillItems.value.length;
-      return;
-    }
-    if (event.key === 'Enter' && !event.isComposing && !event.shiftKey) {
-      event.preventDefault();
-      const skill = skillItems.value[skillActiveIndex.value];
-      if (skill) chooseSkill(skill.id);
-      return;
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      skillOpen.value = false;
-      return;
-    }
-  }
+  if (handleSkillKeydown(event)) return;
   onKeydown(event);
 };
-
-watch(skillActiveIndex, async () => {
-  await nextTick();
-  const buttons = skillListRef.value?.querySelectorAll<HTMLElement>('.nh-composer__skill');
-  buttons?.[skillActiveIndex.value]?.scrollIntoView({ block: 'nearest' });
-});
 
 const onInputBlur = (): void => {
   closeReferences();
@@ -343,92 +255,4 @@ const {
   gap: 8px;
 }
 
-.nh-composer__skills {
-  display: flex;
-  max-height: 280px;
-  flex-direction: column;
-  gap: 1px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 2px;
-}
-
-.nh-composer__skills-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 2px 7px 6px;
-  color: var(--nh-color-text-secondary);
-  font-size: 11px;
-}
-
-.nh-composer__skills-count {
-  color: var(--nh-color-text-disabled);
-  font-family: var(--nh-font-mono);
-  font-size: 10px;
-}
-
-.nh-composer__skill {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--nh-color-text-primary);
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--nh-duration-fast) var(--nh-ease-standard);
-}
-
-.nh-composer__skill:hover {
-  background: var(--nh-color-bg-hover);
-}
-
-.nh-composer__skill--active,
-.nh-composer__skill--active:hover {
-  background: color-mix(in srgb, var(--nh-color-accent) 10%, transparent);
-}
-
-.nh-composer__skill-icon {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  flex: none;
-  place-items: center;
-  border-radius: 6px;
-  background: var(--nh-color-bg-hover);
-  color: var(--nh-color-text-secondary);
-}
-
-.nh-composer__skill--active .nh-composer__skill-icon {
-  background: color-mix(in srgb, var(--nh-color-accent) 14%, transparent);
-  color: var(--nh-color-accent);
-}
-
-.nh-composer__skill-copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.nh-composer__skill-name {
-  overflow: hidden;
-  font-family: var(--nh-font-mono);
-  font-size: 12px;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.nh-composer__skill-description {
-  overflow: hidden;
-  color: var(--nh-color-text-secondary);
-  font-size: 11px;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 </style>

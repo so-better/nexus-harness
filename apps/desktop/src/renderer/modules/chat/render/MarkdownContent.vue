@@ -135,7 +135,27 @@ const handleClick = async (event: MouseEvent): Promise<void> => {
 
 .nh-markdown img {
   max-width: 100%;
+  height: auto;
   border-radius: 8px;
+}
+
+.nh-markdown video {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 10px 0;
+  border-radius: 8px;
+  background: var(--nh-color-code-bg);
+}
+
+.nh-markdown figure {
+  margin: 10px 0;
+}
+
+.nh-markdown figcaption {
+  margin-top: 6px;
+  color: var(--nh-color-text-secondary);
+  font-size: 12px;
 }
 
 .nh-markdown .katex-display {

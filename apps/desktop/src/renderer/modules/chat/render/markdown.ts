@@ -91,7 +91,20 @@ export const renderMarkdown = (content: string): string => {
   try {
     const html = DOMPurify.sanitize(marked.parse(content) as string, {
       USE_PROFILES: { html: true, mathMl: true },
-      ADD_ATTR: ['class', 'encoding', 'xmlns', 'data-nh-math'],
+      ADD_ATTR: [
+        'class',
+        'encoding',
+        'xmlns',
+        'data-nh-math',
+        'controls',
+        'poster',
+        'preload',
+        'playsinline',
+        'muted',
+        'loop',
+        'width',
+        'height'
+      ],
       FORBID_TAGS: ['style', 'iframe', 'form', 'input', 'object', 'embed', 'link', 'meta'],
       FORBID_ATTR: ['style']
     });

@@ -555,6 +555,9 @@ const PLAN_ALLOWED_TOOLS = new Set([
   'read_skill_file'
 ]);
 
+const MEDIA_MARKDOWN_PROMPT =
+  '当回复中包含图片或视频链接时，必须直接嵌入媒体，不要只输出“查看”链接、裸 URL 或链接表格：图片使用 Markdown 图片语法 ![描述](URL)；视频使用 <video controls src="URL"></video>，并使用可直接播放的文件地址。表格中同样直接嵌入图片或视频。';
+
 const modeSystemPrompt = (mode: AgentMode): string =>
   mode === 'plan'
     ? '当前处于 Plan 模式：只能读取、分析和制定计划，不得写文件、执行命令、发起网络请求或启动 MCP 工具。需要澄清时使用 ask_user；需要执行时提示用户切换到 Build。'
@@ -1394,7 +1397,7 @@ export class AgentService {
           : '';
       const modeMessage: ChatMessage = {
         role: 'system',
-        content: `${modeSystemPrompt(mode)}${noWorkspaceHint}`
+        content: `${modeSystemPrompt(mode)}\n${MEDIA_MARKDOWN_PROMPT}${noWorkspaceHint}`
       };
       const shouldAddUserMessage = !input.regenerateMessageId;
       const loadedImages = input.imagePaths?.length

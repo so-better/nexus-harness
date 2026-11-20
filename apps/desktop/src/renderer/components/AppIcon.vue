@@ -20,6 +20,10 @@
     <path v-else-if="name === 'stop'" d="M7 7h10v10H7z" fill="currentColor" stroke="none" />
     <path v-else-if="name === 'file'" d="M7 3h7l4 4v14H7zM14 3v5h5" />
     <path v-else-if="name === 'image'" d="M4 5h16v14H4zM7 15l3-3 2 2 3-3 3 3M8 9h.01" />
+    <path
+      v-else-if="name === 'eye'"
+      d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6"
+    />
     <path v-else-if="name === 'export'" d="M12 15V3M7 8l5-5 5 5M5 15v5h14v-5" />
     <path v-else-if="name === 'download'" d="M12 3v12M7 10l5 5 5-5M5 21h14" />
     <path
@@ -55,6 +59,7 @@
     <path v-else-if="name === 'message'" d="M4 5h16v11H9l-4 4v-4H4z" />
     <path v-else-if="name === 'more'" d="M5 12h.01M12 12h.01M19 12h.01" />
     <path v-else-if="name === 'pin'" d="M9 4h6l-1 6 4 4H6l4-4-1-6ZM12 14v7" />
+    <path v-else-if="name === 'play'" d="M8 5v14l11-7Z" />
     <path v-else-if="name === 'info'" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM12 11v5M12 8h.01" />
     <path v-else-if="name === 'trash'" d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" />
     <path v-else-if="name === 'check'" d="m5 12 4 4L19 6" />
@@ -105,6 +110,7 @@ export type AppIconName =
   | 'spark'
   | 'file'
   | 'image'
+  | 'eye'
   | 'export'
   | 'download'
   | 'terminal'
@@ -126,6 +132,7 @@ export type AppIconName =
   | 'bell'
   | 'close'
   | 'pin'
+  | 'play'
   | 'message'
   | 'search'
   | 'more'

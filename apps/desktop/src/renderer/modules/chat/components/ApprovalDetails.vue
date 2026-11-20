@@ -7,6 +7,14 @@
     <div v-if="command" class="nh-approval__field">
       <pre class="nh-approval__pre nh-approval__pre--command">{{ command }}</pre>
     </div>
+    <div v-if="prompt" class="nh-approval__field">
+      <span class="nh-approval__label">{{ t('chat.approvalPrompt') }}</span>
+      <p class="nh-approval__text">{{ prompt }}</p>
+    </div>
+    <div v-if="query" class="nh-approval__field">
+      <span class="nh-approval__label">{{ t('chat.approvalQuery') }}</span>
+      <p class="nh-approval__text">{{ query }}</p>
+    </div>
     <div v-if="oldText !== undefined || newText !== undefined" class="nh-approval__field">
       <span class="nh-approval__label">{{ t('chat.approvalDiff') }}</span>
       <div class="nh-approval__diff">
@@ -16,12 +24,12 @@
     </div>
     <div v-else-if="content" class="nh-approval__field">
       <span class="nh-approval__label">{{ t('chat.approvalContent') }}</span>
-      <pre class="nh-approval__pre">{{ contentPreview }}</pre>
+      <pre class="nh-approval__pre">{{ content }}</pre>
     </div>
-    <div v-else-if="!path && !command" class="nh-approval__field">
-      <span class="nh-approval__label">{{ t('chat.approvalInput') }}</span>
+    <details class="nh-approval__raw">
+      <summary>{{ t('chat.approvalRaw') }}</summary>
       <pre class="nh-approval__pre">{{ inputPreview }}</pre>
-    </div>
+    </details>
   </div>
 </template>
 
@@ -44,17 +52,12 @@ const stringValue = (key: string): string | undefined =>
   typeof input.value[key] === 'string' ? (input.value[key] as string) : undefined;
 const path = computed(() => stringValue('path'));
 const command = computed(() => stringValue('command'));
+const prompt = computed(() => stringValue('prompt'));
+const query = computed(() => stringValue('query'));
 const content = computed(() => stringValue('content'));
 const oldText = computed(() => stringValue('oldText'));
 const newText = computed(() => stringValue('newText'));
-const contentPreview = computed(() => {
-  const value = content.value ?? '';
-  return value.length > 3000 ? `${value.slice(0, 3000)}\n…[已截断]` : value;
-});
-const inputPreview = computed(() => {
-  const text = JSON.stringify(props.tool.input, null, 2) ?? '';
-  return text.length > 3000 ? `${text.slice(0, 3000)}\n…[已截断]` : text;
-});
+const inputPreview = computed(() => JSON.stringify(props.tool.input, null, 2) ?? '');
 </script>
 
 <style scoped lang="less">
@@ -69,6 +72,24 @@ const inputPreview = computed(() => {
 .nh-approval__label {
   color: var(--nh-color-text-secondary);
   font-size: 11px;
+}
+
+.nh-approval__text {
+  margin: 0;
+  color: var(--nh-color-text-primary);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.nh-approval__raw {
+  margin-top: 9px;
+}
+
+.nh-approval__raw summary {
+  color: var(--nh-color-text-secondary);
+  font-size: 11px;
+  cursor: pointer;
 }
 
 .nh-approval__value {
@@ -120,5 +141,9 @@ const inputPreview = computed(() => {
 .nh-approval__pre--added {
   border-color: color-mix(in srgb, var(--nh-color-success) 24%, var(--nh-border-subtle));
   color: var(--nh-color-success);
+}
+
+.nh-approval__raw .nh-approval__pre {
+  margin-top: 6px;
 }
 </style>

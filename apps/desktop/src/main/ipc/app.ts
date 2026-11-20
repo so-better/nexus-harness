@@ -16,8 +16,11 @@ export const registerAppIpc = (): void => {
   ipcMain.handle(
     IPC_CHANNELS.appOpenExternal,
     async (_event, rawUrl: unknown): Promise<Result<{ opened: boolean }>> => {
-      if (typeof rawUrl !== 'string' || !/^https?:\/\//i.test(rawUrl)) {
-        return { ok: false, error: { code: 'INVALID_URL', message: '只允许打开 HTTP/HTTPS 链接' } };
+      if (typeof rawUrl !== 'string' || !/^(https?:\/\/|mailto:)/i.test(rawUrl)) {
+        return {
+          ok: false,
+          error: { code: 'INVALID_URL', message: '只允许打开 HTTP/HTTPS 或 mailto 链接' }
+        };
       }
       await shell.openExternal(rawUrl);
       return ok({ opened: true });

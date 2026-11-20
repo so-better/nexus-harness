@@ -73,7 +73,8 @@ export const useFileReference = (options: FileReferenceOptions) => {
         : options.draft.value.length;
     const before = options.draft.value.slice(0, caret);
     const at = before.lastIndexOf('@');
-    if (at < 0 || (at > 0 && !/\s/.test(before[at - 1] ?? '')) || /\s/.test(before.slice(at + 1))) {
+    // @ 不区分是否在开头；出现空白后视为结束
+    if (at < 0 || /\s/.test(before.slice(at + 1))) {
       close();
       return;
     }

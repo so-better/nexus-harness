@@ -6,8 +6,10 @@ import { createPinia } from 'pinia';
 import { createApp } from 'vue';
 import App from './NexusApp.vue';
 import { initTheme } from './theme';
+import { installLinkNavigation } from './link-navigation';
 import '../styles/global.less';
 
+installLinkNavigation();
 initTheme().catch((error: unknown) => {
   console.error('初始化主题失败', error);
 });

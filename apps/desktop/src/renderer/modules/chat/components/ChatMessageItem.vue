@@ -36,14 +36,58 @@
         'nh-message__bubble--editing': editing
       }">
         <template v-if="editing">
-          <NInput ref="editInput" v-model:value="draft" type="textarea" :autosize="{ minRows: 2, maxRows: 6 }"
-            @keydown.esc.prevent="cancelEdit" @keydown.ctrl.enter.prevent="saveEdit"
-            @keydown.meta.enter.prevent="saveEdit" />
+          <div v-if="editingReferences.length" class="nh-message__edit-files">
+            <UserFileChip
+              v-for="file in editingReferences"
+              :key="file.path"
+              :file="file"
+              removable
+              @remove="removeEditingReference(file.path)"
+            />
+          </div>
+          <NPopover
+            :show="(editSkillOpen && editSkillItems.length > 0) || editFileOpen"
+            trigger="manual"
+            placement="top-start"
+            :show-arrow="false"
+            :style="{ width: 'min(420px, calc(100vw - 48px))' }"
+          >
+            <template #trigger>
+              <NInput
+                ref="editInput"
+                v-model:value="draft"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 6 }"
+                @keydown="onEditKeydown"
+                @blur="onEditBlur"
+              />
+            </template>
+            <SkillPalette
+              v-if="editSkillOpen && editSkillItems.length > 0"
+              :items="editSkillItems"
+              :active-index="editSkillActiveIndex"
+              @select="chooseEditSkill"
+              @hover="editSkillActiveIndex = $event"
+            />
+            <ComposerFileReference
+              v-else-if="editFileOpen"
+              :references="editFileCandidates"
+              :active-index="editFileActiveIndex"
+              :searching="editFileSearching"
+              @select="selectEditFile"
+            />
+          </NPopover>
           <div class="nh-message__edit-actions">
             <NButton size="small" secondary @click="cancelEdit">{{
               t('chat.askUserCancel')
             }}</NButton>
-            <NButton size="small" type="primary" secondary :disabled="!draft.trim()" @click="saveEdit">
+            <NButton
+              size="small"
+              type="primary"
+              secondary
+              :disabled="!draft.trim() && !editingReferences.length"
+              @click="saveEdit"
+            >
               {{ t('app.send') }}
             </NButton>
           </div>
@@ -116,7 +160,8 @@
               </template>
               <template v-else-if="segment.kind === 'file'">
                 <template v-for="file in fileLookup(segment.fileId)" :key="file.id">
-                  <OutputFileCard :file="file" />
+                  <InlineMediaFile v-if="isInlineMediaFile(file)" :file="file" />
+                  <OutputFileCard v-else :file="file" />
                 </template>
               </template>
             </template>
@@ -137,7 +182,10 @@
 
             <div v-if="message.files?.length" class="nh-message__files"
               :class="{ 'nh-message__files--after-content': Boolean(message.content) }">
-              <OutputFileCard v-for="file in message.files" :key="file.id" :file="file" />
+              <template v-for="file in message.files" :key="file.id">
+                <InlineMediaFile v-if="isInlineMediaFile(file)" :file="file" />
+                <OutputFileCard v-else :file="file" />
+              </template>
             </div>
 
             <div v-if="toolEntries.length" class="nh-message__tools"
@@ -237,24 +285,35 @@
  */
 
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { NButton, NInput, useMessage, type InputInst } from 'naive-ui';
+import { NButton, NInput, NPopover, useMessage, type InputInst } from 'naive-ui';
 import { t } from '@/app/i18n';
 import type { AskUserAnswer } from '@shared/ask-user';
 import type { MessageFileReference } from '@shared/events';
 import type { ChatApproval, ChatAskUser, ChatMessageView, ChatToolCall } from '../types';
-import type { OutputFile, WorkspaceAuthorizationRequest } from '@shared/ipc/contracts';
+import type {
+  OutputFile,
+  WorkspaceAuthorizationRequest,
+  WorkspaceFileReference
+} from '@shared/ipc/contracts';
 import AppIcon from '@/components/AppIcon.vue';
 import ApprovalCard from './ApprovalCard.vue';
 import AskUserCard from './AskUserCard.vue';
 import OutputFileCard from './OutputFileCard.vue';
+import InlineMediaFile from './InlineMediaFile.vue';
 import ToolCallCard from './ToolCallCard.vue';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import UserMessageContent from './UserMessageContent.vue';
+import UserFileChip from './UserFileChip.vue';
 import MarkdownSegments from '../render/MarkdownSegments.vue';
 import ReasoningBlock from './ReasoningBlock.vue';
 import WorkspaceAuthCard from './WorkspaceAuthCard.vue';
+import ComposerFileReference from './ComposerFileReference.vue';
+import SkillPalette from './SkillPalette.vue';
 import { splitUserMessageReferences } from '../message-references';
+import { useFileReference } from '../use-file-reference';
+import { useSkillPalette } from '../use-skill-palette';
 import { buildToolEntries, unmatchedAskUsers } from '../ask-tool-entries';
+import { isInlineMediaFile } from '../inline-media';
 
 const props = withDefaults(
   defineProps<{
@@ -300,6 +359,76 @@ const draft = ref('');
 const editingReferences = ref<MessageFileReference[]>([]);
 const editInput = ref<InputInst | null>(null);
 const visibleContent = ref(props.message.content);
+
+/**
+ * 编辑态新增文件引用，与输入区的 @ 选择保持一致。
+ */
+const addEditingReference = (reference: WorkspaceFileReference): void => {
+  if (editingReferences.value.some((file) => file.path === reference.path)) return;
+  editingReferences.value = [
+    ...editingReferences.value,
+    { path: reference.path, name: reference.name }
+  ];
+};
+
+const editFileReference = useFileReference({
+  draft,
+  sessionId: computed(() => props.sessionId),
+  disabled: computed(() => props.actionsDisabled),
+  running: computed(() => props.actionsDisabled),
+  enabled: computed(() => Boolean(props.sessionId)),
+  inputRef: editInput,
+  onSelect: addEditingReference,
+  formatReference: () => '',
+  submit: () => undefined,
+  toggleMode: () => undefined
+});
+const editSkillPalette = useSkillPalette(draft, editInput);
+
+const {
+  references: editFileCandidates,
+  activeIndex: editFileActiveIndex,
+  searching: editFileSearching,
+  open: editFileOpen,
+  close: closeEditReferences,
+  select: selectEditFile,
+  onKeydown: onEditFileKeydown
+} = editFileReference;
+const {
+  open: editSkillOpen,
+  items: editSkillItems,
+  activeIndex: editSkillActiveIndex,
+  choose: chooseEditSkill,
+  handleKeydown: handleEditSkillKeydown
+} = editSkillPalette;
+
+/**
+ * 编辑态失焦时关闭 Skill 与 @ 候选，避免浮层残留。
+ */
+const onEditBlur = (): void => {
+  closeEditReferences();
+  editSkillOpen.value = false;
+};
+
+/**
+ * 编辑态键盘：优先处理 Skill 与 @ 候选，保留 Cmd/Ctrl+Enter 保存与 Esc 取消。
+ */
+const onEditKeydown = (event: KeyboardEvent): void => {
+  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+    event.preventDefault();
+    saveEdit();
+    return;
+  }
+  if (editSkillOpen.value && handleEditSkillKeydown(event)) return;
+  if (editFileOpen.value) {
+    onEditFileKeydown(event);
+    if (event.defaultPrevented) return;
+  }
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    cancelEdit();
+  }
+};
 let frameId: number | undefined;
 
 /**
@@ -362,6 +491,12 @@ const startEdit = async (): Promise<void> => {
   editing.value = true;
   await nextTick();
   editInput.value?.focus();
+  const textarea = editInput.value?.textareaElRef;
+  if (textarea) {
+    const end = textarea.value.length;
+    textarea.selectionStart = end;
+    textarea.selectionEnd = end;
+  }
 };
 
 /**
@@ -369,7 +504,7 @@ const startEdit = async (): Promise<void> => {
  */
 const saveEdit = (): void => {
   const content = draft.value.trim();
-  if (!content) return;
+  if (!content && !editingReferences.value.length) return;
   editing.value = false;
   emit(
     'edit-message',
@@ -386,6 +521,13 @@ const cancelEdit = (): void => {
   editing.value = false;
   draft.value = '';
   editingReferences.value = [];
+};
+
+/**
+ * 编辑态移除一个文件引用。
+ */
+const removeEditingReference = (path: string): void => {
+  editingReferences.value = editingReferences.value.filter((file) => file.path !== path);
 };
 
 /**
@@ -559,6 +701,17 @@ const timeLabel = computed(() =>
   gap: 10px;
 }
 
+.nh-message__files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nh-message__files--after-content,
+.nh-message__tools--after-content {
+  margin-top: 10px;
+}
+
 .nh-message__tools {
   display: flex;
   flex-direction: column;
@@ -658,6 +811,13 @@ const timeLabel = computed(() =>
 
 .nh-message__bubble--editing {
   width: 100%;
+}
+
+.nh-message__edit-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .nh-message__edit-actions {
