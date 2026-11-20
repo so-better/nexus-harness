@@ -49,12 +49,16 @@ import {
 } from './context-service';
 import type { NexusEvent } from '@shared/events';
 import type {
-  AgentMode,
   AgentProviderConfig,
   AgentRunInput,
   AgentRunResult
 } from '@shared/ipc/contracts';
 import { askUserInputSchema, type AskQuestion, type AskUserAnswer } from '@shared/ask-user';
+import {
+  appendEnvironmentContext,
+  buildAgentSystemPrompt,
+  buildEnvironmentContext
+} from './system-prompt';
 
 /**
  * 测试可注入 Provider 工厂；生产默认使用 OpenAI 兼容实现。
@@ -554,14 +558,6 @@ const PLAN_ALLOWED_TOOLS = new Set([
   'read_skill',
   'read_skill_file'
 ]);
-
-const MEDIA_MARKDOWN_PROMPT =
-  '当回复中包含图片或视频链接时，必须直接嵌入媒体，不要只输出“查看”链接、裸 URL 或链接表格：图片使用 Markdown 图片语法 ![描述](URL)；视频使用 <video controls src="URL"></video>，并使用可直接播放的文件地址。表格中同样直接嵌入图片或视频。';
-
-const modeSystemPrompt = (mode: AgentMode): string =>
-  mode === 'plan'
-    ? '当前处于 Plan 模式：只能读取、分析和制定计划，不得写文件、执行命令、发起网络请求或启动 MCP 工具。需要澄清时使用 ask_user；需要执行时提示用户切换到 Build。'
-    : '当前处于 Build 模式：可以按权限和审批要求使用读写与执行工具；高风险操作仍需用户审批。需要澄清时使用 ask_user。';
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
@@ -1391,13 +1387,12 @@ export class AgentService {
           };
         }
       };
-      const noWorkspaceHint =
-        input.rootPaths.length === 0
-          ? '\n当前没有工作区；调用本地文件或命令工具时必须使用用户明确给出的绝对路径，并在需要时请求目录授权，不要假设 Desktop。'
-          : '';
       const modeMessage: ChatMessage = {
         role: 'system',
-        content: `${modeSystemPrompt(mode)}\n${MEDIA_MARKDOWN_PROMPT}${noWorkspaceHint}`
+        content: buildAgentSystemPrompt({
+          mode,
+          hasWorkspace: input.rootPaths.length > 0
+        })
       };
       const shouldAddUserMessage = !input.regenerateMessageId;
       const loadedImages = input.imagePaths?.length
@@ -1486,17 +1481,22 @@ export class AgentService {
         requiresApproval: definition.requiresApproval
       }));
 
+      const conversationMessages = [
+        modeMessage,
+        ...(hooks.history ?? []),
+        ...(shouldAddUserMessage ? [userMessage] : [])
+      ];
+      const messages = appendEnvironmentContext(
+        conversationMessages,
+        buildEnvironmentContext()
+      );
       const loop = new AgentLoop({
         provider,
         providerName: providerConfig.name,
         model: modelConfig.id,
         sessionId: input.sessionId,
         runId,
-        messages: [
-          modeMessage,
-          ...(hooks.history ?? []),
-          ...(shouldAddUserMessage ? [userMessage] : [])
-        ],
+        messages,
         tools,
         ...(mode === 'plan' ? { blockedTools } : {}),
         permissionGateway: new PermissionGateway(

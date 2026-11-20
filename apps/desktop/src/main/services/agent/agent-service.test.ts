@@ -69,11 +69,15 @@ describe('AgentService', () => {
       role: 'system',
       content: expect.stringContaining('Build')
     });
-    expect(requests[0]?.messages.slice(1).map((message) => message.content)).toEqual([
+    expect(requests[0]?.messages[0]?.content).toContain('工具与事实');
+    expect(requests[0]?.messages.slice(1, 3).map((message) => message.content)).toEqual([
       '之前的问题',
-      '之前的回答',
-      `继续\n\n@${join(root, 'a.txt')}`
+      '之前的回答'
     ]);
+    const currentPrompt = requests[0]?.messages[3]?.content ?? '';
+    expect(currentPrompt).toContain(`继续\n\n@${join(root, 'a.txt')}`);
+    expect(currentPrompt).toContain('<environment>');
+    expect(currentPrompt).toContain('平台：');
     expect(events[0]).toMatchObject({
       type: 'message.completed',
       payload: {
@@ -118,6 +122,7 @@ describe('AgentService', () => {
     );
 
     expect(result.finishReason).toBe('stop');
+    expect(requests[0]?.messages[0]?.content).toContain('当前没有工作区');
     expect(requests[0]?.tools?.map((tool) => tool.name)).toEqual([
       'read_file',
       'list_dir',
@@ -317,7 +322,7 @@ describe('AgentService', () => {
     expect(requests[1]?.messages.some((message) => message.content.includes('"core"'))).toBe(true);
   });
 
-  it('compacts oversized tool output into artifacts before the next model call', async () => {
+  it('artifacts oversized tool output before the next model call', async () => {
     await writeFile(join(root, 'large.txt'), 'x'.repeat(20_000), 'utf8');
     const provider = new MockProvider([
       {
@@ -335,7 +340,7 @@ describe('AgentService', () => {
       protocol: 'openai' as const,
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
-      models: [{ id: 'mock-model', contextWindow: 4_096, maxOutputTokens: 1_024 }],
+      models: [{ id: 'mock-model', contextWindow: 8_192, maxOutputTokens: 1_024 }],
       defaultModelId: 'mock-model',
       apiKey: 'secret',
       enabled: true
