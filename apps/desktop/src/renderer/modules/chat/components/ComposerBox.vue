@@ -213,8 +213,8 @@ const {
   flex: none;
   flex-direction: column;
   gap: 6px;
-  width: calc(100% - 64px);
-  max-width: 1040px;
+  width: calc(100% - 32px);
+  max-width: 1104px;
   margin: 0 auto 24px;
   padding: 10px 12px 8px;
   border: 1px solid var(--nh-border-subtle);
