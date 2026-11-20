@@ -192,6 +192,7 @@ const zhCN = {
   'chat.fileReferenceTitle': '引用工作区文件',
   'chat.fileReferenceSearching': '搜索中…',
   'chat.fileReferenceEmpty': '没有匹配文件',
+  'chat.skillTitle': '斜杠技能',
   'chat.emptySessionTitle': '从一个目标开始',
   'chat.emptySessionHint': '说清要达成的结果，Nexus 会推进并记录过程。',
   'chat.modeChangeFailed': '切换 Agent 模式失败',
@@ -608,6 +609,7 @@ const enUS: Record<MessageKey, string> = {
   'chat.fileReferenceTitle': 'Reference workspace file',
   'chat.fileReferenceSearching': 'Searching…',
   'chat.fileReferenceEmpty': 'No matching files',
+  'chat.skillTitle': 'Slash skills',
   'chat.emptySessionTitle': 'Start with a goal',
   'chat.emptySessionHint':
     'State the outcome you want. Nexus will move it forward and record the process.',

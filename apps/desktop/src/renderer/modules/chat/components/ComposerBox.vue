@@ -56,6 +56,10 @@
         />
       </template>
       <div ref="skillListRef" class="nh-composer__skills" role="listbox">
+        <div class="nh-composer__skills-header">
+          <span>{{ t('chat.skillTitle') }}</span>
+          <span class="nh-composer__skills-count">{{ skillItems.length }}</span>
+        </div>
         <button
           v-for="(skill, index) in skillItems"
           :key="skill.id"
@@ -67,8 +71,13 @@
           @mouseenter="skillActiveIndex = index"
           @mousedown.prevent="chooseSkill(skill.id)"
         >
-          <span class="nh-composer__skill-name">/{{ skill.id }}</span>
-          <span class="nh-composer__skill-description">{{ skill.description }}</span>
+          <span class="nh-composer__skill-icon">
+            <AppIcon name="spark" :size="14" />
+          </span>
+          <span class="nh-composer__skill-copy">
+            <span class="nh-composer__skill-name">/{{ skill.id }}</span>
+            <span class="nh-composer__skill-description">{{ skill.description }}</span>
+          </span>
         </button>
       </div>
     </NPopover>
@@ -338,39 +347,87 @@ const {
   display: flex;
   max-height: 280px;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 2px;
+}
+
+.nh-composer__skills-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 7px 6px;
+  color: var(--nh-color-text-secondary);
+  font-size: 11px;
+}
+
+.nh-composer__skills-count {
+  color: var(--nh-color-text-disabled);
+  font-family: var(--nh-font-mono);
+  font-size: 10px;
 }
 
 .nh-composer__skill {
   display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 9px;
   padding: 6px 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--nh-color-text-primary);
   text-align: left;
   cursor: pointer;
+  transition: background var(--nh-duration-fast) var(--nh-ease-standard);
 }
 
-.nh-composer__skill:hover,
-.nh-composer__skill--active {
+.nh-composer__skill:hover {
   background: var(--nh-color-bg-hover);
 }
 
+.nh-composer__skill--active,
+.nh-composer__skill--active:hover {
+  background: color-mix(in srgb, var(--nh-color-accent) 10%, transparent);
+}
+
+.nh-composer__skill-icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--nh-color-bg-hover);
+  color: var(--nh-color-text-secondary);
+}
+
+.nh-composer__skill--active .nh-composer__skill-icon {
+  background: color-mix(in srgb, var(--nh-color-accent) 14%, transparent);
+  color: var(--nh-color-accent);
+}
+
+.nh-composer__skill-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
 .nh-composer__skill-name {
+  overflow: hidden;
   font-family: var(--nh-font-mono);
   font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nh-composer__skill-description {
   overflow: hidden;
   color: var(--nh-color-text-secondary);
   font-size: 11px;
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

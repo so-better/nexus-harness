@@ -19,6 +19,7 @@
     <path v-else-if="name === 'send'" d="m4 11 16-7-7 16-2-7-7-2Z" />
     <path v-else-if="name === 'stop'" d="M7 7h10v10H7z" fill="currentColor" stroke="none" />
     <path v-else-if="name === 'file'" d="M7 3h7l4 4v14H7zM14 3v5h5" />
+    <path v-else-if="name === 'image'" d="M4 5h16v14H4zM7 15l3-3 2 2 3-3 3 3M8 9h.01" />
     <path v-else-if="name === 'export'" d="M12 15V3M7 8l5-5 5 5M5 15v5h14v-5" />
     <path
       v-else-if="name === 'terminal'"
@@ -61,6 +62,10 @@
     <path v-else-if="name === 'arrow-up'" d="M12 19V5M6 11l6-6 6 6" />
     <path v-else-if="name === 'arrow-down'" d="M12 5v14M18 13l-6 6-6-6" />
     <path v-else-if="name === 'plug'" d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0V7ZM12 16v5" />
+    <path
+      v-else-if="name === 'spark'"
+      d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z"
+    />
     <path v-else-if="name === 'loader'" d="M21 12a9 9 0 1 1-6.2-8.56" />
     <path
       v-else-if="name === 'lightbulb'"
@@ -81,6 +86,7 @@
       v-else-if="name === 'refresh'"
       d="M20 7v5h-5M4 17v-5h5M6.1 9a7 7 0 0 1 11.2-2.6L20 9M4 15l2.7 2.6A7 7 0 0 0 17.9 15"
     />
+    <path v-else-if="name === 'regenerate'" d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5" />
     <path v-else d="m12 3 2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2Z" />
   </svg>
 </template>
@@ -97,6 +103,7 @@ export type AppIconName =
   | 'stop'
   | 'spark'
   | 'file'
+  | 'image'
   | 'export'
   | 'terminal'
   | 'edit'
@@ -124,6 +131,7 @@ export type AppIconName =
   | 'trash'
   | 'check'
   | 'refresh'
+  | 'regenerate'
   | 'copy'
   | 'plug'
   | 'minimize'

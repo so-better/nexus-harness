@@ -695,7 +695,11 @@ export class AgentService {
               runId,
               seq: 1,
               type: 'ask_user.requested',
-              payload: { requestId, questions: parsed.data.questions }
+              payload: {
+                requestId,
+                questions: parsed.data.questions,
+                ...(call.id ? { toolCallId: call.id } : {})
+              }
             })
           );
           const answers = await hooks.askUser(requestId, parsed.data.questions);

@@ -7,33 +7,30 @@
     </div>
 
     <div v-if="platform && !isMac" class="nh-titlebar__controls" @dblclick.stop>
-      <button
-        type="button"
-        class="nh-titlebar__control"
+      <NButton
+        text
         :aria-label="t('window.minimize')"
         :title="t('window.minimize')"
         @click="minimize"
       >
-        <AppIcon name="minimize" :size="14" />
-      </button>
-      <button
-        type="button"
-        class="nh-titlebar__control"
+        <template #icon><AppIcon name="minimize" /></template>
+      </NButton>
+      <NButton
+        text
         :aria-label="maximized ? t('window.restore') : t('window.maximize')"
         :title="maximized ? t('window.restore') : t('window.maximize')"
         @click="toggleMaximize"
       >
-        <AppIcon :name="maximized ? 'restore' : 'maximize'" :size="13" />
-      </button>
-      <button
-        type="button"
-        class="nh-titlebar__control nh-titlebar__control--close"
+        <template #icon><AppIcon :name="maximized ? 'restore' : 'maximize'" /></template>
+      </NButton>
+      <NButton
+        text
         :aria-label="t('window.close')"
         :title="t('window.close')"
         @click="close"
       >
-        <AppIcon name="close" :size="14" />
-      </button>
+        <template #icon><AppIcon name="close" /></template>
+      </NButton>
     </div>
   </header>
 </template>
@@ -44,6 +41,7 @@
  */
 
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { NButton } from 'naive-ui';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import {
@@ -134,37 +132,18 @@ onBeforeUnmount(() => unsubscribe?.());
 .nh-titlebar__controls {
   display: flex;
   height: 100%;
-  align-items: stretch;
+  align-items: center;
+  gap: var(--nh-space-md);
   -webkit-app-region: no-drag;
 }
 
-.nh-titlebar__control {
-  display: grid;
-  width: 46px;
-  height: 100%;
-  place-items: center;
-  border: 0;
-  background: transparent;
-  color: var(--nh-color-text-secondary);
-  cursor: pointer;
-  transition:
-    background var(--nh-duration-fast) var(--nh-ease-standard),
-    color var(--nh-duration-fast) var(--nh-ease-standard);
+.nh-titlebar__controls :deep(.n-button) {
+  min-width: 32px;
+  min-height: 32px;
 }
 
-.nh-titlebar__control:hover {
-  background: var(--nh-color-bg-hover);
-  color: var(--nh-color-text-primary);
-}
-
-.nh-titlebar__control--close:hover {
+.nh-titlebar__controls :deep(.n-button:last-child:hover) {
   background: color-mix(in srgb, var(--nh-color-danger) 16%, transparent);
   color: var(--nh-color-danger);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .nh-titlebar__control {
-    transition: none;
-  }
 }
 </style>

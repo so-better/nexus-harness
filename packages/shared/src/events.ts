@@ -125,7 +125,8 @@ export const eventPayloadSchemas = {
   }),
   'ask_user.requested': z.object({
     requestId: z.string(),
-    questions: z.array(askQuestionSchema)
+    questions: z.array(askQuestionSchema),
+    toolCallId: z.string().optional()
   }),
   'ask_user.resolved': z.object({
     requestId: z.string(),

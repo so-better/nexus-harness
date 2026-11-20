@@ -1,6 +1,6 @@
 <template>
   <div class="nh-workspace-picker">
-    <NButton text size="small" @click="emit('choose-root')">
+    <NButton text @click="emit('choose-root')">
       <template #icon>
         <AppIcon :name="roots.length ? 'folder' : 'plus'" />
       </template>
@@ -11,7 +11,9 @@
         <NPopconfirm @positive-click="emit('remove-root', roots[0].id)">
           <template #trigger>
             <NButton size="tiny" secondary :aria-label="t('app.leaveWorkspace')">
-              <template #icon><AppIcon name="power" :size="12" /></template>
+              <template #icon>
+                <AppIcon name="close" :size="12" />
+              </template>
             </NButton>
           </template>
           {{ t('app.confirmLeaveWorkspace') }}

@@ -548,4 +548,136 @@ describe('projectEvents', () => {
 
     expect(projection.messages[0]?.usage).toMatchObject({ inputTokens: 10, outputTokens: 5 });
   });
+  it('按事件顺序生成助手时间线，推理与工具/提问交错', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'run.started',
+        payload: { model: 'mock-model' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'message.reasoning.delta',
+        payload: { messageId: 'assistant-1', text: '先想一下' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'message.delta',
+        payload: { messageId: 'assistant-1', text: '第一段回答' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 4,
+        type: 'message.completed',
+        payload: {
+          messageId: 'assistant-1',
+          role: 'assistant',
+          content: '第一段回答',
+          reasoning: '先想一下'
+        }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 5,
+        type: 'tool.requested',
+        payload: { toolCallId: 'tool-1', name: 'list_dir', input: {} }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 6,
+        type: 'ask_user.requested',
+        payload: { requestId: 'ask-1', questions: [{ id: 'q', question: '继续吗？' }] }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 7,
+        type: 'ask_user.resolved',
+        payload: { requestId: 'ask-1', answers: [], cancelled: false }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 8,
+        type: 'message.reasoning.delta',
+        payload: { messageId: 'assistant-2', text: '继续思考' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 9,
+        type: 'message.delta',
+        payload: { messageId: 'assistant-2', text: '第二段回答' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 10,
+        type: 'message.completed',
+        payload: {
+          messageId: 'assistant-2',
+          role: 'assistant',
+          content: '第二段回答',
+          reasoning: '继续思考'
+        }
+      })
+    ]);
+
+    const timeline = projection.messages[0]?.timeline ?? [];
+    expect(timeline.map((segment) => segment.kind)).toEqual([
+      'reasoning',
+      'content',
+      'tool',
+      'ask',
+      'reasoning',
+      'content'
+    ]);
+    expect(timeline[0]).toMatchObject({ kind: 'reasoning', text: '先想一下' });
+    expect(timeline[2]).toMatchObject({ kind: 'tool', toolCallId: 'tool-1' });
+    expect(timeline[3]).toMatchObject({ kind: 'ask', requestId: 'ask-1' });
+    expect(timeline[5]).toMatchObject({ kind: 'content', text: '第二段回答' });
+  });
+  it('完成事件用最终内容校正时间线段', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'message.reasoning.delta',
+        payload: { messageId: 'assistant-1', text: '先' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'message.delta',
+        payload: { messageId: 'assistant-1', text: '答' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'message.completed',
+        payload: {
+          messageId: 'assistant-1',
+          role: 'assistant',
+          content: '答案',
+          reasoning: '先想一下'
+        }
+      })
+    ]);
+
+    const timeline = projection.messages[0]?.timeline ?? [];
+    expect(timeline[0]).toMatchObject({ kind: 'reasoning', text: '先想一下' });
+    expect(timeline[1]).toMatchObject({ kind: 'content', text: '答案' });
+  });
 });

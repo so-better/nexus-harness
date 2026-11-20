@@ -1,6 +1,13 @@
 <template>
   <div class="nh-composer__selectors">
-    <NButton v-if="providers.length === 0" size="tiny" secondary @click="emit('open-settings')">
+    <NButton
+      v-if="providers.length === 0"
+      type="primary"
+      secondary
+      round
+      size="small"
+      @click="emit('open-settings')"
+    >
       <template #icon><AppIcon name="settings" :size="14" /></template>
       {{ t('chat.configureModel') }}
     </NButton>

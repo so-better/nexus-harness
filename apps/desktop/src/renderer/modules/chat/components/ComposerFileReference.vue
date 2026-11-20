@@ -19,10 +19,14 @@
       :aria-selected="index === activeIndex"
       @mousedown.prevent="emit('select', reference)"
     >
-      <AppIcon name="file" :size="13" />
-      <span class="nh-reference__name">{{ reference.name }}</span>
-      <span class="nh-reference__path">
-        {{ rootName(reference.root) }} · {{ reference.relativePath }}
+      <span class="nh-reference__icon">
+        <AppIcon :name="reference.isImage ? 'image' : 'file'" :size="14" />
+      </span>
+      <span class="nh-reference__copy">
+        <span class="nh-reference__name">{{ reference.name }}</span>
+        <span class="nh-reference__path">
+          {{ rootName(reference.root) }} · {{ reference.relativePath }}
+        </span>
       </span>
     </button>
   </div>
@@ -51,30 +55,31 @@ const rootName = (path: string): string => path.split(/[\\/]/).filter(Boolean).a
 <style scoped lang="less">
 .nh-references {
   display: flex;
-  max-height: 220px;
+  max-height: 240px;
   flex-direction: column;
   gap: 1px;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 6px;
   border: 1px solid var(--nh-border-subtle);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--nh-surface-elevated);
-  box-shadow: var(--nh-shadow-card);
+  box-shadow: var(--nh-shadow-float);
 }
 
 .nh-references__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 2px 7px 5px;
+  padding: 2px 7px 6px;
   color: var(--nh-color-text-secondary);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .nh-references__hint,
 .nh-references__empty {
   color: var(--nh-color-text-disabled);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .nh-references__empty {
@@ -83,36 +88,66 @@ const rootName = (path: string): string => path.split(/[\\/]/).filter(Boolean).a
 
 .nh-reference {
   display: flex;
-  min-height: 28px;
   align-items: center;
-  gap: 7px;
-  padding: 4px 7px;
+  gap: 9px;
+  padding: 6px 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--nh-color-text-secondary);
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: background var(--nh-duration-fast) var(--nh-ease-standard);
 }
 
-.nh-reference:hover,
-.nh-reference--active {
+.nh-reference:hover {
   background: var(--nh-color-bg-hover);
-  color: var(--nh-color-text-primary);
+}
+
+.nh-reference--active,
+.nh-reference--active:hover {
+  background: color-mix(in srgb, var(--nh-color-accent) 10%, transparent);
+}
+
+.nh-reference__icon {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--nh-color-bg-hover);
+  color: var(--nh-color-text-secondary);
+}
+
+.nh-reference--active .nh-reference__icon {
+  background: color-mix(in srgb, var(--nh-color-accent) 14%, transparent);
+  color: var(--nh-color-accent);
+}
+
+.nh-reference__copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .nh-reference__name {
-  flex: none;
-  font-size: 12px;
+  overflow: hidden;
+  color: var(--nh-color-text-primary);
+  font-size: 13px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nh-reference__path {
-  min-width: 0;
   overflow: hidden;
-  color: var(--nh-color-text-disabled);
+  color: var(--nh-color-text-secondary);
   font-family: var(--nh-font-mono);
-  font-size: 10px;
+  font-size: 11px;
+  line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

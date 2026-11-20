@@ -26,8 +26,8 @@
           @select="selectExport"
         >
           <NButton
+            type="primary"
             text
-            size="small"
             :loading="exporting"
             :disabled="exporting"
             :title="t('session.export')"
@@ -85,26 +85,30 @@
       />
 
       <div class="nh-chat__bottom">
-        <NButton
-          v-if="workspaceAuth"
-          size="small"
-          secondary
-          class="nh-chat__approval-jump"
-          @click="focusWorkspaceAuth"
-        >
-          <template #icon><AppIcon name="folder" :size="14" /></template>
-          {{ t('workspaceAuth.jump') }}
-        </NButton>
-        <NButton
-          v-if="pendingApprovals.length"
-          size="small"
-          secondary
-          class="nh-chat__approval-jump"
-          @click="focusApproval"
-        >
-          <template #icon><AppIcon name="alert" :size="14" /></template>
-          {{ t('chat.approvalJump') }} {{ pendingApprovals.length }}
-        </NButton>
+        <div v-if="workspaceAuth || pendingApprovals.length" class="nh-chat__interruptions">
+          <NButton
+            v-if="workspaceAuth"
+            type="primary"
+            secondary
+            round
+            size="small"
+            @click="focusWorkspaceAuth"
+          >
+            <template #icon><AppIcon name="folder" :size="14" /></template>
+            {{ t('workspaceAuth.jump') }}
+          </NButton>
+          <NButton
+            v-if="pendingApprovals.length"
+            type="warning"
+            secondary
+            round
+            size="small"
+            @click="focusApproval"
+          >
+            <template #icon><AppIcon name="alert" :size="14" /></template>
+            {{ t('chat.approvalJump') }} {{ pendingApprovals.length }}
+          </NButton>
+        </div>
         <ComposerBox
           :disabled="Boolean(disabledReason)"
           :disabled-reason="disabledReason"
@@ -323,7 +327,10 @@ watch(
   gap: 16px;
 }
 
-.nh-chat__approval-jump {
-  align-self: center;
+.nh-chat__interruptions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
 }
 </style>

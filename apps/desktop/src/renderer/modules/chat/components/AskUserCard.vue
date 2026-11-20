@@ -227,6 +227,13 @@ const submitAnswers = (): void => {
   gap: 8px;
 }
 
+.nh-ask-user--embedded .nh-ask-user__summary {
+  padding: 10px 12px;
+  border: 1px solid var(--nh-border-subtle);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--nh-color-bg-elevated) 70%, transparent);
+}
+
 .nh-ask-user__answers {
   display: flex;
   flex-direction: column;

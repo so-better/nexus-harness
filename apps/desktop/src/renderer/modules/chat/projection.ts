@@ -8,11 +8,56 @@ import type {
   ChatApproval,
   ChatMessageView,
   ChatProjection,
+  ChatTimelineSegment,
   ChatToolCall,
   ChatUsage
 } from './types';
 
 const emptyUsage = (): ChatUsage => ({ inputTokens: 0, outputTokens: 0, cost: 0 });
+
+/**
+ * 保证消息持有时间线数组。
+ */
+const ensureTimeline = (message: ChatMessageView): ChatTimelineSegment[] => {
+  message.timeline ??= [];
+  return message.timeline;
+};
+
+/**
+ * 追加文本段；连续同类增量合并到同一段，遇到工具/提问后自动新开一段。
+ */
+const appendText = (
+  message: ChatMessageView,
+  kind: 'reasoning' | 'content',
+  text: string
+): void => {
+  const timeline = ensureTimeline(message);
+  const last = timeline.at(-1);
+  if (last && last.kind === kind) {
+    last.text += text;
+    last.streaming = true;
+    return;
+  }
+  timeline.push({
+    kind,
+    id: `${message.id}:${kind}-${timeline.length}`,
+    text,
+    streaming: true
+  });
+};
+
+const pushSegment = (message: ChatMessageView, segment: ChatTimelineSegment): void => {
+  ensureTimeline(message).push(segment);
+};
+
+/**
+ * 关闭文本段的流式标记。
+ */
+const finishSegments = (message: ChatMessageView): void => {
+  for (const segment of message.timeline ?? []) {
+    if (segment.kind === 'reasoning' || segment.kind === 'content') segment.streaming = false;
+  }
+};
 
 /**
  * Run 终止时取消尚未回答的问题，避免残留旧卡片。
@@ -29,6 +74,7 @@ const finishAskUsers = (askUsers: ChatAskUser[]): void => {
 const finishStreaming = (messages: ChatMessageView[]): void => {
   for (const message of messages) {
     if (message.streaming) message.streaming = false;
+    finishSegments(message);
   }
 };
 
@@ -79,6 +125,9 @@ const mergeAssistantRuns = (messages: ChatMessageView[], askUsers: ChatAskUser[]
       merged.outputTokens += message.usage.outputTokens;
       merged.cost += message.usage.cost;
       base.usage = merged;
+    }
+    if (message.timeline?.length) {
+      base.timeline = [...(base.timeline ?? []), ...message.timeline];
     }
     for (const ask of askUsers) {
       if (ask.messageId === message.id) ask.messageId = base.id;
@@ -134,6 +183,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
         messages.push(message);
       }
       message.reasoning = (message.reasoning ?? '') + payload.text;
+      appendText(message, 'reasoning', payload.text);
       message.streaming = true;
       attachUsage(payload.messageId);
       if (event.runId) message.runId = event.runId;
@@ -158,6 +208,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
         messages.push(message);
       }
       message.content += payload.text;
+      appendText(message, 'content', payload.text);
       if (event.runId) message.runId = event.runId;
       attachUsage(payload.messageId);
       message.streaming = true;
@@ -173,12 +224,56 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
         existing.content = payload.content;
         if (payload.reasoning !== undefined) existing.reasoning = payload.reasoning;
         existing.streaming = false;
+        finishSegments(existing);
+        const timeline = ensureTimeline(existing);
+        if (payload.reasoning) {
+          const last = timeline.filter((segment) => segment.kind === 'reasoning').at(-1);
+          if (last) last.text = payload.reasoning;
+          else {
+            timeline.push({
+              kind: 'reasoning',
+              id: `${existing.id}:reasoning-${timeline.length}`,
+              text: payload.reasoning
+            });
+          }
+        }
+        if (payload.content) {
+          const last = timeline.filter((segment) => segment.kind === 'content').at(-1);
+          if (last) last.text = payload.content;
+          else {
+            timeline.push({
+              kind: 'content',
+              id: `${existing.id}:content-${timeline.length}`,
+              text: payload.content
+            });
+          }
+        }
         if (payload.error) pendingFailure = undefined;
         if (event.runId) existing.runId = event.runId;
         attachUsage(payload.messageId);
         if (payload.references?.length) existing.references = payload.references;
         lastAssistant = payload.role === 'assistant' ? existing : undefined;
       } else {
+        const timeline: ChatTimelineSegment[] = [
+          ...(payload.reasoning
+            ? [
+                {
+                  kind: 'reasoning' as const,
+                  id: `${payload.messageId}:reasoning-0`,
+                  text: payload.reasoning
+                }
+              ]
+            : []),
+          ...(payload.content
+            ? [
+                {
+                  kind: 'content' as const,
+                  id: `${payload.messageId}:content-0`,
+                  text: payload.content
+                }
+              ]
+            : [])
+        ];
         const message: ChatMessageView = {
           id: payload.messageId,
           role: payload.role,
@@ -188,6 +283,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
           createdAt: event.ts,
           streaming: false,
           files: [],
+          timeline,
           ...(payload.references?.length ? { references: payload.references } : {}),
           ...(event.runId ? { runId: event.runId } : {})
         };
@@ -236,6 +332,11 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
           createdAt: event.ts
         }
       ];
+      pushSegment(lastAssistant, {
+        kind: 'file',
+        id: `${lastAssistant.id}:file-${payload.fileId}`,
+        fileId: payload.fileId
+      });
       continue;
     }
 
@@ -259,6 +360,13 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
         input: payload.input,
         status: 'requested'
       });
+      if (payload.name !== 'ask_user' && payload.name !== 'save_file') {
+        pushSegment(lastAssistant, {
+          kind: 'tool',
+          id: `${lastAssistant.id}:tool-${payload.toolCallId}`,
+          toolCallId: payload.toolCallId
+        });
+      }
       continue;
     }
 
@@ -373,8 +481,16 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
         questions: payload.questions,
         status: 'pending',
         ...(lastAssistant ? { messageId: lastAssistant.id } : {}),
+        ...(payload.toolCallId ? { toolCallId: payload.toolCallId } : {}),
         ...(event.runId ? { runId: event.runId } : {})
       });
+      if (lastAssistant) {
+        pushSegment(lastAssistant, {
+          kind: 'ask',
+          id: `${lastAssistant.id}:ask-${payload.requestId}`,
+          requestId: payload.requestId
+        });
+      }
       status = 'waiting_user';
       continue;
     }

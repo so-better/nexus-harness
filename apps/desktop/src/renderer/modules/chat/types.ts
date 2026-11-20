@@ -34,6 +34,16 @@ export interface ChatToolCall {
 }
 
 /**
+ * 助手消息内的有序时间线段：文本、推理、工具、提问与文件按事件顺序排列。
+ */
+export type ChatTimelineSegment =
+  | { kind: 'reasoning'; id: string; text: string; streaming?: boolean }
+  | { kind: 'content'; id: string; text: string; streaming?: boolean }
+  | { kind: 'tool'; id: string; toolCallId: string }
+  | { kind: 'ask'; id: string; requestId: string }
+  | { kind: 'file'; id: string; fileId: string };
+
+/**
  * 会话流中的一条消息。
  */
 export interface ChatMessageView {
@@ -50,6 +60,7 @@ export interface ChatMessageView {
   usage?: ChatUsage;
   files?: OutputFile[];
   references?: MessageFileReference[];
+  timeline?: ChatTimelineSegment[];
 }
 
 /**
@@ -81,6 +92,7 @@ export interface ChatAskUser {
   answers?: AskUserAnswer[];
   messageId?: string;
   runId?: string;
+  toolCallId?: string;
 }
 
 export interface ChatProjection {

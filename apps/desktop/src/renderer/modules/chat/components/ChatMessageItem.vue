@@ -8,8 +8,9 @@
     message.content ||
     message.reasoning ||
     message.streaming ||
+    timeline.length ||
     message.references?.length ||
-    displayToolCalls.length ||
+    toolEntries.length ||
     askUsers.length ||
     message.files?.length ||
     orphanWorkspaceAuth
@@ -22,15 +23,16 @@
         message.content ||
         message.reasoning ||
         message.streaming ||
+        timeline.length ||
         message.references?.length ||
-        displayToolCalls.length ||
+        toolEntries.length ||
         askUsers.length ||
         message.files?.length ||
         orphanWorkspaceAuth
       " class="nh-message__bubble" :class="{
         'nh-message__bubble--tools':
-          displayToolCalls.length > 0 || askUsers.some((ask) => ask.status === 'pending'),
-        'nh-message__bubble--interruption': hasInterruption && !contentText,
+          toolEntries.length > 0 || askUsers.some((ask) => ask.status === 'pending'),
+        'nh-message__bubble--interruption': hasInterruption && !contentText && !timeline.length,
         'nh-message__bubble--editing': editing
       }">
         <template v-if="editing">
@@ -55,54 +57,114 @@
             role: 'assistant',
             usage: message.usage
           }" />
-          <AskUserCard v-for="ask in resolvedAsks" :key="ask.requestId" class="nh-message__ask nh-message__ask--first"
-            embedded :ask="ask" @submit="(answers) => submitAsk(ask, answers)" @cancel="cancelAsk(ask)" />
-          <div v-if="message.reasoning" class="nh-message__reasoning">
-            <NButton text block class="nh-message__reasoning-header" @click="reasoningOpen = !reasoningOpen">
-              <span class="nh-message__reasoning-main">
-                <AppIcon :name="thinking ? 'loader' : 'lightbulb'" :size="14"
-                  :class="{ 'nh-message__reasoning-spin': thinking }" />
-                {{ thinking ? t('chat.thinking') : t('chat.reasoning') }}
-              </span>
-              <AppIcon :name="reasoningOpen ? 'chevron-up' : 'chevron-down'" :size="14" />
-            </NButton>
-            <div v-show="reasoningOpen" class="nh-message__reasoning-body">
-              <MarkdownContent :content="message.reasoning" :streaming="thinking" />
+
+          <!-- 新消息走有序时间线；无 timeline 的历史消息走下方兜底渲染 -->
+          <template v-if="timeline.length">
+            <template v-for="segment in timeline" :key="segment.id">
+              <ReasoningBlock
+                v-if="segment.kind === 'reasoning'"
+                :text="segment.text"
+                :streaming="Boolean(segment.streaming)"
+              />
+              <MarkdownSegments
+                v-else-if="segment.kind === 'content'"
+                :content="segment.text"
+                :streaming="Boolean(segment.streaming)"
+              />
+              <template v-else-if="segment.kind === 'tool'">
+                <template v-for="tool in toolLookup(segment.toolCallId)" :key="tool.id">
+                  <WorkspaceAuthCard
+                    v-if="relatedWorkspaceAuth && relatedWorkspaceAuth.toolCallId === tool.id"
+                    :data-workspace-auth-id="relatedWorkspaceAuth?.requestId"
+                    :request="relatedWorkspaceAuth"
+                    @allow="emit('allow-workspace')"
+                    @reject="emit('reject-workspace')"
+                  />
+                  <ToolCallCard
+                    v-if="!isToolInterruption(tool)"
+                    :tool="tool"
+                    flush
+                    :session-id="sessionId"
+                    :message-id="message.id"
+                    :run-id="message.runId"
+                    @authorize-root="emit('request-root')"
+                  />
+                  <ApprovalCard
+                    v-for="approval in approvalForTool(tool)"
+                    :key="approval.id"
+                    :approval="approval"
+                    :tool="tool"
+                    :session-id="sessionId"
+                    :message-id="message.id"
+                    :run-id="message.runId"
+                    :data-approval-id="approval.id"
+                    @approve="emit('approve', approval.id)"
+                    @reject="emit('reject', approval.id)"
+                  />
+                </template>
+              </template>
+              <template v-else-if="segment.kind === 'ask'">
+                <template v-for="ask in askLookup(segment.requestId)" :key="ask.requestId">
+                  <AskUserCard
+                    :ask="ask"
+                    class="nh-message__ask"
+                    embedded
+                    @submit="(answers) => submitAsk(ask, answers)"
+                    @cancel="cancelAsk(ask)"
+                  />
+                </template>
+              </template>
+              <template v-else-if="segment.kind === 'file'">
+                <template v-for="file in fileLookup(segment.fileId)" :key="file.id">
+                  <OutputFileCard :file="file" />
+                </template>
+              </template>
+            </template>
+          </template>
+
+          <template v-else>
+            <ReasoningBlock
+              v-if="message.reasoning"
+              :text="message.reasoning"
+              :streaming="Boolean(message.streaming)"
+            />
+            <div v-if="isTyping && !message.content && !message.reasoning" class="nh-message__thinking">
+              <span />
+              <span />
+              <span />
             </div>
-          </div>
+            <MarkdownSegments v-else-if="message.content" :content="contentText" :streaming="isTyping" />
 
-          <div v-if="isTyping && !message.content && !message.reasoning" class="nh-message__thinking">
-            <span />
-            <span />
-            <span />
-          </div>
-          <MarkdownSegments v-else-if="message.content" :content="contentText" :streaming="isTyping" />
-
-          <div v-if="message.files?.length" class="nh-message__files"
-            :class="{ 'nh-message__files--after-content': Boolean(message.content) }">
-            <OutputFileCard v-for="file in message.files" :key="file.id" :file="file" />
-          </div>
-
-          <div v-if="displayToolCalls.length" class="nh-message__tools"
-            :class="{ 'nh-message__tools--after-content': Boolean(message.content) }">
-            <div v-for="tool in displayToolCalls" :key="tool.id" class="nh-message__tool-entry"
-              :data-tool-call-id="tool.id" :data-workspace-auth-id="isWorkspaceAuthTool(tool.id) ? relatedWorkspaceAuth?.requestId : undefined
-                ">
-              <WorkspaceAuthCard v-if="relatedWorkspaceAuth && relatedWorkspaceAuth.toolCallId === tool.id"
-                :data-workspace-auth-id="relatedWorkspaceAuth?.requestId" :request="relatedWorkspaceAuth"
-                @allow="emit('allow-workspace')" @reject="emit('reject-workspace')" />
-              <ToolCallCard v-if="!isToolInterruption(tool)" :tool="tool" flush :session-id="sessionId"
-                :message-id="message.id" :run-id="message.runId" @authorize-root="emit('request-root')" />
-              <ApprovalCard v-for="approval in approvalForTool(tool)" :key="approval.id" :approval="approval"
-                :tool="tool" :session-id="sessionId" :message-id="message.id" :run-id="message.runId"
-                :data-approval-id="approval.id" @approve="emit('approve', approval.id)"
-                @reject="emit('reject', approval.id)" />
+            <div v-if="message.files?.length" class="nh-message__files"
+              :class="{ 'nh-message__files--after-content': Boolean(message.content) }">
+              <OutputFileCard v-for="file in message.files" :key="file.id" :file="file" />
             </div>
-          </div>
+
+            <div v-if="toolEntries.length" class="nh-message__tools"
+              :class="{ 'nh-message__tools--after-content': Boolean(message.content) }">
+              <div v-for="entry in toolEntries" :key="entry.tool.id" class="nh-message__tool-entry"
+                :data-tool-call-id="entry.tool.id"
+                :data-workspace-auth-id="isWorkspaceAuthTool(entry.tool.id) ? relatedWorkspaceAuth?.requestId : undefined">
+                <AskUserCard v-if="entry.kind === 'ask'" :ask="entry.ask" class="nh-message__ask" embedded
+                  @submit="(answers) => submitAsk(entry.ask, answers)" @cancel="cancelAsk(entry.ask)" />
+                <template v-else>
+                  <WorkspaceAuthCard v-if="relatedWorkspaceAuth && relatedWorkspaceAuth.toolCallId === entry.tool.id"
+                    :data-workspace-auth-id="relatedWorkspaceAuth?.requestId" :request="relatedWorkspaceAuth"
+                    @allow="emit('allow-workspace')" @reject="emit('reject-workspace')" />
+                  <ToolCallCard v-if="!isToolInterruption(entry.tool)" :tool="entry.tool" flush :session-id="sessionId"
+                    :message-id="message.id" :run-id="message.runId" @authorize-root="emit('request-root')" />
+                  <ApprovalCard v-for="approval in approvalForTool(entry.tool)" :key="approval.id" :approval="approval"
+                    :tool="entry.tool" :session-id="sessionId" :message-id="message.id" :run-id="message.runId"
+                    :data-approval-id="approval.id" @approve="emit('approve', approval.id)"
+                    @reject="emit('reject', approval.id)" />
+                </template>
+              </div>
+            </div>
+          </template>
 
           <WorkspaceAuthCard v-if="orphanWorkspaceAuth" :data-workspace-auth-id="orphanWorkspaceAuth.requestId"
             :request="orphanWorkspaceAuth" @allow="emit('allow-workspace')" @reject="emit('reject-workspace')" />
-          <AskUserCard v-for="ask in otherAsks" :key="ask.requestId" class="nh-message__ask" embedded :ask="ask"
+          <AskUserCard v-for="ask in unmatchedAsks" :key="ask.requestId" class="nh-message__ask" embedded :ask="ask"
             @submit="(answers) => submitAsk(ask, answers)" @cancel="cancelAsk(ask)" />
           <PluginSlot location="message.assistant.footer" :context="{
             location: 'message.assistant.footer',
@@ -143,7 +205,7 @@
         <NButton v-if="message.role === 'assistant' && isLastAssistant" text size="tiny" :disabled="actionsDisabled"
           @click="emit('regenerate-message')">
           <template #icon>
-            <AppIcon name="refresh" :size="13" />
+            <AppIcon name="regenerate" :size="13" />
           </template>
           {{ t('chat.regenerate') }}
         </NButton>
@@ -179,7 +241,7 @@ import { t } from '@/app/i18n';
 import type { AskUserAnswer } from '@shared/ask-user';
 import type { MessageFileReference } from '@shared/events';
 import type { ChatApproval, ChatAskUser, ChatMessageView, ChatToolCall } from '../types';
-import type { WorkspaceAuthorizationRequest } from '@shared/ipc/contracts';
+import type { OutputFile, WorkspaceAuthorizationRequest } from '@shared/ipc/contracts';
 import AppIcon from '@/components/AppIcon.vue';
 import ApprovalCard from './ApprovalCard.vue';
 import AskUserCard from './AskUserCard.vue';
@@ -188,9 +250,10 @@ import ToolCallCard from './ToolCallCard.vue';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import UserMessageContent from './UserMessageContent.vue';
 import MarkdownSegments from '../render/MarkdownSegments.vue';
-import MarkdownContent from '../render/MarkdownContent.vue';
+import ReasoningBlock from './ReasoningBlock.vue';
 import WorkspaceAuthCard from './WorkspaceAuthCard.vue';
 import { splitUserMessageReferences } from '../message-references';
+import { buildToolEntries, unmatchedAskUsers } from '../ask-tool-entries';
 
 const props = withDefaults(
   defineProps<{
@@ -232,7 +295,6 @@ const emit = defineEmits<{
 
 const messageApi = useMessage();
 const editing = ref(false);
-const reasoningOpen = ref(true);
 const draft = ref('');
 const editingReferences = ref<MessageFileReference[]>([]);
 const editInput = ref<InputInst | null>(null);
@@ -268,6 +330,7 @@ const pump = (): void => {
  * 启动追逐帧；已有帧时不重复调度。
  */
 const startPump = (): void => {
+  if (props.message.timeline?.length) return;
   if (frameId === undefined) frameId = requestAnimationFrame(pump);
 };
 
@@ -329,7 +392,7 @@ const cancelEdit = (): void => {
  */
 const copyMessage = async (): Promise<void> => {
   try {
-    await navigator.clipboard.writeText(props.message.content);
+    await navigator.clipboard.writeText(copyText.value);
     messageApi.success(t('chat.copied'));
   } catch {
     messageApi.error(t('chat.copyFailed'));
@@ -344,12 +407,50 @@ const approvalForTool = (tool: ChatToolCall): ChatApproval[] =>
       approval.status === 'pending'
   );
 
-const resolvedAsks = computed(() => props.askUsers.filter((ask) => ask.status === 'resolved'));
-const otherAsks = computed(() => props.askUsers.filter((ask) => ask.status !== 'resolved'));
 
-const displayToolCalls = computed(() =>
-  props.message.toolCalls.filter((tool) => tool.name !== 'ask_user' && tool.name !== 'save_file')
-);
+const toolEntries = computed(() => buildToolEntries(props.message.toolCalls, props.askUsers));
+const unmatchedAsks = computed(() => {
+  const matchedByTimeline = new Set(
+    (props.message.timeline ?? []).flatMap((segment) =>
+      segment.kind === 'ask' ? [segment.requestId] : []
+    )
+  );
+  return unmatchedAskUsers(toolEntries.value, props.askUsers).filter(
+    (ask) => !matchedByTimeline.has(ask.requestId)
+  );
+});
+
+const timeline = computed(() => props.message.timeline ?? []);
+
+/**
+ * 复制时优先使用时间线里的正文段，避免与渲染顺序/拼接字段不一致。
+ */
+const copyText = computed(() => {
+  const segments = props.message.timeline ?? [];
+  if (!segments.length) return props.message.content;
+  return segments
+    .filter((segment) => segment.kind === 'content')
+    .map((segment) => segment.text)
+    .join('\n\n');
+});
+
+/**
+ * 时间线渲染需要按 id 取回具体对象；返回数组便于模板内 v-for 做类型收窄。
+ */
+const toolLookup = (id: string): ChatToolCall[] => {
+  const tool = props.message.toolCalls.find((item) => item.id === id);
+  return tool ? [tool] : [];
+};
+
+const askLookup = (id: string): ChatAskUser[] => {
+  const ask = props.askUsers.find((item) => item.requestId === id);
+  return ask ? [ask] : [];
+};
+
+const fileLookup = (id: string): OutputFile[] => {
+  const file = props.message.files?.find((item) => item.id === id);
+  return file ? [file] : [];
+};
 const relatedWorkspaceAuth = computed<WorkspaceAuthorizationRequest | null>(() => {
   const request = props.workspaceAuth;
   return request && request.sessionId === props.sessionId ? request : null;
@@ -379,7 +480,7 @@ const orphanWorkspaceAuth = computed<WorkspaceAuthorizationRequest | null>(() =>
 const hasInterruption = computed(
   () =>
     Boolean(orphanWorkspaceAuth.value) ||
-    displayToolCalls.value.some((tool) => isToolInterruption(tool))
+    toolEntries.value.some((entry) => entry.kind === 'tool' && isToolInterruption(entry.tool))
 );
 
 const contentText = computed(() =>
@@ -390,8 +491,6 @@ const isTyping = computed(
     props.message.role === 'assistant' &&
     (props.message.streaming === true || visibleContent.value !== props.message.content)
 );
-const thinking = computed(() => isTyping.value && !props.message.content);
-
 watch(
   () => props.message.content,
   () => {
@@ -451,6 +550,19 @@ const timeLabel = computed(() =>
   flex: 1;
   flex-direction: column;
   gap: 6px;
+}
+
+.nh-message__tools {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nh-message__tool-entry {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .nh-message--user {
@@ -554,48 +666,6 @@ const timeLabel = computed(() =>
   text-wrap: pretty;
 }
 
-.nh-message__reasoning {
-  margin-bottom: 10px;
-  overflow: hidden;
-  border: 1px solid var(--nh-border-subtle);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--nh-surface-elevated) 72%, transparent);
-}
-
-.nh-message__reasoning-header {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  padding: 7px 10px;
-  color: var(--nh-color-text-secondary);
-  font-size: 12px;
-}
-
-.nh-message__reasoning-main {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.nh-message__reasoning-spin {
-  animation: nh-reasoning-spin 1.2s linear infinite;
-}
-
-.nh-message__reasoning-body {
-  max-height: 260px;
-  overflow-y: auto;
-  padding: 0 10px 10px;
-  color: var(--nh-color-text-secondary);
-  font-size: 12px;
-}
-
-@keyframes nh-reasoning-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .nh-message__thinking {
   display: inline-flex;
   align-items: center;
@@ -620,7 +690,6 @@ const timeLabel = computed(() =>
 }
 
 @keyframes nh-message-thinking {
-
   0%,
   60%,
   100% {
