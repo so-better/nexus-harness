@@ -4,6 +4,7 @@
     <AppTitleBar :title="sessions.activeSession?.title" :platform="platform" />
     <div class="nh-layout__body">
       <SessionSidebar
+        ref="sidebarRef"
         :sessions="sessions.sessions"
         :active-id="sessions.activeId"
         :loading="sessions.loading"
@@ -61,9 +62,16 @@
       @toggle-terminal="terminal.togglePanel"
       @update-theme="setTheme"
       @open-settings="settingsOpen = true"
+      @open-changelog="changelogOpen = true"
     />
 
     <ExtensionsModal :show="extensionsOpen" @update:show="extensionsOpen = $event" />
+    <ChangelogModal :show="changelogOpen" @update:show="changelogOpen = $event" />
+    <CommandPalette
+      v-model:show="commandPaletteOpen"
+      :commands="paletteCommands"
+      @select="executeCommand"
+    />
 
     <SettingsModal
       :show="settingsOpen"
@@ -91,6 +99,7 @@ import type {
 } from '@shared/ipc/contracts';
 import type { AskUserAnswer } from '@shared/ask-user';
 import { setLocale, t } from '@/app/i18n';
+import { effectiveTheme } from '@/app/theme';
 import type { MessageFileReference } from '@shared/events';
 import ChatView from '@/modules/chat/views/ChatView.vue';
 import {
@@ -113,18 +122,23 @@ import { getLanguage } from '@/modules/settings/api/settings.api';
 import SettingsModal from '@/modules/settings/views/SettingsModal.vue';
 import { useTerminalStore } from '@/modules/terminal/stores/terminal.store';
 import ExtensionsModal from '@/plugin-runtime/components/ExtensionsModal.vue';
+import ChangelogModal from '@/components/ChangelogModal.vue';
+import CommandPalette from '@/components/CommandPalette.vue';
 import PluginSkinLayer from '@/plugin-runtime/components/PluginSkinLayer.vue';
 import { usePluginRuntimeStore } from '@/plugin-runtime/runtime.store';
 import AppStatusbar from './AppStatusbar.vue';
 import AppTitleBar from './AppTitleBar.vue';
 import { useAppMeta } from './use-app-meta';
 import { useSessionStatusSync } from './use-session-status';
+import { useAppCommands } from './use-app-commands';
 
 const sessions = useSessionStore();
 const chat = useChatStore();
 const terminal = useTerminalStore();
 const pluginRuntime = usePluginRuntimeStore();
 const extensionsOpen = ref(false);
+const changelogOpen = ref(false);
+const sidebarRef = ref<{ openSearch: () => Promise<void> } | null>(null);
 const TerminalPanel = defineAsyncComponent(
   () => import('@/modules/terminal/components/TerminalPanel.vue')
 );
@@ -472,6 +486,30 @@ const rejectWorkspace = async (): Promise<void> => {
     message.error(reason instanceof Error ? reason.message : t('app.rootAddFailed'));
   }
 };
+
+const { commandPaletteOpen, paletteCommands, executeCommand } = useAppCommands({
+  pluginRuntime,
+  activeRunning,
+  sessions: sessionList,
+  openSession: (id) => sessions.select(id),
+  createSession,
+  openSearch: () => sidebarRef.value?.openSearch(),
+  openSettings: () => {
+    settingsOpen.value = true;
+  },
+  openExtensions: () => {
+    extensionsOpen.value = true;
+  },
+  toggleTerminal: () => terminal.togglePanel(),
+  openChangelog: () => {
+    changelogOpen.value = true;
+  },
+  toggleTheme: () => {
+    void setTheme(effectiveTheme.value === 'dark' ? 'light' : 'dark');
+  },
+  stop,
+  showError: (text) => message.error(text)
+});
 
 onMounted(async () => {
   terminal.init();

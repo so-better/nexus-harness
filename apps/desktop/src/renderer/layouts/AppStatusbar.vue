@@ -1,6 +1,10 @@
 <template>
   <footer class="nh-statusbar">
     <div class="nh-statusbar__meta">
+      <NButton text size="tiny" @click="emit('open-changelog')">
+        <template #icon><AppIcon name="history" :size="14" /></template>
+        {{ t('changelog.open') }}
+      </NButton>
       <span class="nh-statusbar__version">v{{ version }}</span>
       <PluginSlot location="statusbar.left" :context="{ location: 'statusbar.left', sessionId }" />
       <NButton
@@ -107,6 +111,7 @@ const emit = defineEmits<{
   'open-settings': [];
   'open-extensions': [];
   'toggle-terminal': [];
+  'open-changelog': [];
 }>();
 
 /**

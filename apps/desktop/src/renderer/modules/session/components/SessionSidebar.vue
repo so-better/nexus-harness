@@ -149,6 +149,8 @@ const openSearch = async (): Promise<void> => {
   searchInput.value?.focus();
 };
 
+defineExpose({ openSearch });
+
 /**
  * 关闭搜索并清空结果。
  */

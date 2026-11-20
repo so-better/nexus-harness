@@ -6,7 +6,7 @@ import type { Unsubscribe } from '@shared/ipc/contracts';
 
 export interface CommandDefinition {
   id: string;
-  title: string;
+  title: string | (() => string);
   description?: string;
   shortcut?: string;
   isEnabled?: () => boolean;
