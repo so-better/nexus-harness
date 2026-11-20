@@ -1,7 +1,11 @@
 <template>
   <section
     class="nh-ask-user"
-    :class="{ 'nh-ask-user--embedded': embedded, 'nh-ask-user--resolved': isResolved }"
+    :class="{
+      'nh-ask-user--embedded': embedded,
+      'nh-ask-user--pending': isPending,
+      'nh-ask-user--resolved': isResolved
+    }"
     @keydown.esc.prevent="onEscape"
   >
     <span v-if="!embedded" class="nh-ask-user__icon">
@@ -163,15 +167,19 @@ const submitAnswers = (): void => {
 }
 
 .nh-ask-user--embedded {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--nh-border-subtle) 55%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--nh-color-bg-elevated) 55%, transparent);
   box-shadow: none;
 }
 
 .nh-ask-user--resolved {
   gap: 10px;
+}
+
+.nh-ask-user--embedded.nh-ask-user--pending {
+  box-shadow: var(--nh-shadow-card);
 }
 
 .nh-ask-user__icon {
@@ -225,13 +233,6 @@ const submitAnswers = (): void => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.nh-ask-user--embedded .nh-ask-user__summary {
-  padding: 10px 12px;
-  border: 1px solid var(--nh-border-subtle);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--nh-color-bg-elevated) 70%, transparent);
 }
 
 .nh-ask-user__answers {

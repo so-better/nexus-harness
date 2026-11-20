@@ -211,6 +211,8 @@ export interface NexusBridge {
   };
   artifact: {
     read: (input: ArtifactReadInput) => Promise<Result<ArtifactReadResult>>;
+    meta: (input: ArtifactReadInput) => Promise<Result<ArtifactMetaResult>>;
+    saveAs: (input: ArtifactSaveAsInput) => Promise<Result<ArtifactSaveAsResult>>;
   };
   files: {
     saveAs: (input: FileSaveAsInput) => Promise<Result<FileSaveAsResult>>;
@@ -705,6 +707,28 @@ export const artifactReadResultSchema = z.object({
 
 export type ArtifactReadInput = z.infer<typeof artifactReadInputSchema>;
 export type ArtifactReadResult = z.infer<typeof artifactReadResultSchema>;
+
+export const artifactMetaResultSchema = z.object({
+  artifactId: z.string().min(1),
+  label: z.string(),
+  bytes: z.number().nonnegative()
+});
+
+export type ArtifactMetaResult = z.infer<typeof artifactMetaResultSchema>;
+
+export const artifactSaveAsInputSchema = z.object({
+  sessionId: z.string().min(1),
+  artifactId: z.string().min(1)
+});
+
+export const artifactSaveAsResultSchema = z.object({
+  artifactId: z.string().min(1),
+  saved: z.boolean(),
+  path: z.string().optional()
+});
+
+export type ArtifactSaveAsInput = z.infer<typeof artifactSaveAsInputSchema>;
+export type ArtifactSaveAsResult = z.infer<typeof artifactSaveAsResultSchema>;
 
 /**
  * 用户对审批请求的决定。

@@ -680,4 +680,53 @@ describe('projectEvents', () => {
     expect(timeline[0]).toMatchObject({ kind: 'reasoning', text: '先想一下' });
     expect(timeline[1]).toMatchObject({ kind: 'content', text: '答案' });
   });
+  it('同一步骤内晚到的推理不会割开正文', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'message.reasoning.delta',
+        payload: { messageId: 'assistant-1', text: '先想' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'message.delta',
+        payload: { messageId: 'assistant-1', text: '第一段' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'message.reasoning.delta',
+        payload: { messageId: 'assistant-1', text: '再想' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 4,
+        type: 'message.delta',
+        payload: { messageId: 'assistant-1', text: '第二段' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 5,
+        type: 'message.completed',
+        payload: {
+          messageId: 'assistant-1',
+          role: 'assistant',
+          content: '第一段第二段',
+          reasoning: '先想再想'
+        }
+      })
+    ]);
+
+    const timeline = projection.messages[0]?.timeline ?? [];
+    expect(timeline.map((segment) => segment.kind)).toEqual(['reasoning', 'content']);
+    expect(timeline[0]).toMatchObject({ kind: 'reasoning', text: '先想再想' });
+    expect(timeline[1]).toMatchObject({ kind: 'content', text: '第一段第二段' });
+  });
 });

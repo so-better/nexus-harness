@@ -36,6 +36,15 @@ export interface ArtifactContent {
   content: string;
 }
 
+/**
+ * 产物元信息；不读取文件内容，供列表与卡片轻量展示。
+ */
+export interface ArtifactMeta {
+  artifactId: string;
+  label: string;
+  bytes: number;
+}
+
 interface ArtifactRow {
   id: string;
   label: string;
@@ -94,6 +103,18 @@ export class ArtifactService {
       );
 
     return { artifactId, path, bytes };
+  }
+
+  /**
+   * 只读取产物元信息，不加载文件内容。
+   */
+  async meta(sessionId: string, artifactId: string): Promise<ArtifactMeta | undefined> {
+    if (!this.db) return undefined;
+    const row = this.db
+      .prepare('SELECT id, label, bytes FROM artifacts WHERE id = ? AND session_id = ?')
+      .get(artifactId, sessionId) as unknown as ArtifactRow | undefined;
+    if (!row) return undefined;
+    return { artifactId: row.id, label: row.label, bytes: Number(row.bytes) };
   }
 
   /**

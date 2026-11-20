@@ -108,7 +108,9 @@ export const IPC_CHANNELS = {
   checkpointDiff: 'checkpoint:diff',
   checkpointOpenFile: 'checkpoint:openFile',
   checkpointRestore: 'checkpoint:restore',
-  artifactRead: 'artifact:read'
+  artifactRead: 'artifact:read',
+  artifactMeta: 'artifact:meta',
+  artifactSaveAs: 'artifact:saveAs'
 } as const;
 
 /**

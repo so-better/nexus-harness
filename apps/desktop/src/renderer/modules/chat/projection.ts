@@ -24,7 +24,8 @@ const ensureTimeline = (message: ChatMessageView): ChatTimelineSegment[] => {
 };
 
 /**
- * 追加文本段；连续同类增量合并到同一段，遇到工具/提问后自动新开一段。
+ * 追加文本段：同一阶段内同类增量合并到已有段；
+ * 只有工具/提问/文件形成新阶段后才新开段，避免晚到的推理把正文割开。
  */
 const appendText = (
   message: ChatMessageView,
@@ -32,18 +33,21 @@ const appendText = (
   text: string
 ): void => {
   const timeline = ensureTimeline(message);
-  const last = timeline.at(-1);
-  if (last && last.kind === kind) {
-    last.text += text;
-    last.streaming = true;
+  for (let index = timeline.length - 1; index >= 0; index -= 1) {
+    const segment = timeline[index];
+    if (!segment || (segment.kind !== 'reasoning' && segment.kind !== 'content')) continue;
+    if (segment.kind !== kind) continue;
+    const crossedBoundary = timeline
+      .slice(index + 1)
+      .some((item) => item.kind === 'tool' || item.kind === 'ask' || item.kind === 'file');
+    if (crossedBoundary) break;
+    segment.text += text;
+    segment.streaming = true;
     return;
   }
-  timeline.push({
-    kind,
-    id: `${message.id}:${kind}-${timeline.length}`,
-    text,
-    streaming: true
-  });
+  const id = `${message.id}:${kind}-${timeline.length}`;
+  if (kind === 'reasoning') timeline.push({ kind: 'reasoning', id, text, streaming: true });
+  else timeline.push({ kind: 'content', id, text, streaming: true });
 };
 
 const pushSegment = (message: ChatMessageView, segment: ChatTimelineSegment): void => {
@@ -226,28 +230,23 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
         existing.streaming = false;
         finishSegments(existing);
         const timeline = ensureTimeline(existing);
-        if (payload.reasoning) {
-          const last = timeline.filter((segment) => segment.kind === 'reasoning').at(-1);
-          if (last) last.text = payload.reasoning;
-          else {
-            timeline.push({
-              kind: 'reasoning',
-              id: `${existing.id}:reasoning-${timeline.length}`,
-              text: payload.reasoning
-            });
+        const reconcile = (kind: 'reasoning' | 'content', text: string): void => {
+          const segments = timeline.filter(
+            (segment): segment is Extract<ChatTimelineSegment, { kind: 'reasoning' | 'content' }> =>
+              segment.kind === kind
+          );
+          if (segments.length === 0) {
+            const id = `${existing.id}:${kind}-${timeline.length}`;
+            if (kind === 'reasoning') timeline.push({ kind: 'reasoning', id, text });
+            else timeline.push({ kind: 'content', id, text });
+            return;
           }
-        }
-        if (payload.content) {
-          const last = timeline.filter((segment) => segment.kind === 'content').at(-1);
-          if (last) last.text = payload.content;
-          else {
-            timeline.push({
-              kind: 'content',
-              id: `${existing.id}:content-${timeline.length}`,
-              text: payload.content
-            });
-          }
-        }
+          // 多段交错时不能用最终文本覆盖最后一段，否则会把全文重复到末段
+          const [first] = segments;
+          if (segments.length === 1 && first && first.text !== text) first.text = text;
+        };
+        if (payload.reasoning) reconcile('reasoning', payload.reasoning);
+        if (payload.content) reconcile('content', payload.content);
         if (payload.error) pendingFailure = undefined;
         if (event.runId) existing.runId = event.runId;
         attachUsage(payload.messageId);

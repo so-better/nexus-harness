@@ -48,7 +48,7 @@
             </NButton>
           </div>
         </template>
-        <template v-if="message.role === 'assistant'">
+        <template v-else-if="message.role === 'assistant'">
           <PluginSlot location="message.assistant.header" :context="{
             location: 'message.assistant.header',
             sessionId,
@@ -58,6 +58,7 @@
             usage: message.usage
           }" />
 
+          <div class="nh-message__flow">
           <!-- 新消息走有序时间线；无 timeline 的历史消息走下方兜底渲染 -->
           <template v-if="timeline.length">
             <template v-for="segment in timeline" :key="segment.id">
@@ -83,7 +84,6 @@
                   <ToolCallCard
                     v-if="!isToolInterruption(tool)"
                     :tool="tool"
-                    flush
                     :session-id="sessionId"
                     :message-id="message.id"
                     :run-id="message.runId"
@@ -151,7 +151,7 @@
                   <WorkspaceAuthCard v-if="relatedWorkspaceAuth && relatedWorkspaceAuth.toolCallId === entry.tool.id"
                     :data-workspace-auth-id="relatedWorkspaceAuth?.requestId" :request="relatedWorkspaceAuth"
                     @allow="emit('allow-workspace')" @reject="emit('reject-workspace')" />
-                  <ToolCallCard v-if="!isToolInterruption(entry.tool)" :tool="entry.tool" flush :session-id="sessionId"
+                  <ToolCallCard v-if="!isToolInterruption(entry.tool)" :tool="entry.tool" :session-id="sessionId"
                     :message-id="message.id" :run-id="message.runId" @authorize-root="emit('request-root')" />
                   <ApprovalCard v-for="approval in approvalForTool(entry.tool)" :key="approval.id" :approval="approval"
                     :tool="entry.tool" :session-id="sessionId" :message-id="message.id" :run-id="message.runId"
@@ -166,6 +166,7 @@
             :request="orphanWorkspaceAuth" @allow="emit('allow-workspace')" @reject="emit('reject-workspace')" />
           <AskUserCard v-for="ask in unmatchedAsks" :key="ask.requestId" class="nh-message__ask" embedded :ask="ask"
             @submit="(answers) => submitAsk(ask, answers)" @cancel="cancelAsk(ask)" />
+          </div>
           <PluginSlot location="message.assistant.footer" :context="{
             location: 'message.assistant.footer',
             sessionId,
@@ -552,6 +553,12 @@ const timeLabel = computed(() =>
   gap: 6px;
 }
 
+.nh-message__flow {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .nh-message__tools {
   display: flex;
   flex-direction: column;
@@ -623,7 +630,11 @@ const timeLabel = computed(() =>
 }
 
 .nh-message--assistant .nh-message__bubble {
-  border-top-left-radius: 0;
+  width: 100%;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
 }
 
 .nh-message--assistant .nh-message__bubble--tools {
@@ -638,10 +649,10 @@ const timeLabel = computed(() =>
 }
 
 .nh-message--user .nh-message__bubble {
-  --bubble-bg: color-mix(in srgb, var(--nh-color-accent) 8%, var(--nh-surface-base));
-  --bubble-border: color-mix(in srgb, var(--nh-color-accent) 12%, var(--nh-border-subtle));
+  --bubble-bg: color-mix(in srgb, var(--nh-color-accent) 6%, var(--nh-surface-base));
+  --bubble-border: color-mix(in srgb, var(--nh-color-accent) 14%, var(--nh-border-subtle));
 
-  border-top-right-radius: 0;
+  padding: 12px 16px;
   box-shadow: var(--nh-highlight);
 }
 

@@ -414,7 +414,10 @@ const zhCN = {
   'tool.artifactId': '产物',
   'tool.input': '参数',
   'tool.output': '输出',
-  'tool.authorizeRoot': '授权工作区'
+  'tool.authorizeRoot': '授权工作区',
+  'tool.authorizeRootAction': '去授权',
+  'tool.artifactLoadFailed': '无法读取产物',
+  'tool.artifactRetry': '重试'
 } as const;
 
 export type MessageKey = keyof typeof zhCN;
@@ -840,7 +843,10 @@ const enUS: Record<MessageKey, string> = {
   'tool.artifactId': 'Artifact',
   'tool.input': 'Input',
   'tool.output': 'Output',
-  'tool.authorizeRoot': 'Authorize workspace'
+  'tool.authorizeRoot': 'Authorize workspace',
+  'tool.authorizeRootAction': 'Authorize',
+  'tool.artifactLoadFailed': 'Could not load artifact',
+  'tool.artifactRetry': 'Retry'
 };
 
 const dictionaries: Record<AppLanguage, Record<MessageKey, string>> = {

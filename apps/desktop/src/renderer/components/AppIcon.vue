@@ -21,6 +21,7 @@
     <path v-else-if="name === 'file'" d="M7 3h7l4 4v14H7zM14 3v5h5" />
     <path v-else-if="name === 'image'" d="M4 5h16v14H4zM7 15l3-3 2 2 3-3 3 3M8 9h.01" />
     <path v-else-if="name === 'export'" d="M12 15V3M7 8l5-5 5 5M5 15v5h14v-5" />
+    <path v-else-if="name === 'download'" d="M12 3v12M7 10l5 5 5-5M5 21h14" />
     <path
       v-else-if="name === 'terminal'"
       d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7 9l3 3-3 3M13 15h4"
@@ -105,6 +106,7 @@ export type AppIconName =
   | 'file'
   | 'image'
   | 'export'
+  | 'download'
   | 'terminal'
   | 'edit'
   | 'history'

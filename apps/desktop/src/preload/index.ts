@@ -96,7 +96,9 @@ const bridge: NexusBridge = {
     restore: (input) => ipcRenderer.invoke(IPC_CHANNELS.checkpointRestore, input)
   },
   artifact: {
-    read: (input) => ipcRenderer.invoke(IPC_CHANNELS.artifactRead, input)
+    read: (input) => ipcRenderer.invoke(IPC_CHANNELS.artifactRead, input),
+    meta: (input) => ipcRenderer.invoke(IPC_CHANNELS.artifactMeta, input),
+    saveAs: (input) => ipcRenderer.invoke(IPC_CHANNELS.artifactSaveAs, input)
   },
   files: {
     saveAs: (input) => ipcRenderer.invoke(IPC_CHANNELS.filesSaveAs, input),

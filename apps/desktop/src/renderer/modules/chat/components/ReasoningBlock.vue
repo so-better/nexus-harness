@@ -1,5 +1,5 @@
 <template>
-  <div class="nh-reasoning" :class="{ 'nh-reasoning--open': open }">
+  <div class="nh-reasoning">
     <NButton text block class="nh-reasoning__header" @click="open = !open">
       <span class="nh-reasoning__main">
         <AppIcon
@@ -7,12 +7,17 @@
           :size="14"
           :class="{ 'nh-reasoning__spin': streaming }"
         />
-        {{ streaming ? t('chat.thinking') : t('chat.reasoning') }}
+        <span
+          class="nh-reasoning__label"
+          :class="{ 'nh-reasoning__label--streaming': streaming }"
+        >
+          {{ streaming ? t('chat.thinking') : t('chat.reasoning') }}
+        </span>
       </span>
       <AppIcon :name="open ? 'chevron-up' : 'chevron-down'" :size="14" />
     </NButton>
     <div v-show="open" class="nh-reasoning__body">
-      <MarkdownContent :content="text" :streaming="streaming" />
+      <MarkdownSegments :content="text" :streaming="streaming" />
     </div>
   </div>
 </template>
@@ -26,29 +31,25 @@ import { ref, watch } from 'vue';
 import { NButton } from 'naive-ui';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
-import MarkdownContent from '../render/MarkdownContent.vue';
+import MarkdownSegments from '../render/MarkdownSegments.vue';
 
 const props = withDefaults(defineProps<{ text: string; streaming?: boolean }>(), {
   streaming: false
 });
 
-// 历史推理默认折叠；正在流式的段自动展开，避免长任务里堆满推理块
+// 每个推理块独立维护展开状态：流式时自动展开，结束后自动折叠
 const open = ref(props.streaming);
 watch(
   () => props.streaming,
   (streaming) => {
-    if (streaming) open.value = true;
+    open.value = streaming;
   }
 );
 </script>
 
 <style scoped lang="less">
 .nh-reasoning {
-  margin-bottom: 10px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--nh-color-text-secondary) 12%, var(--nh-border-subtle));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--nh-color-bg-elevated) 82%, transparent);
+  min-width: 0;
 }
 
 .nh-reasoning__header {
@@ -56,19 +57,19 @@ watch(
   width: 100%;
   align-items: center;
   justify-content: space-between;
-  padding: 7px 10px;
-  color: var(--nh-color-text-secondary);
-  font-size: 12px;
-  transition: background var(--nh-duration-fast) var(--nh-ease-standard);
+  padding: 2px 0;
+  color: var(--nh-color-text-disabled);
+  font-size: 11px;
+  transition: color var(--nh-duration-fast) var(--nh-ease-standard);
 }
 
 .nh-reasoning__header:hover {
-  background: var(--nh-color-bg-hover);
-  color: var(--nh-color-text-primary);
+  color: var(--nh-color-text-secondary);
 }
 
-.nh-reasoning--open .nh-reasoning__header {
-  border-bottom: 1px solid var(--nh-border-subtle);
+.nh-reasoning__header :deep(.n-button__content) {
+  justify-content: flex-start;
+  gap: 8px;
 }
 
 .nh-reasoning__main {
@@ -77,36 +78,74 @@ watch(
   gap: 6px;
 }
 
+.nh-reasoning__label--streaming {
+  background: linear-gradient(
+    90deg,
+    var(--nh-color-text-disabled) 0%,
+    var(--nh-color-text-secondary) 45%,
+    var(--nh-color-text-disabled) 90%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  color: transparent;
+  animation: nh-reasoning-shimmer 1.8s linear infinite;
+}
+
+@keyframes nh-reasoning-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+
+  to {
+    background-position: -100% 0;
+  }
+}
+
 .nh-reasoning__spin {
   animation: nh-reasoning-spin 1.2s linear infinite;
 }
 
 .nh-reasoning__body {
-  max-height: 240px;
-  overflow-y: auto;
-  padding: 10px 12px;
-  background: color-mix(in srgb, var(--nh-color-bg-base) 55%, transparent);
-  color: var(--nh-color-text-secondary);
-  font-size: 12px;
-  line-height: 1.65;
+  padding: 10px 0 0 20px;
+  color: var(--nh-color-text-disabled);
+  font-size: 11px;
+  line-height: 1.6;
 }
 
 /* MarkdownContent 默认 14px，推理区需降一级，避免与正文抢视觉权重 */
 .nh-reasoning__body :deep(.nh-markdown) {
-  font-size: 12px;
-  line-height: 1.65;
+  color: var(--nh-color-text-disabled);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* 去掉最后一段自带的下外边距，避免底部比顶部空 */
+.nh-reasoning__body :deep(.nh-markdown > :last-child) {
+  margin-bottom: 0;
 }
 
 .nh-reasoning__body :deep(.nh-markdown h1),
 .nh-reasoning__body :deep(.nh-markdown h2),
 .nh-reasoning__body :deep(.nh-markdown h3),
 .nh-reasoning__body :deep(.nh-markdown h4) {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .nh-reasoning__body :deep(.nh-markdown code),
 .nh-reasoning__body :deep(.nh-markdown .md-code-block pre) {
-  font-size: 11px;
+  font-size: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nh-reasoning__label--streaming {
+    animation: none;
+    background: none;
+    color: var(--nh-color-text-disabled);
+  }
+
+  .nh-reasoning__spin {
+    animation: none;
+  }
 }
 
 @keyframes nh-reasoning-spin {
