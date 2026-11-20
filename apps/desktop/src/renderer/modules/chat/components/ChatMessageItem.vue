@@ -310,7 +310,7 @@ import { splitUserMessageReferences } from '../message-references';
 import { useFileReference } from '../use-file-reference';
 import { useSkillPalette } from '../use-skill-palette';
 import { buildToolEntries, unmatchedAskUsers } from '../ask-tool-entries';
-import { hasStreamingText, shouldShowMessageThinking } from '../agent-generation';
+import { hasStreamingText, isAssistantTyping, shouldShowMessageThinking } from '../agent-generation';
 import { isInlineMediaFile } from '../inline-media';
 
 const props = withDefaults(
@@ -458,7 +458,10 @@ const pump = (): void => {
  * 启动追逐帧；已有帧时不重复调度。
  */
 const startPump = (): void => {
-  if (props.message.timeline?.length) return;
+  if (!props.message.streaming || props.message.timeline?.length) {
+    visibleContent.value = props.message.content;
+    return;
+  }
   if (frameId === undefined) frameId = requestAnimationFrame(pump);
 };
 
@@ -628,10 +631,14 @@ const hasPendingAsk = computed(() => props.askUsers.some((ask) => ask.status ===
 const contentText = computed(() =>
   props.message.role === 'assistant' ? visibleContent.value : props.message.content
 );
-const isTyping = computed(
-  () =>
-    props.message.role === 'assistant' &&
-    (props.message.streaming === true || visibleContent.value !== props.message.content)
+const isTyping = computed(() =>
+  isAssistantTyping({
+    role: props.message.role,
+    streaming: props.message.streaming === true,
+    hasTimeline: Boolean(props.message.timeline?.length),
+    visibleContent: visibleContent.value,
+    content: props.message.content
+  })
 );
 const showThinking = computed(() =>
   shouldShowMessageThinking({
@@ -644,7 +651,7 @@ const showThinking = computed(() =>
 watch(
   () => props.message.content,
   () => {
-    if (props.message.role !== 'assistant') {
+    if (props.message.role !== 'assistant' || !props.message.streaming) {
       visibleContent.value = props.message.content;
       return;
     }
@@ -654,8 +661,17 @@ watch(
 
 watch(
   () => props.message.streaming,
-  () => {
-    if (props.message.role === 'assistant') startPump();
+  (streaming) => {
+    if (props.message.role !== 'assistant') return;
+    if (!streaming) {
+      if (frameId !== undefined) {
+        cancelAnimationFrame(frameId);
+        frameId = undefined;
+      }
+      visibleContent.value = props.message.content;
+      return;
+    }
+    startPump();
   }
 );
 

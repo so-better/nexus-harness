@@ -6,6 +6,7 @@ import type { ChatMessageView, ChatProjection } from './types';
 import {
   hasStreamingText,
   isAgentThinking,
+  isAssistantTyping,
   shouldShowMessageThinking,
   shouldShowRunThinking
 } from './agent-generation';
@@ -66,6 +67,36 @@ describe('agent generation state', () => {
     expect(shouldShowMessageThinking({ ...base, hasInterruption: true })).toBe(false);
     expect(shouldShowMessageThinking({ ...base, hasPendingAsk: true })).toBe(false);
     expect(shouldShowMessageThinking({ ...base, isTyping: false })).toBe(false);
+  });
+
+  it('does not leave an inline cursor after a timeline reply finishes', () => {
+    expect(
+      isAssistantTyping({
+        role: 'assistant',
+        streaming: false,
+        hasTimeline: true,
+        visibleContent: '',
+        content: 'done'
+      })
+    ).toBe(false);
+    expect(
+      isAssistantTyping({
+        role: 'assistant',
+        streaming: false,
+        hasTimeline: false,
+        visibleContent: 'do',
+        content: 'done'
+      })
+    ).toBe(true);
+    expect(
+      isAssistantTyping({
+        role: 'assistant',
+        streaming: true,
+        hasTimeline: true,
+        visibleContent: 'done',
+        content: 'done'
+      })
+    ).toBe(true);
   });
 
   it('detects streaming text in timeline and fallback messages', () => {

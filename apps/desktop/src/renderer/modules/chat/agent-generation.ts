@@ -37,6 +37,23 @@ export const hasStreamingText = (message: ChatMessageView, isTyping: boolean): b
   );
 };
 
+export interface AssistantTypingState {
+  role: ChatMessageView['role'];
+  streaming: boolean;
+  hasTimeline: boolean;
+  visibleContent: string;
+  content: string;
+}
+
+/**
+ * 判断助手是否仍在追赶可见文本。
+ * 有时间线时只认 segment 的流式状态，避免历史内容与可见文本不一致导致光标常驻。
+ */
+export const isAssistantTyping = (state: AssistantTypingState): boolean =>
+  state.role === 'assistant' &&
+  (state.streaming ||
+    (!state.hasTimeline && state.visibleContent !== state.content));
+
 export interface MessageThinkingState {
   isTyping: boolean;
   hasInterruption: boolean;
