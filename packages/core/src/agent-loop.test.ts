@@ -342,6 +342,12 @@ describe('AgentLoop', () => {
     const result = await loop.run();
 
     expect(result.finishReason).toBe('max_steps');
-    expect(events.some((event) => event.type === 'run.failed')).toBe(true);
+    const failure = events.find((event) => event.type === 'run.failed');
+    expect(failure?.payload).toMatchObject({
+      error: {
+        code: 'RUN_MAX_STEPS',
+        message: expect.stringContaining('已达到最大执行步骤')
+      }
+    });
   });
 });

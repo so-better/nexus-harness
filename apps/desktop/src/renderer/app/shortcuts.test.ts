@@ -30,4 +30,11 @@ describe('matchesShortcut', () => {
       false
     );
   });
+
+  it('matches the theme shortcut with shift', () => {
+    expect(matchesShortcut(key('l', { metaKey: true, shiftKey: true }), 'CmdOrCtrl+Shift+L')).toBe(
+      true
+    );
+    expect(matchesShortcut(key('l', { metaKey: true }), 'CmdOrCtrl+Shift+L')).toBe(false);
+  });
 });

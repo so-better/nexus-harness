@@ -21,7 +21,7 @@ import type {
   ThemeSource
 } from '@shared/ipc/contracts';
 import { unwrap } from '@/app/ipc';
-import type { GeneralSettingsState } from '@shared/ipc/contracts';
+import type { AgentSettings, GeneralSettingsState } from '@shared/ipc/contracts';
 
 /**
  * 读取应用版本信息。
@@ -82,6 +82,18 @@ export const setThemeSource = async (source: ThemeSource): Promise<ThemeInfo> =>
   unwrap(await nexus.theme.setSource(source));
 
 /**
+ * 读取 Agent 运行设置。
+ */
+export const getAgentSettings = async (): Promise<AgentSettings> =>
+  unwrap(await nexus.settings.getAgent());
+
+/**
+ * 保存 Agent 运行设置。
+ */
+export const setAgentSettings = async (value: AgentSettings): Promise<AgentSettings> =>
+  unwrap(await nexus.settings.setAgent(value));
+
+/**
  * 读取开机自启设置。
  */
 export const getAutoLaunch = async (): Promise<boolean> =>
@@ -139,8 +151,7 @@ export const getBackupStatus = async (): Promise<BackupStatus> =>
 
 export const onGeneralSettingsChanged = (
   handler: (state: GeneralSettingsState) => void
-): (() => void) =>
-  nexus.settings.onGeneralChanged(handler);
+): (() => void) => nexus.settings.onGeneralChanged(handler);
 
 import type {
   NotificationBadgeStyle,

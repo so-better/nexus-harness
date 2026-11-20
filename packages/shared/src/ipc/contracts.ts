@@ -3,11 +3,7 @@
  */
 
 import { z } from 'zod';
-import {
-  messageFileReferenceSchema,
-  type MessageAttachment,
-  type NexusEvent
-} from '../events';
+import { messageFileReferenceSchema, type MessageAttachment, type NexusEvent } from '../events';
 import type { AskUserResolveInput, AskUserResolveResult } from '../ask-user';
 import type {
   PluginPublic,
@@ -150,6 +146,15 @@ export interface GeneralSettingsState {
 }
 
 /**
+ * Agent 运行设置；maxSteps 表示单次 Run 允许的模型步骤数。
+ */
+export const AGENT_MAX_STEPS_DEFAULT = 10;
+export const agentSettingsSchema = z.object({
+  maxSteps: z.number().int().min(1).max(50).default(AGENT_MAX_STEPS_DEFAULT)
+});
+export type AgentSettings = z.infer<typeof agentSettingsSchema>;
+
+/**
  * 数据迁移备份导出结果。
  */
 export interface BackupExportResult {
@@ -215,6 +220,8 @@ export interface NexusBridge {
     importBackup: () => Promise<Result<BackupImportResult | null>>;
     backupStatus: () => Promise<Result<BackupStatus>>;
     onGeneralChanged: (handler: (state: GeneralSettingsState) => void) => Unsubscribe;
+    getAgent: () => Promise<Result<AgentSettings>>;
+    setAgent: (input: AgentSettings) => Promise<Result<AgentSettings>>;
   };
   cache: {
     getInfo: () => Promise<Result<CacheInfo>>;
@@ -257,8 +264,12 @@ export interface NexusBridge {
     saveAs: (input: ArtifactSaveAsInput) => Promise<Result<ArtifactSaveAsResult>>;
   };
   attachments: {
-    upload: (input: z.infer<typeof attachmentUploadInputSchema>) => Promise<Result<MessageAttachment>>;
-    remove: (input: z.infer<typeof attachmentRemoveInputSchema>) => Promise<Result<{ removed: boolean }>>;
+    upload: (
+      input: z.infer<typeof attachmentUploadInputSchema>
+    ) => Promise<Result<MessageAttachment>>;
+    remove: (
+      input: z.infer<typeof attachmentRemoveInputSchema>
+    ) => Promise<Result<{ removed: boolean }>>;
     read: (input: AttachmentReadInput) => Promise<Result<AttachmentPreviewResult>>;
   };
   files: {
@@ -684,7 +695,6 @@ export interface WorkspaceImagePreviewResult {
 
 export type WorkspaceImageReadInput = z.infer<typeof workspaceImageReadInputSchema>;
 
-
 export const outputFileSchema = z.object({
   id: z.string().min(1),
   sessionId: z.string().min(1),
@@ -724,7 +734,6 @@ export interface AttachmentPreviewResult {
   mime: string;
   base64: string;
 }
-
 
 export const fileSaveAsInputSchema = z.object({
   sessionId: z.string().min(1),

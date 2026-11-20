@@ -99,6 +99,15 @@ pre {
 }
 
 /**
+ * Electron 的自定义标题栏 drag 区域会截获覆盖其上的弹层点击；
+ * 弹窗打开时让标题栏退出命中与拖拽，遮罩和关闭按钮才能正常交互。
+ */
+body:has(.n-modal-mask) .nh-titlebar {
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
+/**
  * 全局卡片式模态框：用独立表面色和描边与主界面拉开层级。
  */
 .n-modal.n-card {

@@ -76,9 +76,10 @@ const bridge: NexusBridge = {
     exportBackup: () => ipcRenderer.invoke(IPC_CHANNELS.settingsExportBackup),
     importBackup: () => ipcRenderer.invoke(IPC_CHANNELS.settingsImportBackup),
     backupStatus: () => ipcRenderer.invoke(IPC_CHANNELS.settingsBackupStatus),
+    getAgent: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetAgent),
+    setAgent: (input) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetAgent, input),
     onGeneralChanged: (handler) => {
-      const listener = (_event: unknown, state: unknown) =>
-        handler(state as GeneralSettingsState);
+      const listener = (_event: unknown, state: unknown) => handler(state as GeneralSettingsState);
       ipcRenderer.on(IPC_CHANNELS.settingsGeneralChanged, listener);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.settingsGeneralChanged, listener);
     },

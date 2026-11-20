@@ -9,6 +9,8 @@ import {
   cacheTargetSchema,
   languageSchema,
   notificationBadgeStyleSchema,
+  agentSettingsSchema,
+  type AgentSettings,
   type AppLanguage,
   type CacheInfo,
   type NotificationBadgeStyle
@@ -23,6 +25,7 @@ import {
   saveAutoLaunch
 } from '../services/settings/startup-settings';
 import { loadLanguage, saveLanguage } from '../services/settings/language-settings';
+import { loadAgentSettings, saveAgentSettings } from '../services/settings/agent-settings';
 import {
   setNotificationLanguage,
   setNotificationBadgeStyle
@@ -70,6 +73,33 @@ export const registerSettingsIpc = (): void => {
         return fail(
           'SETTINGS_WRITE_FAILED',
           error instanceof Error ? error.message : '保存设置失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(IPC_CHANNELS.settingsGetAgent, async (): Promise<Result<AgentSettings>> => {
+    try {
+      return ok(await loadAgentSettings());
+    } catch (error) {
+      return fail(
+        'SETTINGS_READ_FAILED',
+        error instanceof Error ? error.message : '读取 Agent 设置失败'
+      );
+    }
+  });
+
+  ipcMain.handle(
+    IPC_CHANNELS.settingsSetAgent,
+    async (_event, rawInput: unknown): Promise<Result<AgentSettings>> => {
+      const parsed = agentSettingsSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('SETTINGS_INVALID_INPUT', 'Agent 设置不合法');
+      try {
+        return ok(await saveAgentSettings(parsed.data));
+      } catch (error) {
+        return fail(
+          'SETTINGS_WRITE_FAILED',
+          error instanceof Error ? error.message : '保存 Agent 设置失败'
         );
       }
     }

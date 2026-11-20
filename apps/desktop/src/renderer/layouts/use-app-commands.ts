@@ -109,7 +109,7 @@ export const useAppCommands = (options: AppCommandOptions) => {
     {
       id: 'theme.toggle',
       title: () => t('commands.toggleTheme'),
-      shortcut: 'CmdOrCtrl+L',
+      shortcut: 'CmdOrCtrl+Shift+L',
       handler: options.toggleTheme
     },
     {

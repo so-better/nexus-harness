@@ -37,6 +37,7 @@ import { SessionHistoryService } from '../services/session/session-history';
 import { AttachmentService } from '../services/attachments/attachment-service';
 import { loadImageSettings } from '../services/settings/image-settings';
 import { loadSearchSettings } from '../services/settings/search-settings';
+import { loadAgentSettings } from '../services/settings/agent-settings';
 import {
   getRun,
   getRunForSession,
@@ -420,7 +421,10 @@ export const registerAgentIpc = (): void => {
               payload: {
                 messageId: `error-${randomUUID()}`,
                 role: 'assistant',
-                content: [error.message, error.code].filter(Boolean).join('\n\n'),
+                content:
+                  error.code === 'RUN_MAX_STEPS'
+                    ? error.message
+                    : [error.message, error.code].filter(Boolean).join('\n\n'),
                 error: true
               }
             })
@@ -428,65 +432,76 @@ export const registerAgentIpc = (): void => {
         };
 
         const rootPaths = sessions.listRoots(session.id).map((root) => root.path);
+        const agentSettings = await loadAgentSettings();
         agentService
-          .run({ ...parsed.data, rootPaths, mode: session.mode }, provider, {
-            runId,
-            history: runHistory,
-            signal: controller.signal,
-            terminalOwnerId: senderId,
-            approveTool: (_call, _tool, approvalId) => {
-              return approvalService.request(approvalId, runId, senderId);
+          .run(
+            {
+              ...parsed.data,
+              maxSteps: parsed.data.maxSteps ?? agentSettings.maxSteps,
+              rootPaths,
+              mode: session.mode
             },
-            askUser: (requestId, _questions) => askUserService.request(requestId, runId, senderId),
-            requestWorkspace: async (call) => {
-              if (sender.isDestroyed()) return undefined;
-              const requestId = randomUUID();
-              const suggestedPath = await workspacePathFromCall(call.name, call.input);
-              if (!suggestedPath) return undefined;
-              sender.send(IPC_CHANNELS.workspaceAuthorizationRequested, {
-                requestId,
-                sessionId: session.id,
-                suggestedPath,
-                toolName: call.name,
-                ...(call.id ? { toolCallId: call.id } : {})
-              });
-              try {
-                const path = await workspaceAuthService.request(
+            provider,
+            {
+              runId,
+              history: runHistory,
+              signal: controller.signal,
+              terminalOwnerId: senderId,
+              approveTool: (_call, _tool, approvalId) => {
+                return approvalService.request(approvalId, runId, senderId);
+              },
+              askUser: (requestId, _questions) =>
+                askUserService.request(requestId, runId, senderId),
+              requestWorkspace: async (call) => {
+                if (sender.isDestroyed()) return undefined;
+                const requestId = randomUUID();
+                const suggestedPath = await workspacePathFromCall(call.name, call.input);
+                if (!suggestedPath) return undefined;
+                sender.send(IPC_CHANNELS.workspaceAuthorizationRequested, {
                   requestId,
-                  runId,
-                  senderId,
-                  suggestedPath
-                );
-                if (!path) return undefined;
-                const roots = await sessions.addRoots(session.id, [path]);
-                if (!sender.isDestroyed()) {
-                  sender.send(IPC_CHANNELS.sessionRootsChanged, session.id);
+                  sessionId: session.id,
+                  suggestedPath,
+                  toolName: call.name,
+                  ...(call.id ? { toolCallId: call.id } : {})
+                });
+                try {
+                  const path = await workspaceAuthService.request(
+                    requestId,
+                    runId,
+                    senderId,
+                    suggestedPath
+                  );
+                  if (!path) return undefined;
+                  const roots = await sessions.addRoots(session.id, [path]);
+                  if (!sender.isDestroyed()) {
+                    sender.send(IPC_CHANNELS.sessionRootsChanged, session.id);
+                  }
+                  return roots.map((root) => root.path);
+                } finally {
+                  if (!sender.isDestroyed()) {
+                    sender.send(IPC_CHANNELS.workspaceAuthorizationSettled, { requestId });
+                  }
                 }
-                return roots.map((root) => root.path);
-              } finally {
-                if (!sender.isDestroyed()) {
-                  sender.send(IPC_CHANNELS.workspaceAuthorizationSettled, { requestId });
+              },
+              onEvent: (agentEvent) => {
+                if (
+                  agentEvent.type === 'run.completed' ||
+                  agentEvent.type === 'run.failed' ||
+                  agentEvent.type === 'run.cancelled'
+                ) {
+                  terminalEventSent = true;
                 }
+                if (agentEvent.type === 'run.failed') {
+                  const failure = agentEvent.payload as unknown as {
+                    error: { code: string; message: string };
+                  };
+                  enqueueFailure(failure.error);
+                  return;
+                }
+                enqueueEvent(agentEvent);
               }
-            },
-            onEvent: (agentEvent) => {
-              if (
-                agentEvent.type === 'run.completed' ||
-                agentEvent.type === 'run.failed' ||
-                agentEvent.type === 'run.cancelled'
-              ) {
-                terminalEventSent = true;
-              }
-              if (agentEvent.type === 'run.failed') {
-                const failure = agentEvent.payload as unknown as {
-                  error: { code: string; message: string };
-                };
-                enqueueFailure(failure.error);
-                return;
-              }
-              enqueueEvent(agentEvent);
             }
-          })
+          )
           .then(() => undefined)
           .catch((error: unknown) => {
             console.error('Agent 运行失败', error);

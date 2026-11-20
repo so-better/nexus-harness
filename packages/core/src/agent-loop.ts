@@ -236,7 +236,7 @@ export class AgentLoop {
 
     const error = {
       code: 'RUN_MAX_STEPS',
-      message: `超过最大步骤数：${maxSteps}`
+      message: `已达到最大执行步骤（${maxSteps} 步），本次执行已终止。如需继续，请重新发起对话。`
     };
     this.emit('run.failed', { error });
     return {
