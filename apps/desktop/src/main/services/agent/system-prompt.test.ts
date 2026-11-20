@@ -14,24 +14,33 @@ describe('agent system prompt', () => {
   it('includes identity, safety, honesty, facts, links and file checks', () => {
     const prompt = buildAgentSystemPrompt({ mode: 'build', hasWorkspace: true });
 
-    expect(prompt).toContain('Nexus AI Agent');
+    expect(prompt).toContain('Nexus Agent');
     expect(prompt).toContain('不可信');
-    expect(prompt).toContain('工具与事实');
-    expect(prompt).toContain('不编造数据');
-    expect(prompt).toContain('只用用户或工具提供的 URL');
-    expect(prompt).toContain('文件：生成/修改');
-    expect(prompt).toContain('Build 模式');
-    expect(prompt).toContain('图片/视频链接必须直接嵌入');
-    expect(estimateTextTokens(prompt)).toBeLessThan(600);
-    expect(prompt).not.toContain('当前没有工作区');
+    expect(prompt).toContain('事实/工具');
+    expect(prompt).toContain('不编造事实');
+    expect(prompt).toContain('只用用户/工具 URL');
+    expect(prompt).toContain('文件：修改');
+    expect(prompt).toContain('Build：');
+    expect(prompt).toContain('图片/视频直接嵌入');
+    expect(prompt).not.toContain('无工作区');
+  });
+
+  it('keeps every mode and workspace variant within the prompt budget', () => {
+    for (const mode of ['plan', 'build'] as const) {
+      for (const hasWorkspace of [true, false]) {
+        expect(
+          estimateTextTokens(buildAgentSystemPrompt({ mode, hasWorkspace }))
+        ).toBeLessThan(600);
+      }
+    }
   });
 
   it('adds plan and no-workspace constraints when needed', () => {
     const planPrompt = buildAgentSystemPrompt({ mode: 'plan', hasWorkspace: false });
 
-    expect(planPrompt).toContain('Plan 模式');
+    expect(planPrompt).toContain('Plan：');
     expect(planPrompt).toContain('不得写文件');
-    expect(planPrompt).toContain('当前没有工作区');
+    expect(planPrompt).toContain('无工作区');
   });
 
   it('formats platform, local time and timezone', () => {
@@ -46,6 +55,15 @@ describe('agent system prompt', () => {
     expect(context).toContain('2026');
     expect(context).toContain('时区：Asia/Shanghai');
     expect(context).toContain('</environment>');
+    expect(estimateTextTokens(context)).toBeLessThan(100);
+    expect(() => buildEnvironmentContext({ timeZone: '' })).not.toThrow();
+    expect(
+      buildEnvironmentContext({
+        now: new Date('2026-11-20T12:34:00Z'),
+        platform: 'linux',
+        timeZone: 'Invalid/Zone'
+      })
+    ).toContain('时区：本地');
   });
 
   it('appends environment context only to the last user message', () => {

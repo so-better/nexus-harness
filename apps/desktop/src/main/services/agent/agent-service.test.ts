@@ -5,7 +5,7 @@
 import { mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MockProvider, type ChatProvider, type ProviderRequest } from '@nexus/providers';
+import { MockProvider, type ChatMessage, type ChatProvider, type ProviderRequest } from '@nexus/providers';
 import type { NexusEvent } from '@shared/events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDatabase } from '../storage/database';
@@ -69,7 +69,7 @@ describe('AgentService', () => {
       role: 'system',
       content: expect.stringContaining('Build')
     });
-    expect(requests[0]?.messages[0]?.content).toContain('工具与事实');
+    expect(requests[0]?.messages[0]?.content).toContain('事实/工具');
     expect(requests[0]?.messages.slice(1, 3).map((message) => message.content)).toEqual([
       '之前的问题',
       '之前的回答'
@@ -122,7 +122,7 @@ describe('AgentService', () => {
     );
 
     expect(result.finishReason).toBe('stop');
-    expect(requests[0]?.messages[0]?.content).toContain('当前没有工作区');
+    expect(requests[0]?.messages[0]?.content).toContain('无工作区');
     expect(requests[0]?.tools?.map((tool) => tool.name)).toEqual([
       'read_file',
       'list_dir',
@@ -322,6 +322,49 @@ describe('AgentService', () => {
     expect(requests[1]?.messages.some((message) => message.content.includes('"core"'))).toBe(true);
   });
 
+  it('compacts long history before the first model call on a small window', async () => {
+    const provider = new MockProvider([
+      { text: '摘要：用户要求处理长任务。', finishReason: 'stop' },
+      { text: '完成', finishReason: 'stop' }
+    ]);
+    const service = new AgentService({ createProvider: () => provider });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 4_096, maxOutputTokens: 1_024 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+    const history: ChatMessage[] = Array.from({ length: 12 }, (_, index) => ({
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      content: `历史消息 ${index}: ${'x'.repeat(800)}`
+    }));
+    const events: NexusEvent[] = [];
+
+    const result = await service.run(
+      {
+        sessionId: 'session-1',
+        prompt: '继续处理',
+        rootPaths: [root],
+        providerId: providerConfig.id,
+        modelId: 'mock-model',
+        mode: 'plan'
+      },
+      providerConfig,
+      { history, onEvent: (event) => events.push(event) }
+    );
+
+    expect(result.finishReason).toBe('stop');
+    const compacted = events.find(
+      (event): event is NexusEvent<'context.compacted'> => event.type === 'context.compacted'
+    );
+    expect(compacted).toBeDefined();
+    expect(compacted?.payload.strategy).toContain('summarized');
+  });
+
   it('artifacts oversized tool output before the next model call', async () => {
     await writeFile(join(root, 'large.txt'), 'x'.repeat(20_000), 'utf8');
     const provider = new MockProvider([
@@ -340,7 +383,7 @@ describe('AgentService', () => {
       protocol: 'openai' as const,
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
-      models: [{ id: 'mock-model', contextWindow: 8_192, maxOutputTokens: 1_024 }],
+      models: [{ id: 'mock-model', contextWindow: 4_096, maxOutputTokens: 1_024 }],
       defaultModelId: 'mock-model',
       apiKey: 'secret',
       enabled: true
