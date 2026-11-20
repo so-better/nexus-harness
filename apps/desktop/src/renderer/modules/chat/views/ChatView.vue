@@ -70,6 +70,7 @@
         :session-id="session?.id"
         :ask-users="projection.askUsers"
         :approvals="projection.approvals"
+        :thinking="isThinking"
         :actions-disabled="projection.running"
         :workspace-auth="workspaceAuth"
         @answer-user="(requestId, answers) => emit('answer-user', requestId, answers)"
@@ -159,6 +160,7 @@ import ComposerBox from '../components/ComposerBox.vue';
 import MessageList from '../components/MessageList.vue';
 import SessionEmptyView from '../components/SessionEmptyView.vue';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
+import { isAgentThinking } from '../agent-generation';
 import type { ChatProjection } from '../types';
 
 const props = defineProps<{
@@ -201,6 +203,9 @@ const emit = defineEmits<{
 const isEmpty = computed(() => !props.session || props.projection.messages.length === 0);
 const pendingApprovals = computed(() =>
   props.projection.approvals.filter((approval) => approval.status === 'pending')
+);
+const isThinking = computed(() =>
+  isAgentThinking(props.projection, Boolean(props.workspaceAuth))
 );
 
 /**

@@ -26,6 +26,7 @@
         @allow-workspace="emit('allow-workspace')"
         @reject-workspace="emit('reject-workspace')"
       />
+      <ThinkingIndicator v-if="showThinking" />
     </div>
   </div>
 </template>
@@ -39,9 +40,11 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import type { AskUserAnswer } from '@shared/ask-user';
 import type { MessageFileReference } from '@shared/events';
 import { indexAskUsersByMessage } from '../ask-user-index';
+import { shouldShowRunThinking } from '../agent-generation';
 import type { WorkspaceAuthorizationRequest } from '@shared/ipc/contracts';
 import type { ChatApproval, ChatAskUser, ChatMessageView } from '../types';
 import ChatMessageItem from './ChatMessageItem.vue';
+import ThinkingIndicator from './ThinkingIndicator.vue';
 
 const emit = defineEmits<{
   'answer-user': [requestId: string, answers: AskUserAnswer[] | undefined];
@@ -64,6 +67,7 @@ const props = defineProps<{
   approvals?: ChatApproval[] | undefined;
   actionsDisabled?: boolean | undefined;
   workspaceAuth?: WorkspaceAuthorizationRequest | null | undefined;
+  thinking?: boolean | undefined;
 }>();
 
 const viewport = ref<HTMLElement | null>(null);
@@ -78,6 +82,9 @@ const workspaceAuthToolExists = computed(() => {
 
 const lastAssistantId = computed(
   () => [...props.messages].reverse().find((message) => message.role === 'assistant')?.id
+);
+const showThinking = computed(() =>
+  shouldShowRunThinking(Boolean(props.thinking), props.messages)
 );
 
 /**
@@ -178,6 +185,12 @@ const scrollToLatest = (behavior: 'auto' | 'smooth' = 'smooth'): void => {
   if (!view) return;
   view.scrollTo({ top: view.scrollHeight, behavior });
 };
+
+watch(showThinking, async (thinking) => {
+  if (!thinking || focusing.value || !stickToBottom.value) return;
+  await nextTick();
+  scrollToLatest();
+});
 
 /**
  * 切换会话时回到最新消息，并重置跟随状态。

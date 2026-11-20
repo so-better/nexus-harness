@@ -7,10 +7,7 @@
           :size="14"
           :class="{ 'nh-reasoning__spin': streaming }"
         />
-        <span
-          class="nh-reasoning__label"
-          :class="{ 'nh-reasoning__label--streaming': streaming }"
-        >
+        <span class="nh-reasoning__label">
           {{ streaming ? t('chat.thinking') : t('chat.reasoning') }}
         </span>
       </span>
@@ -78,29 +75,6 @@ watch(
   gap: 6px;
 }
 
-.nh-reasoning__label--streaming {
-  background: linear-gradient(
-    90deg,
-    var(--nh-color-text-disabled) 0%,
-    var(--nh-color-text-secondary) 45%,
-    var(--nh-color-text-disabled) 90%
-  );
-  background-size: 200% 100%;
-  background-clip: text;
-  color: transparent;
-  animation: nh-reasoning-shimmer 1.8s linear infinite;
-}
-
-@keyframes nh-reasoning-shimmer {
-  from {
-    background-position: 100% 0;
-  }
-
-  to {
-    background-position: -100% 0;
-  }
-}
-
 .nh-reasoning__spin {
   animation: nh-reasoning-spin 1.2s linear infinite;
 }
@@ -137,12 +111,6 @@ watch(
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nh-reasoning__label--streaming {
-    animation: none;
-    background: none;
-    color: var(--nh-color-text-disabled);
-  }
-
   .nh-reasoning__spin {
     animation: none;
   }

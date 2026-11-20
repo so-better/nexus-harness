@@ -173,12 +173,7 @@
               :text="message.reasoning"
               :streaming="Boolean(message.streaming)"
             />
-            <div v-if="isTyping && !message.content && !message.reasoning" class="nh-message__thinking">
-              <span />
-              <span />
-              <span />
-            </div>
-            <MarkdownSegments v-else-if="message.content" :content="contentText" :streaming="isTyping" />
+            <MarkdownSegments v-if="message.content" :content="contentText" :streaming="isTyping" />
 
             <div v-if="message.files?.length" class="nh-message__files"
               :class="{ 'nh-message__files--after-content': Boolean(message.content) }">
@@ -214,6 +209,7 @@
             :request="orphanWorkspaceAuth" @allow="emit('allow-workspace')" @reject="emit('reject-workspace')" />
           <AskUserCard v-for="ask in unmatchedAsks" :key="ask.requestId" class="nh-message__ask" embedded :ask="ask"
             @submit="(answers) => submitAsk(ask, answers)" @cancel="cancelAsk(ask)" />
+          <ThinkingIndicator v-if="showThinking" />
           </div>
           <PluginSlot location="message.assistant.footer" :context="{
             location: 'message.assistant.footer',
@@ -304,6 +300,7 @@ import ToolCallCard from './ToolCallCard.vue';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import UserMessageContent from './UserMessageContent.vue';
 import UserFileChip from './UserFileChip.vue';
+import ThinkingIndicator from './ThinkingIndicator.vue';
 import MarkdownSegments from '../render/MarkdownSegments.vue';
 import ReasoningBlock from './ReasoningBlock.vue';
 import WorkspaceAuthCard from './WorkspaceAuthCard.vue';
@@ -313,6 +310,7 @@ import { splitUserMessageReferences } from '../message-references';
 import { useFileReference } from '../use-file-reference';
 import { useSkillPalette } from '../use-skill-palette';
 import { buildToolEntries, unmatchedAskUsers } from '../ask-tool-entries';
+import { hasStreamingText, shouldShowMessageThinking } from '../agent-generation';
 import { isInlineMediaFile } from '../inline-media';
 
 const props = withDefaults(
@@ -625,6 +623,7 @@ const hasInterruption = computed(
     Boolean(orphanWorkspaceAuth.value) ||
     toolEntries.value.some((entry) => entry.kind === 'tool' && isToolInterruption(entry.tool))
 );
+const hasPendingAsk = computed(() => props.askUsers.some((ask) => ask.status === 'pending'));
 
 const contentText = computed(() =>
   props.message.role === 'assistant' ? visibleContent.value : props.message.content
@@ -633,6 +632,14 @@ const isTyping = computed(
   () =>
     props.message.role === 'assistant' &&
     (props.message.streaming === true || visibleContent.value !== props.message.content)
+);
+const showThinking = computed(() =>
+  shouldShowMessageThinking({
+    isTyping: isTyping.value,
+    hasInterruption: hasInterruption.value,
+    hasPendingAsk: hasPendingAsk.value,
+    hasStreamingText: hasStreamingText(props.message, isTyping.value)
+  })
 );
 watch(
   () => props.message.content,
@@ -835,43 +842,6 @@ const timeLabel = computed(() =>
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   text-wrap: pretty;
-}
-
-.nh-message__thinking {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 0;
-}
-
-.nh-message__thinking span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--nh-color-accent);
-  animation: nh-message-thinking 1.2s ease-in-out infinite;
-}
-
-.nh-message__thinking span:nth-child(2) {
-  animation-delay: 0.16s;
-}
-
-.nh-message__thinking span:nth-child(3) {
-  animation-delay: 0.32s;
-}
-
-@keyframes nh-message-thinking {
-  0%,
-  60%,
-  100% {
-    opacity: 0.3;
-    transform: translateY(0);
-  }
-
-  30% {
-    opacity: 1;
-    transform: translateY(-3px);
-  }
 }
 
 .nh-message--system {
