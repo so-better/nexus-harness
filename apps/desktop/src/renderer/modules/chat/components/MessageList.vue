@@ -1,6 +1,6 @@
 <template>
   <div ref="viewport" class="nh-message-list" @scroll="handleScroll">
-    <div class="nh-message-list__stack">
+    <div ref="stack" class="nh-message-list__stack">
       <ChatMessageItem
         v-for="(message, index) in messages"
         :key="message.id"
@@ -36,7 +36,7 @@
  * 消息列表：限制阅读宽度，并在新消息到达时滚动到底部。
  */
 
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { AskUserAnswer } from '@shared/ask-user';
 import type { MessageFileReference } from '@shared/events';
 import { indexAskUsersByMessage } from '../ask-user-index';
@@ -71,6 +71,7 @@ const props = defineProps<{
 }>();
 
 const viewport = ref<HTMLElement | null>(null);
+const stack = ref<HTMLElement | null>(null);
 
 const workspaceAuthToolExists = computed(() => {
   const toolCallId = props.workspaceAuth?.toolCallId;
@@ -96,6 +97,7 @@ const askForMessage = (messageId: string): ChatAskUser[] =>
   asksByMessage.value.get(messageId) ?? [];
 const highlightedId = ref<string>();
 let highlightTimer: ReturnType<typeof setTimeout> | undefined;
+let resizeObserver: ResizeObserver | undefined;
 let focusRequest = 0;
 let focusReleaseTimer: ReturnType<typeof setTimeout> | undefined;
 const focusing = ref(false);
@@ -152,8 +154,21 @@ watch(
   { immediate: true }
 );
 
+onMounted(() => {
+  // 初始帧先贴底；ResizeObserver 只负责随后异步内容变高的补充滚动
+  if (!focusing.value && stickToBottom.value) scrollToLatest('auto');
+  if (typeof ResizeObserver === 'undefined' || !stack.value) return;
+  // 历史消息中的图片、代码块和字体加载会晚于首次布局，内容变高时保持贴底
+  resizeObserver = new ResizeObserver(() => {
+    if (focusing.value || !stickToBottom.value) return;
+    scrollToLatest('auto');
+  });
+  resizeObserver.observe(stack.value);
+});
+
 onBeforeUnmount(() => {
   focusRequest += 1;
+  resizeObserver?.disconnect();
   if (highlightTimer) clearTimeout(highlightTimer);
   if (focusReleaseTimer) clearTimeout(focusReleaseTimer);
 });
@@ -183,12 +198,19 @@ const handleScroll = (): void => {
 const scrollToLatest = (behavior: 'auto' | 'smooth' = 'smooth'): void => {
   const view = viewport.value;
   if (!view) return;
+  // auto 用直接赋值，避免部分 Chromium 版本在首帧尚未完成布局时忽略 scrollTo
+  if (behavior === 'auto') {
+    view.scrollTop = view.scrollHeight;
+    return;
+  }
   view.scrollTo({ top: view.scrollHeight, behavior });
 };
 
 watch(showThinking, async (thinking) => {
   if (!thinking || focusing.value || !stickToBottom.value) return;
   await nextTick();
+  // nextTick 期间用户可能已向上滚动或首个 token 已到达，不能覆盖该状态
+  if (!showThinking.value || focusing.value || !stickToBottom.value) return;
   scrollToLatest();
 });
 

@@ -75,4 +75,103 @@ describe('MessageList thinking placeholder', () => {
     expect(host.querySelector('.nh-thinking')).toBeNull();
     app.unmount();
   });
+
+  it('scrolls to the latest message on initial mount', async () => {
+    const messages: ChatMessageView[] = [userMessage];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'scrollHeight'
+    );
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.classList.contains('nh-message-list') ? 480 : 0;
+      }
+    });
+
+    try {
+      const app = createApp({
+        render: () => h(MessageList, { messages, sessionId: 'session-1' })
+      });
+      app.mount(host);
+      await nextTick();
+
+      const viewport = host.querySelector<HTMLElement>('.nh-message-list');
+      if (!viewport) throw new Error('message viewport missing');
+      expect(viewport.scrollTop).toBe(480);
+      app.unmount();
+    } finally {
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, 'scrollHeight', originalScrollHeight);
+      }
+    }
+  });
+
+  it('keeps following late content growth while the user is at the bottom', async () => {
+    const callbacks: ResizeObserverCallback[] = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          callbacks.push(callback);
+        }
+        observe(): void {}
+        disconnect(): void {}
+        unobserve(): void {}
+      }
+    );
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp({
+      render: () => h(MessageList, { messages: [userMessage], sessionId: 'session-1' })
+    });
+
+    try {
+      app.mount(host);
+      await nextTick();
+      const viewport = host.querySelector<HTMLElement>('.nh-message-list');
+      if (!viewport) throw new Error('message viewport missing');
+      Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 720 });
+
+      callbacks[0]?.([], {} as ResizeObserver);
+      await nextTick();
+      expect(viewport.scrollTop).toBe(720);
+    } finally {
+      app.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns to the latest message when switching sessions', async () => {
+    const messages = ref<ChatMessageView[]>([userMessage]);
+    const sessionId = ref('session-1');
+    const Wrapper = defineComponent({
+      setup() {
+        return () =>
+          h(MessageList, {
+            messages: messages.value,
+            sessionId: sessionId.value
+          });
+      }
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(Wrapper);
+    app.mount(host);
+    await nextTick();
+
+    const viewport = host.querySelector<HTMLElement>('.nh-message-list');
+    if (!viewport) throw new Error('message viewport missing');
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 480 });
+    Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 200 });
+
+    sessionId.value = 'session-2';
+    await nextTick();
+    await nextTick();
+
+    expect(viewport.scrollTop).toBe(480);
+    app.unmount();
+  });
 });
