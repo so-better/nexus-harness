@@ -1,110 +1,67 @@
 <template>
-  <article
-    v-if="message.role === 'system'"
-    class="nh-message nh-message--system"
-    :data-message-id="message.id"
-    :class="{ 'nh-message--highlighted': highlighted }"
-  >
+  <article v-if="message.role === 'system'" class="nh-message nh-message--system" :data-message-id="message.id"
+    :class="{ 'nh-message--highlighted': highlighted }">
     <span class="nh-message__system-dot" />
     <span>{{ message.content }}</span>
   </article>
-  <article
-    v-else-if="
-      message.content ||
-      message.reasoning ||
-      message.streaming ||
-      message.references?.length ||
-      displayToolCalls.length ||
-      askUsers.length ||
-      message.files?.length ||
-      orphanWorkspaceAuth
-    "
-    class="nh-message"
-    :class="[
-      `nh-message--${message.role}`,
-      { 'nh-message--grouped': grouped, 'nh-message--highlighted': highlighted }
-    ]"
-    :data-message-id="message.id"
-  >
+  <article v-else-if="
+    message.content ||
+    message.reasoning ||
+    message.streaming ||
+    message.references?.length ||
+    displayToolCalls.length ||
+    askUsers.length ||
+    message.files?.length ||
+    orphanWorkspaceAuth
+  " class="nh-message" :class="[
+    `nh-message--${message.role}`,
+    { 'nh-message--grouped': grouped, 'nh-message--highlighted': highlighted }
+  ]" :data-message-id="message.id">
     <div class="nh-message__body" :class="{ 'nh-message__body--editing': editing }">
-      <div
-        v-if="
-          message.content ||
-          message.reasoning ||
-          message.streaming ||
-          message.references?.length ||
-          displayToolCalls.length ||
-          askUsers.length ||
-          message.files?.length ||
-          orphanWorkspaceAuth
-        "
-        class="nh-message__bubble"
-        :class="{
-          'nh-message__bubble--tools':
-            displayToolCalls.length > 0 || askUsers.some((ask) => ask.status === 'pending'),
-          'nh-message__bubble--interruption': hasInterruption && !contentText,
-          'nh-message__bubble--editing': editing
-        }"
-      >
+      <div v-if="
+        message.content ||
+        message.reasoning ||
+        message.streaming ||
+        message.references?.length ||
+        displayToolCalls.length ||
+        askUsers.length ||
+        message.files?.length ||
+        orphanWorkspaceAuth
+      " class="nh-message__bubble" :class="{
+        'nh-message__bubble--tools':
+          displayToolCalls.length > 0 || askUsers.some((ask) => ask.status === 'pending'),
+        'nh-message__bubble--interruption': hasInterruption && !contentText,
+        'nh-message__bubble--editing': editing
+      }">
         <template v-if="editing">
-          <NInput
-            ref="editInput"
-            v-model:value="draft"
-            type="textarea"
-            :autosize="{ minRows: 2, maxRows: 6 }"
-            @keydown.esc.prevent="cancelEdit"
-            @keydown.ctrl.enter.prevent="saveEdit"
-            @keydown.meta.enter.prevent="saveEdit"
-          />
+          <NInput ref="editInput" v-model:value="draft" type="textarea" :autosize="{ minRows: 2, maxRows: 6 }"
+            @keydown.esc.prevent="cancelEdit" @keydown.ctrl.enter.prevent="saveEdit"
+            @keydown.meta.enter.prevent="saveEdit" />
           <div class="nh-message__edit-actions">
             <NButton size="small" secondary @click="cancelEdit">{{
               t('chat.askUserCancel')
             }}</NButton>
-            <NButton
-              size="small"
-              type="primary"
-              secondary
-              :disabled="!draft.trim()"
-              @click="saveEdit"
-            >
+            <NButton size="small" type="primary" secondary :disabled="!draft.trim()" @click="saveEdit">
               {{ t('app.send') }}
             </NButton>
           </div>
         </template>
         <template v-if="message.role === 'assistant'">
-          <PluginSlot
-            location="message.assistant.header"
-            :context="{
-              location: 'message.assistant.header',
-              sessionId,
-              messageId: message.id,
-              runId: message.runId,
-              role: 'assistant',
-              usage: message.usage
-            }"
-          />
-          <AskUserCard
-            v-for="ask in resolvedAsks"
-            :key="ask.requestId"
-            class="nh-message__ask nh-message__ask--first"
-            embedded
-            :ask="ask"
-            @submit="(answers) => submitAsk(ask, answers)"
-            @cancel="cancelAsk(ask)"
-          />
+          <PluginSlot location="message.assistant.header" :context="{
+            location: 'message.assistant.header',
+            sessionId,
+            messageId: message.id,
+            runId: message.runId,
+            role: 'assistant',
+            usage: message.usage
+          }" />
+          <AskUserCard v-for="ask in resolvedAsks" :key="ask.requestId" class="nh-message__ask nh-message__ask--first"
+            embedded :ask="ask" @submit="(answers) => submitAsk(ask, answers)" @cancel="cancelAsk(ask)" />
           <div v-if="message.reasoning" class="nh-message__reasoning">
-            <NButton
-              text
-              block
-              class="nh-message__reasoning-header"
-              @click="reasoningOpen = !reasoningOpen"
-            >
+            <NButton text block class="nh-message__reasoning-header" @click="reasoningOpen = !reasoningOpen">
               <span class="nh-message__reasoning-main">
-                <AppIcon
-                  :name="thinking ? 'loader' : 'lightbulb'"
-                  :size="14"
-                  :class="{ 'nh-message__reasoning-spin': thinking }"
-                />
+                <AppIcon :name="thinking ? 'loader' : 'lightbulb'" :size="14"
+                  :class="{ 'nh-message__reasoning-spin': thinking }" />
                 {{ thinking ? t('chat.thinking') : t('chat.reasoning') }}
               </span>
               <AppIcon :name="reasoningOpen ? 'chevron-up' : 'chevron-down'" :size="14" />
@@ -114,129 +71,64 @@
             </div>
           </div>
 
-          <div
-            v-if="isTyping && !message.content && !message.reasoning"
-            class="nh-message__thinking"
-          >
+          <div v-if="isTyping && !message.content && !message.reasoning" class="nh-message__thinking">
             <span />
             <span />
             <span />
           </div>
-          <MarkdownSegments
-            v-else-if="message.content"
-            :content="contentText"
-            :streaming="isTyping"
-          />
+          <MarkdownSegments v-else-if="message.content" :content="contentText" :streaming="isTyping" />
 
-          <div
-            v-if="message.files?.length"
-            class="nh-message__files"
-            :class="{ 'nh-message__files--after-content': Boolean(message.content) }"
-          >
+          <div v-if="message.files?.length" class="nh-message__files"
+            :class="{ 'nh-message__files--after-content': Boolean(message.content) }">
             <OutputFileCard v-for="file in message.files" :key="file.id" :file="file" />
           </div>
 
-          <div
-            v-if="displayToolCalls.length"
-            class="nh-message__tools"
-            :class="{ 'nh-message__tools--after-content': Boolean(message.content) }"
-          >
-            <div
-              v-for="tool in displayToolCalls"
-              :key="tool.id"
-              class="nh-message__tool-entry"
-              :data-tool-call-id="tool.id"
-              :data-workspace-auth-id="
-                isWorkspaceAuthTool(tool.id) ? relatedWorkspaceAuth?.requestId : undefined
-              "
-            >
-              <WorkspaceAuthCard
-                v-if="relatedWorkspaceAuth && relatedWorkspaceAuth.toolCallId === tool.id"
-                :data-workspace-auth-id="relatedWorkspaceAuth?.requestId"
-                :request="relatedWorkspaceAuth"
-                @allow="emit('allow-workspace')"
-                @reject="emit('reject-workspace')"
-              />
-              <ToolCallCard
-                v-if="!isToolInterruption(tool)"
-                :tool="tool"
-                flush
-                :session-id="sessionId"
-                :message-id="message.id"
-                :run-id="message.runId"
-                @authorize-root="emit('request-root')"
-              />
-              <ApprovalCard
-                v-for="approval in approvalForTool(tool)"
-                :key="approval.id"
-                :approval="approval"
-                :tool="tool"
-                :session-id="sessionId"
-                :message-id="message.id"
-                :run-id="message.runId"
-                :data-approval-id="approval.id"
-                @approve="emit('approve', approval.id)"
-                @reject="emit('reject', approval.id)"
-              />
+          <div v-if="displayToolCalls.length" class="nh-message__tools"
+            :class="{ 'nh-message__tools--after-content': Boolean(message.content) }">
+            <div v-for="tool in displayToolCalls" :key="tool.id" class="nh-message__tool-entry"
+              :data-tool-call-id="tool.id" :data-workspace-auth-id="isWorkspaceAuthTool(tool.id) ? relatedWorkspaceAuth?.requestId : undefined
+                ">
+              <WorkspaceAuthCard v-if="relatedWorkspaceAuth && relatedWorkspaceAuth.toolCallId === tool.id"
+                :data-workspace-auth-id="relatedWorkspaceAuth?.requestId" :request="relatedWorkspaceAuth"
+                @allow="emit('allow-workspace')" @reject="emit('reject-workspace')" />
+              <ToolCallCard v-if="!isToolInterruption(tool)" :tool="tool" flush :session-id="sessionId"
+                :message-id="message.id" :run-id="message.runId" @authorize-root="emit('request-root')" />
+              <ApprovalCard v-for="approval in approvalForTool(tool)" :key="approval.id" :approval="approval"
+                :tool="tool" :session-id="sessionId" :message-id="message.id" :run-id="message.runId"
+                :data-approval-id="approval.id" @approve="emit('approve', approval.id)"
+                @reject="emit('reject', approval.id)" />
             </div>
           </div>
 
-          <WorkspaceAuthCard
-            v-if="orphanWorkspaceAuth"
-            :data-workspace-auth-id="orphanWorkspaceAuth.requestId"
-            :request="orphanWorkspaceAuth"
-            @allow="emit('allow-workspace')"
-            @reject="emit('reject-workspace')"
-          />
-          <AskUserCard
-            v-for="ask in otherAsks"
-            :key="ask.requestId"
-            class="nh-message__ask"
-            embedded
-            :ask="ask"
-            @submit="(answers) => submitAsk(ask, answers)"
-            @cancel="cancelAsk(ask)"
-          />
-          <PluginSlot
-            location="message.assistant.footer"
-            :context="{
-              location: 'message.assistant.footer',
-              sessionId,
-              messageId: message.id,
-              runId: message.runId,
-              role: 'assistant',
-              usage: message.usage
-            }"
-          />
+          <WorkspaceAuthCard v-if="orphanWorkspaceAuth" :data-workspace-auth-id="orphanWorkspaceAuth.requestId"
+            :request="orphanWorkspaceAuth" @allow="emit('allow-workspace')" @reject="emit('reject-workspace')" />
+          <AskUserCard v-for="ask in otherAsks" :key="ask.requestId" class="nh-message__ask" embedded :ask="ask"
+            @submit="(answers) => submitAsk(ask, answers)" @cancel="cancelAsk(ask)" />
+          <PluginSlot location="message.assistant.footer" :context="{
+            location: 'message.assistant.footer',
+            sessionId,
+            messageId: message.id,
+            runId: message.runId,
+            role: 'assistant',
+            usage: message.usage
+          }" />
         </template>
 
         <template v-else>
-          <UserMessageContent
-            v-if="message.content || message.references?.length"
-            :content="message.content"
-            :references="message.references"
-          />
-          <PluginSlot
-            location="message.user.footer"
-            :context="{
-              location: 'message.user.footer',
-              sessionId,
-              messageId: message.id,
-              runId: message.runId,
-              role: 'user'
-            }"
-          />
+          <UserMessageContent v-if="message.content || message.references?.length" :content="message.content"
+            :references="message.references" />
+          <PluginSlot location="message.user.footer" :context="{
+            location: 'message.user.footer',
+            sessionId,
+            messageId: message.id,
+            runId: message.runId,
+            role: 'user'
+          }" />
         </template>
       </div>
 
       <div v-if="!editing" class="nh-message__actions">
-        <NButton
-          v-if="message.role === 'user'"
-          text
-          size="tiny"
-          :disabled="actionsDisabled"
-          @click="startEdit"
-        >
+        <NButton v-if="message.role === 'user'" text size="tiny" :disabled="actionsDisabled" @click="startEdit">
           <template #icon>
             <AppIcon name="edit" :size="13" />
           </template>
@@ -248,41 +140,28 @@
           </template>
           {{ t('chat.copy') }}
         </NButton>
-        <NButton
-          v-if="message.role === 'assistant' && isLastAssistant"
-          text
-          size="tiny"
-          :disabled="actionsDisabled"
-          @click="emit('regenerate-message')"
-        >
+        <NButton v-if="message.role === 'assistant' && isLastAssistant" text size="tiny" :disabled="actionsDisabled"
+          @click="emit('regenerate-message')">
           <template #icon>
             <AppIcon name="refresh" :size="13" />
           </template>
           {{ t('chat.regenerate') }}
         </NButton>
-        <PluginSlot
-          v-if="message.role === 'assistant'"
-          location="message.assistant.actions"
-          :context="{
-            location: 'message.assistant.actions',
-            sessionId,
-            messageId: message.id,
-            runId: message.runId,
-            role: 'assistant',
-            usage: message.usage
-          }"
-        />
-        <PluginSlot
-          v-else-if="message.role === 'user'"
-          location="message.user.actions"
-          :context="{
-            location: 'message.user.actions',
-            sessionId,
-            messageId: message.id,
-            runId: message.runId,
-            role: 'user'
-          }"
-        />
+        <PluginSlot v-if="message.role === 'assistant'" location="message.assistant.actions" :context="{
+          location: 'message.assistant.actions',
+          sessionId,
+          messageId: message.id,
+          runId: message.runId,
+          role: 'assistant',
+          usage: message.usage
+        }" />
+        <PluginSlot v-else-if="message.role === 'user'" location="message.user.actions" :context="{
+          location: 'message.user.actions',
+          sessionId,
+          messageId: message.id,
+          runId: message.runId,
+          role: 'user'
+        }" />
         <span class="nh-message__time">{{ timeLabel }}</span>
       </div>
     </div>
@@ -741,6 +620,7 @@ const timeLabel = computed(() =>
 }
 
 @keyframes nh-message-thinking {
+
   0%,
   60%,
   100% {

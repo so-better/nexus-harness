@@ -16,7 +16,7 @@
         </template>
         {{ t('app.stop') }}
       </NButton>
-      <NButton v-else type="primary" secondary :disabled="disabled || !canSend" attr-type="submit">
+      <NButton v-else type="primary" :disabled="disabled || !canSend" attr-type="submit">
         <template #icon>
           <AppIcon name="send" />
         </template>
