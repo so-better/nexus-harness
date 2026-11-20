@@ -156,6 +156,7 @@ export interface BackupImportResult {
 
 export interface BackupStatus {
   pendingRestore: boolean;
+  lastExportPath?: string;
 }
 
 export interface NexusBridge {
@@ -163,6 +164,7 @@ export interface NexusBridge {
     getInfo: () => Promise<Result<AppInfo>>;
     openExternal: (url: string) => Promise<Result<{ opened: boolean }>>;
     openPath: (path: string) => Promise<Result<{ opened: boolean }>>;
+    showItemInFolder: (path: string) => Promise<Result<{ shown: boolean }>>;
     relaunch: () => Promise<Result<{ relaunched: boolean }>>;
     consumePendingSession: () => Promise<Result<string | null>>;
   };

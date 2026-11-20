@@ -68,6 +68,9 @@ export const relaunchApp = async (): Promise<void> => {
   unwrap(await nexus.app.relaunch());
 };
 
+export const revealPath = async (path: string): Promise<boolean> =>
+  unwrap(await nexus.app.showItemInFolder(path)).shown;
+
 export const getThemeInfo = async (): Promise<ThemeInfo> => unwrap(await nexus.theme.getInfo());
 
 /**

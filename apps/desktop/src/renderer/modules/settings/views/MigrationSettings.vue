@@ -44,7 +44,7 @@
             <p class="nh-migration__card-hint">{{ t('settings.migrationImportHint') }}</p>
           </div>
         </div>
-        <NPopconfirm @positive-click="handleImport">
+        <NPopconfirm v-model:show="importConfirmOpen" @positive-click="handleImport">
           <template #trigger>
             <NButton
               class="nh-migration__action"
@@ -79,6 +79,10 @@
       <AppIcon name="folder" :size="14" />
       <span>{{ t('settings.migrationPath') }}</span>
       <code>{{ lastPath }}</code>
+      <NButton text type="primary" size="tiny" class="nh-migration__reveal" @click="revealBackup">
+        <template #icon><AppIcon name="folder" :size="13" /></template>
+        {{ t('settings.migrationOpenFolder') }}
+      </NButton>
     </div>
   </section>
 </template>
@@ -92,7 +96,13 @@ import { computed, onMounted, ref } from 'vue';
 import { NAlert, NButton, NPopconfirm, useMessage } from 'naive-ui';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
-import { exportBackup, getBackupStatus, importBackup, relaunchApp } from '../api/settings.api';
+import {
+  exportBackup,
+  getBackupStatus,
+  importBackup,
+  relaunchApp,
+  revealPath
+} from '../api/settings.api';
 
 const props = defineProps<{ busy: boolean }>();
 const message = useMessage();
@@ -100,13 +110,16 @@ const exporting = ref(false);
 const importing = ref(false);
 const lastPath = ref('');
 const pendingRestart = ref(false);
+const importConfirmOpen = ref(false);
 const migrationBusy = computed(
   () => props.busy || exporting.value || importing.value
 );
 
 onMounted(async () => {
   try {
-    pendingRestart.value = (await getBackupStatus()).pendingRestore;
+    const status = await getBackupStatus();
+    pendingRestart.value = status.pendingRestore;
+    lastPath.value = status.lastExportPath ?? '';
   } catch {
     // 状态读取失败不阻塞导入导出入口
   }
@@ -127,6 +140,7 @@ const handleExport = async (): Promise<void> => {
 };
 
 const handleImport = async (): Promise<void> => {
+  importConfirmOpen.value = false;
   importing.value = true;
   try {
     const result = await importBackup();
@@ -143,6 +157,15 @@ const handleImport = async (): Promise<void> => {
 const handleRestart = async (): Promise<void> => {
   try {
     await relaunchApp();
+  } catch (reason) {
+    message.error(reason instanceof Error ? reason.message : t('settings.migrationFailed'));
+  }
+};
+
+const revealBackup = async (): Promise<void> => {
+  if (!lastPath.value) return;
+  try {
+    await revealPath(lastPath.value);
   } catch (reason) {
     message.error(reason instanceof Error ? reason.message : t('settings.migrationFailed'));
   }
@@ -276,12 +299,18 @@ const handleRestart = async (): Promise<void> => {
 
 .nh-migration__path code {
   min-width: 0;
+  flex: 1;
   overflow: hidden;
   color: var(--nh-color-text-primary);
   font-family: var(--nh-font-mono);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.nh-migration__reveal {
+  flex: none;
+  margin-left: auto;
 }
 
 @media (width <= 640px) {

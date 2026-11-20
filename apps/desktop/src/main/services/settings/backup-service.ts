@@ -14,6 +14,7 @@ const MANIFEST_NAME = 'nexus-backup.json';
 const STAGING_NAME = '.restore-staging';
 const PREVIOUS_NAME = '.restore-previous';
 const JOURNAL_NAME = '.restore-journal.json';
+const BACKUP_STATE_FILE = 'backup.json';
 const BACKUP_DIRECTORIES = [
   'settings',
   'skills',
@@ -47,6 +48,7 @@ export interface BackupResult {
 
 export interface BackupStatus {
   pendingRestore: boolean;
+  lastExportPath?: string;
 }
 
 const exists = async (path: string): Promise<boolean> =>
@@ -57,9 +59,29 @@ const exists = async (path: string): Promise<boolean> =>
 const isInside = (parent: string, child: string): boolean =>
   child === parent || child.startsWith(`${parent}${sep}`);
 
-/** 查询是否有等待重启后应用的恢复备份。 */
+const readBackupState = async (paths: AppDataPaths): Promise<{ lastExportPath?: string }> => {
+  try {
+    const raw = await readFile(join(paths.settings, BACKUP_STATE_FILE), 'utf8');
+    const value = JSON.parse(raw) as { lastExportPath?: unknown };
+    return typeof value.lastExportPath === 'string' ? { lastExportPath: value.lastExportPath } : {};
+  } catch {
+    return {};
+  }
+};
+
+const saveBackupState = async (paths: AppDataPaths, lastExportPath: string): Promise<void> => {
+  await mkdir(paths.settings, { recursive: true });
+  await writeFile(
+    join(paths.settings, BACKUP_STATE_FILE),
+    `${JSON.stringify({ lastExportPath }, null, 2)}\n`,
+    'utf8'
+  );
+};
+
+/** 查询是否有等待重启后应用的恢复备份及最近导出路径。 */
 export const getBackupStatus = async (paths: AppDataPaths): Promise<BackupStatus> => ({
-  pendingRestore: await exists(join(paths.root, STAGING_NAME, MANIFEST_NAME))
+  pendingRestore: await exists(join(paths.root, STAGING_NAME, MANIFEST_NAME)),
+  ...(await readBackupState(paths))
 });
 
 /**
@@ -87,6 +109,7 @@ export const createBackup = async (
     };
     archive.addFile(MANIFEST_NAME, Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8'));
     await archive.writeZipPromise(destinationFile);
+    await saveBackupState(paths, destinationFile);
     return { path: destinationFile };
   } catch (error) {
     await rm(destinationFile, { force: true });

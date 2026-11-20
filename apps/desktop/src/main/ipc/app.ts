@@ -3,10 +3,11 @@
  */
 
 import { app, ipcMain, shell } from 'electron';
+import { realpath, stat } from 'node:fs/promises';
 import { consumePendingSession } from '../services/notifications/notification-service';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import { appInfoSchema, type AppInfo } from '@shared/ipc/contracts';
-import { ok, type Result } from '@shared/ipc/result';
+import { fail, ok, type Result } from '@shared/ipc/result';
 import desktopPackage from '../../../package.json';
 
 /**
@@ -48,6 +49,19 @@ export const registerAppIpc = (): void => {
     }, 50);
     return ok({ relaunched: true });
   });
+
+  ipcMain.handle(
+    IPC_CHANNELS.appShowItemInFolder,
+    async (_event, rawPath: unknown): Promise<Result<{ shown: boolean }>> => {
+      if (typeof rawPath !== 'string' || !rawPath) return fail('INVALID_PATH', '路径不合法');
+      const target = await realpath(rawPath).catch(() => undefined);
+      if (!target) return fail('PATH_NOT_FOUND', '路径不存在');
+      const info = await stat(target).catch(() => undefined);
+      if (!info) return fail('PATH_NOT_FOUND', '路径不存在');
+      shell.showItemInFolder(target);
+      return ok({ shown: true });
+    }
+  );
 
   ipcMain.handle(IPC_CHANNELS.appConsumePendingSession, (): Result<string | null> =>
     ok(consumePendingSession())
