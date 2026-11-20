@@ -30,6 +30,7 @@ import { FileService } from '../services/files/file-service';
 import { createNexusEvent } from '@nexus/core';
 import { EventStore } from '../services/session/event-store';
 import { SessionService } from '../services/session/session-service';
+import { AttachmentService } from '../services/attachments/attachment-service';
 import { searchSessions } from '../services/session/session-search';
 import { getDatabase } from '../services/storage/database';
 import { buildSessionHtml, buildSessionMarkdown } from '../services/session/export-service';
@@ -48,6 +49,7 @@ export const registerSessionIpc = (): void => {
   const db = getDatabase();
   const events = new EventStore(db);
   const sessions = new SessionService(db, events);
+  const attachments = new AttachmentService(db);
   const files = new FileService(db);
 
   ipcMain.handle(
@@ -151,7 +153,10 @@ export const registerSessionIpc = (): void => {
 
     try {
       const result = sessions.removeAll();
-      for (const session of items) terminalService.closeBySession(session.id);
+      for (const session of items) {
+        terminalService.closeBySession(session.id);
+        await attachments.removeBySession(session.id).catch(() => undefined);
+      }
       return ok(result);
     } catch (error) {
       return fail('SESSION_CLEAR_FAILED', error instanceof Error ? error.message : '清除会话失败');
@@ -380,6 +385,7 @@ export const registerSessionIpc = (): void => {
       try {
         sessions.remove(rawId);
         terminalService.closeBySession(rawId);
+        await attachments.removeBySession(rawId).catch(() => undefined);
         return ok({ id: rawId });
       } catch (error) {
         return fail(

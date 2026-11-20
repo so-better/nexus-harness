@@ -170,6 +170,23 @@ const migrate = (db: DatabaseSync): void => {
     db.exec('PRAGMA user_version = 8');
   }
 
+  if (version < 10) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS attachments (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        mime TEXT NOT NULL,
+        bytes INTEGER NOT NULL,
+        stored_path TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_attachments_session ON attachments(session_id);
+    `);
+    db.exec('PRAGMA user_version = 10');
+  }
+
   if (version < 9) {
     db.exec(`
       CREATE TABLE IF NOT EXISTS plugins (

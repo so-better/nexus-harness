@@ -21,6 +21,7 @@ export interface AppDataPaths {
   mcp: string;
   settings: string;
   files: string;
+  attachments: string;
   artifacts: string;
   checkpoints: string;
   logs: string;
@@ -39,6 +40,7 @@ export const getAppDataPaths = (): AppDataPaths => {
     mcp: join(root, 'mcp'),
     settings: join(root, 'settings'),
     files: join(root, 'files'),
+    attachments: join(root, 'attachments'),
     artifacts: join(root, 'artifacts'),
     checkpoints: join(root, 'checkpoints'),
     logs: join(root, 'logs')
@@ -56,6 +58,7 @@ export const ensureAppDataDirectories = async (): Promise<void> => {
     paths.mcp,
     paths.settings,
     paths.files,
+    paths.attachments,
     paths.artifacts,
     paths.checkpoints,
     paths.logs

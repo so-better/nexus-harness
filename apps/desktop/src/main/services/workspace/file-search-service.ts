@@ -217,7 +217,7 @@ export const searchWorkspaceFiles = async (
     result.push(...(await rootFiles(root)));
   }
 
-  return result
+  const selected = result
     .filter((reference) => score(reference, query) >= 0)
     .sort(
       (left, right) =>
@@ -225,4 +225,11 @@ export const searchWorkspaceFiles = async (
         left.relativePath.localeCompare(right.relativePath)
     )
     .slice(0, maxResults);
+  // 只统计最终候选的大小，避免扫描阶段对全量文件逐个 stat
+  return Promise.all(
+    selected.map(async (reference) => {
+      const info = await stat(reference.path).catch(() => undefined);
+      return info?.isFile() ? { ...reference, bytes: info.size } : reference;
+    })
+  );
 };

@@ -32,6 +32,7 @@
         :focus-session-id="focusMessage?.sessionId"
         :exporting="exporting"
         :workspace-auth="workspaceAuthRequest"
+        :ensure-session="ensureSession"
         @choose-root="chooseRoot"
         @remove-root="removeRoot"
         @request-root="authorizeRootAndRetry"
@@ -118,7 +119,7 @@ import {
   subscribeSessionChanges
 } from '@/modules/session/api/session.api';
 import { useSessionStore } from '@/modules/session/stores/session.store';
-import { getLanguage } from '@/modules/settings/api/settings.api';
+import { getLanguage, onGeneralSettingsChanged } from '@/modules/settings/api/settings.api';
 import SettingsModal from '@/modules/settings/views/SettingsModal.vue';
 import { useTerminalStore } from '@/modules/terminal/stores/terminal.store';
 import ExtensionsModal from '@/plugin-runtime/components/ExtensionsModal.vue';
@@ -159,6 +160,7 @@ let unsubscribeSessionActivate: (() => void) | undefined;
 let unsubscribeSessionRoots: (() => void) | undefined;
 let unsubscribeWorkspaceAuth: (() => void) | undefined;
 let unsubscribeWorkspaceSettled: (() => void) | undefined;
+let unsubscribeGeneralSettings: (() => void) | undefined;
 let focusSequence = 0;
 
 const activeMode = computed(
@@ -236,10 +238,13 @@ const openSearchMessage = (sessionId: string, messageId: string): void => {
 /**
  * 没有会话时自动创建一个，保证始终有可进入的工作上下文。
  */
-const ensureSession = async (): Promise<void> => {
+const ensureSession = async (): Promise<string | undefined> => {
+  if (sessions.activeId) return sessions.activeId;
   if (sessions.sessions.length === 0) {
-    await sessions.create(providerId.value, modelId.value);
+    const created = await sessions.create(providerId.value, modelId.value);
+    return created?.id;
   }
+  return sessions.activeId ?? undefined;
 };
 
 /**
@@ -343,7 +348,8 @@ const removeRoot = async (rootId: string): Promise<void> => {
 const send = async (
   prompt: string,
   imagePaths?: string[],
-  references?: MessageFileReference[]
+  references?: MessageFileReference[],
+  attachmentIds?: string[]
 ): Promise<void> => {
   if (!activeId.value) {
     const created = await sessions.create(providerId.value, modelId.value);
@@ -353,7 +359,7 @@ const send = async (
     }
   }
   if (activeId.value) {
-    const started = await chat.send(activeId.value, prompt, imagePaths, references);
+    const started = await chat.send(activeId.value, prompt, imagePaths, references, attachmentIds);
     if (!started) message.error(chat.error ?? t('chat.sendFailed'));
   }
 };
@@ -402,10 +408,17 @@ const answerUser = async (
 const editMessage = async (
   messageId: string,
   content: string,
-  references?: MessageFileReference[]
+  references?: MessageFileReference[],
+  attachmentIds?: string[]
 ): Promise<void> => {
   if (!activeId.value || activeRunning.value) return;
-  const started = await chat.editMessage(activeId.value, messageId, content, references);
+  const started = await chat.editMessage(
+    activeId.value,
+    messageId,
+    content,
+    references,
+    attachmentIds
+  );
   if (!started) message.error(chat.error ?? t('chat.editFailed'));
 };
 
@@ -531,6 +544,9 @@ onMounted(async () => {
       sessions.select(request.sessionId);
     }
   });
+  unsubscribeGeneralSettings = onGeneralSettingsChanged((state) => {
+    setLocale(state.language);
+  });
   unsubscribeWorkspaceSettled = onWorkspaceAuthorizationSettled((settled) => {
     const entry = Object.entries(workspaceAuthRequests.value).find(
       ([, request]) => request.requestId === settled.requestId
@@ -561,6 +577,8 @@ onBeforeUnmount(() => {
   unsubscribeWorkspaceAuth = undefined;
   unsubscribeWorkspaceSettled?.();
   unsubscribeWorkspaceSettled = undefined;
+  unsubscribeGeneralSettings?.();
+  unsubscribeGeneralSettings = undefined;
   chat.dispose();
   pluginRuntime.dispose().catch(() => undefined);
 });

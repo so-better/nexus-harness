@@ -59,6 +59,7 @@ export interface AgentLoopOptions {
   extraParams?: Record<string, unknown>;
   prepareContext?: ContextPreparer;
   permissionGateway?: PermissionGateway;
+  sanitizeToolInput?: (call: ProviderToolCall) => unknown;
   approveTool?: (
     call: ProviderToolCall,
     tool: AgentToolDefinition,
@@ -186,7 +187,7 @@ export class AgentLoop {
         this.emit('tool.requested', {
           toolCallId: call.id,
           name: call.name,
-          input: call.arguments
+          input: this.options.sanitizeToolInput?.(call) ?? call.arguments
         });
 
         const denied = await this.authorizeTool(call);

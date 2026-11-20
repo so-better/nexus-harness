@@ -19,12 +19,17 @@
     <path v-else-if="name === 'send'" d="m4 11 16-7-7 16-2-7-7-2Z" />
     <path v-else-if="name === 'stop'" d="M7 7h10v10H7z" fill="currentColor" stroke="none" />
     <path v-else-if="name === 'file'" d="M7 3h7l4 4v14H7zM14 3v5h5" />
+    <path
+      v-else-if="name === 'paperclip'"
+      d="M21 11.5l-8.9 8.9a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"
+    />
     <path v-else-if="name === 'image'" d="M4 5h16v14H4zM7 15l3-3 2 2 3-3 3 3M8 9h.01" />
     <path
       v-else-if="name === 'eye'"
       d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12ZM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6"
     />
     <path v-else-if="name === 'export'" d="M12 15V3M7 8l5-5 5 5M5 15v5h14v-5" />
+    <path v-else-if="name === 'upload'" d="M12 16V4M7 9l5-5 5 5M5 20h14" />
     <path v-else-if="name === 'download'" d="M12 3v12M7 10l5 5 5-5M5 21h14" />
     <path
       v-else-if="name === 'terminal'"
@@ -113,9 +118,11 @@ export type AppIconName =
   | 'stop'
   | 'spark'
   | 'file'
+  | 'paperclip'
   | 'image'
   | 'eye'
   | 'export'
+  | 'upload'
   | 'download'
   | 'terminal'
   | 'edit'

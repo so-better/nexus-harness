@@ -1,8 +1,22 @@
 <template>
   <div class="nh-user-message">
     <p v-if="parts.text" class="nh-user-message__text">{{ parts.text }}</p>
-    <div v-if="parts.references.length" class="nh-user-message__references">
-      <UserFileChip v-for="file in parts.references" :key="file.path" :file="file" />
+    <div
+      v-if="parts.references.length || attachments?.length"
+      class="nh-user-message__references"
+    >
+      <UserFileChip
+        v-for="file in parts.references"
+        :key="file.path"
+        :file="file"
+        :session-id="sessionId"
+        :is-image="isImageFile(file.name)"
+      />
+      <AttachmentChip
+        v-for="attachment in attachments"
+        :key="attachment.id"
+        :attachment="attachment"
+      />
     </div>
   </div>
 </template>
@@ -13,13 +27,17 @@
  */
 
 import { computed } from 'vue';
-import type { MessageFileReference } from '@shared/events';
+import type { MessageAttachment, MessageFileReference } from '@shared/events';
+import { isImageFile } from '@shared/files';
 import { splitUserMessageReferences } from '../message-references';
+import AttachmentChip from './AttachmentChip.vue';
 import UserFileChip from './UserFileChip.vue';
 
 const props = defineProps<{
   content: string;
   references?: MessageFileReference[] | undefined;
+  attachments?: MessageAttachment[] | undefined;
+  sessionId?: string | undefined;
 }>();
 const parts = computed(() => {
   if (props.references?.length) {

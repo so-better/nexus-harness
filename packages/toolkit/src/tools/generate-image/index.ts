@@ -129,8 +129,13 @@ const readLimited = async (response: Response, limit: number, label: string): Pr
 };
 
 const headersFor = (template: ImageTemplate, apiKey?: string): Record<string, string> => {
+  const variables = { api_key: apiKey };
+  const renderHeader = (value: string): string => {
+    const rendered = renderTemplate(value, variables);
+    return rendered === undefined || rendered === null ? '' : String(rendered);
+  };
   const headers = Object.fromEntries(
-    Object.entries(template.headers ?? {}).map(([key, value]) => [key, String(value)])
+    Object.entries(template.headers ?? {}).map(([key, value]) => [key, renderHeader(value)])
   );
   const has = (name: string): boolean =>
     Object.keys(headers).some((key) => key.toLowerCase() === name.toLowerCase());

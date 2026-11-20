@@ -41,6 +41,18 @@ describe('enhanceMarkdownImages', () => {
     expect(img.getAttribute('height')).toBe('360');
   });
 
+  it('drops Markdown images that reference an output file id', () => {
+    const root = document.createElement('div');
+    const img = image('9e60661b-7622-489d-aadb-612c2646d2ec');
+    root.appendChild(img);
+    document.body.appendChild(root);
+
+    enhanceMarkdownImages(root);
+
+    expect(root.querySelector('img')).toBeNull();
+    expect(root.querySelector('.nh-md-image')).toBeNull();
+  });
+
   it('reveals the image on load and shows a retryable error otherwise', () => {
     const root = document.createElement('div');
     const loading = image();

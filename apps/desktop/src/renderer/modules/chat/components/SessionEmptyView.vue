@@ -24,6 +24,7 @@
         :models="models"
         :mode="mode"
         :session-id="sessionId"
+        :ensure-session="ensureSession"
         :provider-id="providerId"
         :model-id="modelId"
         @choose-root="emit('choose-root')"
@@ -32,7 +33,7 @@
         @update-model="emit('update-model', $event)"
         @update-mode="emit('update-mode', $event)"
         @open-settings="emit('open-settings')"
-        @send="(prompt, images, references) => emit('send', prompt, images, references)"
+        @send="(prompt, images, references, attachmentIds) => emit('send', prompt, images, references, attachmentIds)"
         @stop="emit('stop')"
       />
     </div>
@@ -59,12 +60,13 @@ defineProps<{
   models: ProviderModel[];
   mode: AgentMode;
   sessionId?: string | undefined;
+  ensureSession: () => Promise<string | undefined>;
   providerId?: string | undefined;
   modelId?: string | undefined;
 }>();
 
 const emit = defineEmits<{
-  send: [prompt: string, imagePaths?: string[], references?: MessageFileReference[]];
+  send: [prompt: string, imagePaths?: string[], references?: MessageFileReference[], attachmentIds?: string[]];
   stop: [];
   'choose-root': [];
   'remove-root': [rootId: string];

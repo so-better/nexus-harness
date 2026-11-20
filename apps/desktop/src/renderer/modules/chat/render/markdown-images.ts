@@ -9,6 +9,8 @@ const IMAGE_CLASS = 'nh-md-image__img';
 const LOADING_CLASS = 'is-loading';
 const LOADED_CLASS = 'is-loaded';
 const ERROR_CLASS = 'is-error';
+const FILE_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const icon = (path: string, size: number): string =>
   `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"></path></svg>`;
@@ -38,6 +40,12 @@ const createError = (name: string, retry: () => void): HTMLElement => {
 
 const enhanceImage = (image: HTMLImageElement): void => {
   if (image.getAttribute(IMAGE_ATTR) === 'true') return;
+  // AI 可能把生成文件的 fileId 误写成 Markdown 图片；文件卡片已经展示，避免重复错误卡片
+  const src = image.getAttribute('src')?.trim() ?? '';
+  if (FILE_ID_PATTERN.test(src)) {
+    image.remove();
+    return;
+  }
   const wrapper = document.createElement('span');
   wrapper.className = `${WRAPPER_CLASS} ${LOADING_CLASS}`;
   const loading = createLoading();

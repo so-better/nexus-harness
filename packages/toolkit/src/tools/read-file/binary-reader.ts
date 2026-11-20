@@ -71,7 +71,12 @@ export const extractBinaryText = async (
   const extension = extname(path).toLowerCase();
 
   if (extension === '.pdf') {
-    const { PDFParse } = await import('pdf-parse');
+    const [{ PDFParse }, worker] = await Promise.all([
+      import('pdf-parse'),
+      import('pdfjs-dist/legacy/build/pdf.worker.mjs')
+    ]);
+    // Electron 主进程没有浏览器 Worker，直接把 pdfjs worker 注入主线程，避免打包后 worker 路径丢失
+    (globalThis as { pdfjsWorker?: unknown }).pdfjsWorker = worker;
     const parser = new PDFParse({ data: new Uint8Array(buffer) });
     try {
       const result = await parser.getText({ first: 200 });

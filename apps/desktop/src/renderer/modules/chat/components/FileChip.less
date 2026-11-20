@@ -1,0 +1,96 @@
+/**
+ * 文件 chip 共用样式：@ 引用与附件仅通过主色和左侧图标区分。
+ */
+.nh-file-chip {
+  --nh-file-chip-accent: var(--nh-color-accent);
+
+  display: inline-flex;
+  height: 30px;
+  max-width: 300px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px 0 4px;
+  border: 1px solid color-mix(in srgb, var(--nh-file-chip-accent) 22%, var(--nh-border-subtle));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--nh-file-chip-accent) 5%, var(--nh-surface-elevated));
+  color: var(--nh-color-text-primary);
+  font-size: 12px;
+  transition:
+    background var(--nh-duration-fast) var(--nh-ease-standard),
+    border-color var(--nh-duration-fast) var(--nh-ease-standard);
+}
+
+.nh-file-chip:hover {
+  border-color: color-mix(in srgb, var(--nh-file-chip-accent) 42%, var(--nh-border-subtle));
+  background: color-mix(in srgb, var(--nh-file-chip-accent) 9%, var(--nh-surface-elevated));
+}
+
+.nh-file-chip--reference {
+  --nh-file-chip-accent: var(--nh-color-idle);
+}
+
+.nh-file-chip--attachment {
+  --nh-file-chip-accent: var(--nh-color-accent);
+}
+
+.nh-file-chip__glyph {
+  position: relative;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  overflow: hidden;
+  place-items: center;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--nh-file-chip-accent) 14%, transparent);
+  color: var(--nh-file-chip-accent);
+}
+
+.nh-file-chip__preview {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  overflow: hidden;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.nh-file-chip__at {
+  color: var(--nh-file-chip-accent);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.nh-file-chip__name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nh-file-chip__meta {
+  flex: none;
+  color: var(--nh-color-text-secondary);
+  font-size: 11px;
+}
+
+.nh-file-chip__remove {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--nh-file-chip-accent) 10%, transparent);
+  color: var(--nh-color-text-primary);
+  cursor: pointer;
+}
+
+.nh-file-chip__remove:hover {
+  background: color-mix(in srgb, var(--nh-color-danger) 14%, transparent);
+  color: var(--nh-color-danger);
+}

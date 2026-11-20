@@ -11,3 +11,4 @@ export { createFileToolset, fileToolDefinitions, runCommandInputSchema } from '.
 export type { FileToolDefinition, FileToolResult, FileToolset } from './file-toolset';
 export * from './search-images';
 export * from './search-videos';
+export { readTextFileOrExtract } from './read-file/binary-reader';

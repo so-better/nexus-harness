@@ -5,6 +5,7 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import type { PluginPublic } from '@shared/plugin';
+import type { GeneralSettingsState } from '@shared/ipc/contracts';
 import type {
   NexusBridge,
   SessionSummary,
@@ -75,6 +76,12 @@ const bridge: NexusBridge = {
     exportBackup: () => ipcRenderer.invoke(IPC_CHANNELS.settingsExportBackup),
     importBackup: () => ipcRenderer.invoke(IPC_CHANNELS.settingsImportBackup),
     backupStatus: () => ipcRenderer.invoke(IPC_CHANNELS.settingsBackupStatus),
+    onGeneralChanged: (handler) => {
+      const listener = (_event: unknown, state: unknown) =>
+        handler(state as GeneralSettingsState);
+      ipcRenderer.on(IPC_CHANNELS.settingsGeneralChanged, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.settingsGeneralChanged, listener);
+    },
     getNotificationBadge: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetNotificationBadge),
     setNotificationBadge: (style) =>
       ipcRenderer.invoke(IPC_CHANNELS.settingsSetNotificationBadge, style),
@@ -105,6 +112,11 @@ const bridge: NexusBridge = {
     meta: (input) => ipcRenderer.invoke(IPC_CHANNELS.artifactMeta, input),
     saveAs: (input) => ipcRenderer.invoke(IPC_CHANNELS.artifactSaveAs, input)
   },
+  attachments: {
+    upload: (input) => ipcRenderer.invoke(IPC_CHANNELS.attachmentsUpload, input),
+    remove: (input) => ipcRenderer.invoke(IPC_CHANNELS.attachmentsRemove, input),
+    read: (input) => ipcRenderer.invoke(IPC_CHANNELS.attachmentsRead, input)
+  },
   files: {
     saveAs: (input) => ipcRenderer.invoke(IPC_CHANNELS.filesSaveAs, input),
     read: (input) => ipcRenderer.invoke(IPC_CHANNELS.filesRead, input)
@@ -112,6 +124,7 @@ const bridge: NexusBridge = {
   workspace: {
     chooseRoot: (input) => ipcRenderer.invoke(IPC_CHANNELS.workspaceChooseRoot, input),
     searchFiles: (input) => ipcRenderer.invoke(IPC_CHANNELS.workspaceSearchFiles, input),
+    readImage: (input) => ipcRenderer.invoke(IPC_CHANNELS.workspaceReadImage, input),
     onAuthorizationRequested: (handler) => {
       const listener = (_event: unknown, request: unknown) => handler(request as never);
       ipcRenderer.on(IPC_CHANNELS.workspaceAuthorizationRequested, listener);

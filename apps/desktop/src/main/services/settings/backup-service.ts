@@ -21,6 +21,7 @@ const BACKUP_DIRECTORIES = [
   'mcp',
   'plugins',
   'files',
+  'attachments',
   'artifacts',
   'checkpoints'
 ] as const;
@@ -201,6 +202,14 @@ const rebaseDatabasePaths = (databasePath: string, sourceRoot: string | undefine
     const updateFile = db.prepare('UPDATE files SET stored_path = ? WHERE id = ?');
     for (const file of files) {
       updateFile.run(rebasePath(file.stored_path, sourceRoot, targetRoot), file.id);
+    }
+    const attachments = db.prepare('SELECT id, stored_path FROM attachments').all() as Array<{
+      id: string;
+      stored_path: string;
+    }>;
+    const updateAttachment = db.prepare('UPDATE attachments SET stored_path = ? WHERE id = ?');
+    for (const attachment of attachments) {
+      updateAttachment.run(rebasePath(attachment.stored_path, sourceRoot, targetRoot), attachment.id);
     }
     const artifacts = db.prepare('SELECT id, path FROM artifacts').all() as Array<{
       id: string;

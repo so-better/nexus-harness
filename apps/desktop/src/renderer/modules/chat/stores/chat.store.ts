@@ -131,11 +131,13 @@ export const useChatStore = defineStore('chat', () => {
     sessionId: string,
     prompt: string,
     imagePaths?: string[],
-    references?: MessageFileReference[]
+    references?: MessageFileReference[],
+    attachmentIds?: string[]
   ): Promise<boolean> =>
     dispatchRun(sessionId, prompt, {
       ...(imagePaths ? { imagePaths } : {}),
-      ...(references ? { references } : {})
+      ...(references ? { references } : {}),
+      ...(attachmentIds?.length ? { attachmentIds } : {})
     });
 
   /**
@@ -145,11 +147,13 @@ export const useChatStore = defineStore('chat', () => {
     sessionId: string,
     messageId: string,
     prompt: string,
-    references?: MessageFileReference[]
+    references?: MessageFileReference[],
+    attachmentIds?: string[]
   ): Promise<boolean> =>
     dispatchRun(sessionId, prompt, {
       editMessageId: messageId,
-      ...(references ? { references } : {})
+      ...(references ? { references } : {}),
+      ...(attachmentIds?.length ? { attachmentIds } : {})
     });
 
   /**

@@ -3,6 +3,7 @@
  */
 
 import { registerAgentIpc } from './agent';
+import { registerAttachmentsIpc } from './attachments';
 import { registerArtifactIpc } from './artifact';
 import { registerCheckpointIpc } from './checkpoint';
 import { registerFilesIpc } from './files';
@@ -23,6 +24,7 @@ import { registerWorkspaceIpc } from './workspace';
  */
 export const registerIpcHandlers = (): void => {
   registerAgentIpc();
+  registerAttachmentsIpc();
   registerArtifactIpc();
   registerCheckpointIpc();
   registerFilesIpc();

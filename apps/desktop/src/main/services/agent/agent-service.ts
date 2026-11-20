@@ -22,7 +22,12 @@ import {
   type ChatProvider,
   type ProviderToolCall
 } from '@nexus/providers';
-import { createFileToolset, fileToolDefinitions, runCommandInputSchema } from '@nexus/toolkit';
+import {
+  createFileToolset,
+  fileToolDefinitions,
+  readTextFileOrExtract,
+  runCommandInputSchema
+} from '@nexus/toolkit';
 import type { PptDeck } from '@nexus/toolkit';
 import { detectDangerousCommand, isSensitivePath } from '@nexus/runtime-utils';
 import { appendFileReferences, imageMimeForName } from '@shared/files';
@@ -37,6 +42,7 @@ import {
 } from '@nexus/toolkit';
 import { ArtifactService } from '../artifacts/artifact-service';
 import { FileService } from '../files/file-service';
+import { AttachmentService } from '../attachments/attachment-service';
 import { CheckpointService } from '../checkpoint/checkpoint-service';
 import type { SkillService } from '../skills/skill-service';
 import type { McpService } from '../mcp/mcp-service';
@@ -47,13 +53,23 @@ import {
   TOOL_OUTPUT_ARTIFACT_CHAR_LIMIT,
   TOOL_OUTPUT_PREVIEW_CHAR_LIMIT
 } from './context-service';
-import type { NexusEvent } from '@shared/events';
+import type { MessageAttachment, NexusEvent } from '@shared/events';
 import type {
   AgentProviderConfig,
   AgentRunInput,
-  AgentRunResult
+  AgentRunResult,
+  GeneralSettingsState
 } from '@shared/ipc/contracts';
 import { askUserInputSchema, type AskQuestion, type AskUserAnswer } from '@shared/ask-user';
+import {
+  generalSettingsToolDefinitions,
+  executeGeneralSettingsTool
+} from './general-settings-tools';
+import {
+  imageConfigToolDefinitions,
+  executeImageConfigTool,
+  sanitizeImageConfigInput
+} from './image-config-tools';
 import {
   appendEnvironmentContext,
   buildAgentSystemPrompt,
@@ -70,6 +86,7 @@ export type ProviderFactory = (config: AgentProviderConfig) => ChatProvider;
  */
 export interface AgentServiceOptions {
   fileBaseDir?: string;
+  attachmentBaseDir?: string;
   createProvider?: ProviderFactory;
   artifactBaseDir?: string;
   database?: DatabaseSync;
@@ -77,6 +94,7 @@ export interface AgentServiceOptions {
   mcp?: McpService;
   imageSettings?: () => Promise<ImageSettings | null>;
   searchSettings?: () => Promise<SearchSettings | null>;
+  generalSettings?: { onChange?: (state: GeneralSettingsState) => void };
 }
 
 export interface AgentRunHooks {
@@ -397,7 +415,8 @@ const savePdfToolDefinition: AgentToolDefinition = {
 
 const generateImageToolDefinition: AgentToolDefinition = {
   name: 'generate_image',
-  description: '使用设置中配置的图像模型生成图片，结果保存到输出文件目录。',
+  description:
+    '使用设置中配置的图像模型生成图片，结果会自动显示在会话中；不要在回复中重复输出图片 Markdown、fileId 或本地路径。',
   permission: 'network',
   requiresApproval: true,
   inputSchema: {
@@ -556,10 +575,14 @@ const PLAN_ALLOWED_TOOLS = new Set([
   'ask_user',
   'search_skills',
   'read_skill',
-  'read_skill_file'
+  'read_skill_file',
+  'image_config_list',
+  'image_config_get',
+  'general_settings_get'
 ]);
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const APP_MANAGEMENT_MIN_CONTEXT = 8_192;
 
 interface LoadedImage {
   image: ChatImage;
@@ -590,6 +613,112 @@ const loadImages = async (
   return images;
 };
 
+const ATTACHMENT_TOTAL_TEXT_BYTES = 30_000;
+const ATTACHMENT_EXTRACT_LIMIT_BYTES = 25 * 1024 * 1024;
+const IMAGE_ATTACHMENT_MIME = /^image\//i;
+const EXTRACTABLE_ATTACHMENT = /\.(pdf|docx|xlsx|pptx|zip|txt|md|json|csv|log|xml|ya?ml|html?|css|js|ts|tsx|jsx|py|java|go|rs|sql|sh)$/i;
+
+const escapeAttachmentAttr = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/\p{Cc}/gu, ' ');
+
+/**
+ * 把用户附件转换为视觉内容或受限文本；无法读取的二进制只保留元数据。
+ */
+const toAttachmentPrompt = (items: Array<{ name: string; mime: string; bytes: number; text?: string }>): string => {
+  if (!items.length) return '';
+  const blocks = items.map((item) => {
+    const header = `<attachment name="${escapeAttachmentAttr(item.name)}" mime="${escapeAttachmentAttr(item.mime)}" bytes="${item.bytes}">`;
+    const fallback =
+      item.text === undefined
+        ? '（二进制内容未注入上下文，仅保留文件元数据）'
+        : /\.pdf$/i.test(item.name)
+          ? '（PDF 没有可提取的文本层，可能是扫描件）'
+          : '（文件没有可提取的文本内容）';
+    const body = item.text?.trim() ? item.text : fallback;
+    return `${header}\n${body}\n</attachment>`;
+  });
+  return `\n\n${blocks.join('\n')}`;
+};
+
+interface LoadedAttachmentContext {
+  attachments: MessageAttachment[];
+  images: ChatImage[];
+  items: Array<{ name: string; mime: string; bytes: number; text?: string }>;
+  textBytes: number;
+}
+
+/**
+ * 读取一组附件：图片转视觉内容，文本/Office/PDF 抽取文本，其余保留元数据。
+ * textBudget 限制总文本字节，避免附件把上下文挤爆。
+ */
+const reportAttachmentIssue = (attachment: MessageAttachment, error: unknown): void => {
+  console.warn('[attachment] failed to load content', {
+    name: attachment.name,
+    mime: attachment.mime,
+    error: error instanceof Error ? error.message : String(error)
+  });
+};
+
+const loadAttachmentContext = async (
+  service: AttachmentService | undefined,
+  sessionId: string,
+  ids: readonly string[],
+  options: { imageLimit: number; textBudget: number }
+): Promise<LoadedAttachmentContext> => {
+  const attachments = ids
+    .map((id) => service?.get(id, sessionId))
+    .filter((attachment): attachment is MessageAttachment => Boolean(attachment));
+  const images: ChatImage[] = [];
+  const items: LoadedAttachmentContext['items'] = [];
+  let textBytes = 0;
+
+  for (const attachment of attachments) {
+    const imageMime = IMAGE_ATTACHMENT_MIME.test(attachment.mime)
+      ? attachment.mime
+      : imageMimeForName(attachment.name);
+    if (imageMime) {
+      if (attachment.bytes <= MAX_IMAGE_BYTES && images.length < options.imageLimit) {
+        try {
+          const stored = await service?.read(attachment.id, sessionId);
+          if (stored) {
+            images.push({ mimeType: imageMime, data: stored.base64 });
+            continue;
+          }
+        } catch (error) {
+          // 附件读取失败时退化为元数据，不能阻断本次消息，但必须留下诊断信息
+          reportAttachmentIssue(attachment, error);
+        }
+      }
+    }
+    if (
+      attachment.bytes <= ATTACHMENT_EXTRACT_LIMIT_BYTES &&
+      (attachment.mime.startsWith('text/') || EXTRACTABLE_ATTACHMENT.test(attachment.name))
+    ) {
+      const storedPath = service?.getStoredPath(attachment.id, sessionId);
+      const remaining = options.textBudget - textBytes;
+      if (storedPath && remaining > 0) {
+        try {
+          const extracted = await readTextFileOrExtract(storedPath, remaining);
+          const extractedBytes = Buffer.byteLength(extracted.output, 'utf8');
+          textBytes += extractedBytes;
+          items.push({ ...attachment, text: extracted.output });
+          continue;
+        } catch (error) {
+          // 二进制或损坏文件按元数据处理，但保留提取失败诊断
+          reportAttachmentIssue(attachment, error);
+        }
+      }
+    }
+    items.push(attachment);
+  }
+
+  return { attachments, images, items, textBytes };
+};
+
 export const createAgentProvider: ProviderFactory = (config) => {
   const shared = {
     baseUrl: config.baseUrl,
@@ -606,21 +735,25 @@ export class AgentService {
   private readonly createProvider: ProviderFactory;
   private readonly artifactBaseDir: string | undefined;
   private readonly fileBaseDir: string | undefined;
+  private readonly attachmentBaseDir: string | undefined;
   private readonly database: DatabaseSync | undefined;
   private readonly skills: SkillService | undefined;
   private readonly mcp: McpService | undefined;
   private readonly imageSettings: (() => Promise<ImageSettings | null>) | undefined;
   private readonly searchSettings: (() => Promise<SearchSettings | null>) | undefined;
+  private readonly generalSettings: { onChange?: (state: GeneralSettingsState) => void } | undefined;
 
   constructor(options: AgentServiceOptions = {}) {
     this.createProvider = options.createProvider ?? createAgentProvider;
     this.artifactBaseDir = options.artifactBaseDir;
     this.fileBaseDir = options.fileBaseDir;
+    this.attachmentBaseDir = options.attachmentBaseDir;
     this.database = options.database;
     this.skills = options.skills;
     this.mcp = options.mcp;
     this.imageSettings = options.imageSettings;
     this.searchSettings = options.searchSettings;
+    this.generalSettings = options.generalSettings;
   }
 
   /**
@@ -670,6 +803,12 @@ export class AgentService {
       let workspaceDenied = false;
 
       const executeTool = async (call: { id?: string; name: string; arguments: unknown }) => {
+        if (call.name.startsWith('general_settings_')) {
+          return executeGeneralSettingsTool(call.name, call.arguments, this.generalSettings);
+        }
+        if (call.name.startsWith('image_config_')) {
+          return executeImageConfigTool(call.name, call.arguments);
+        }
         if (call.name === 'ask_user') {
           const parsed = askUserInputSchema.safeParse(call.arguments);
           if (!parsed.success) {
@@ -1164,7 +1303,18 @@ export class AgentService {
               );
               saved.push(file);
             }
-            return { ok: true, output: JSON.stringify({ images: saved, prompt: args.prompt }) };
+            return {
+              ok: true,
+              output: JSON.stringify({
+                images: saved.map((file) => ({
+                  name: file.name,
+                  mime: file.mime,
+                  bytes: file.bytes
+                })),
+                prompt: args.prompt,
+                note: '图片已自动显示在会话中，请勿重复输出图片链接、fileId 或本地路径。'
+              })
+            };
           } catch (error) {
             return {
               ok: false,
@@ -1417,10 +1567,32 @@ export class AgentService {
           skillContext = `\n\n<skill name="${skill.name}">\n${skill.content.slice(0, 40_000)}\n</skill>`;
         }
       }
+      const attachmentService = this.database
+        ? new AttachmentService(this.database, this.attachmentBaseDir)
+        : undefined;
+      // 附件文本不能按固定上限硬塞给 4K/8K 模型，否则会直接超出上下文窗口
+      const attachmentTextBudget = Math.max(
+        1_000,
+        Math.min(ATTACHMENT_TOTAL_TEXT_BYTES, Math.floor(modelConfig.contextWindow * 1.5))
+      );
+      const currentAttachments = await loadAttachmentContext(
+        attachmentService,
+        input.sessionId,
+        input.attachmentIds ?? [],
+        {
+          imageLimit: Math.max(0, 4 - loadedImages.length),
+          textBudget: attachmentTextBudget
+        }
+      );
+      const selectedAttachments = currentAttachments.attachments;
+      const attachmentImages = currentAttachments.images;
+      const attachmentPromptItems = currentAttachments.items;
       const userMessage: ChatMessage = {
         role: 'user',
-        content: `${appendFileReferences(agentPrompt, input.references)}${skillContext}`,
-        ...(loadedImages.length ? { images: loadedImages.map((item) => item.image) } : {})
+        content: `${appendFileReferences(agentPrompt, input.references)}${skillContext}${toAttachmentPrompt(attachmentPromptItems)}`,
+        ...(loadedImages.length || attachmentImages.length
+          ? { images: [...loadedImages.map((item) => item.image), ...attachmentImages] }
+          : {})
       };
       if (shouldAddUserMessage) {
         eventBus.publish(
@@ -1434,6 +1606,7 @@ export class AgentService {
               role: 'user',
               content: input.prompt,
               ...(input.references?.length ? { references: input.references } : {}),
+              ...(selectedAttachments.length ? { attachments: selectedAttachments } : {}),
               ...(loadedImages.length ? { images: loadedImages.map((item) => item.reference) } : {})
             }
           })
@@ -1457,6 +1630,12 @@ export class AgentService {
         savePdfToolDefinition,
         ...(pexelsApiKey ? [searchImagesToolDefinition, searchVideosToolDefinition] : []),
         ...(imageConfigs.length ? [imageToolDefinition] : []),
+        ...(this.imageSettings && modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT
+          ? imageConfigToolDefinitions
+          : []),
+        ...(this.generalSettings && modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT
+          ? generalSettingsToolDefinitions
+          : []),
         ...(this.skills
           ? [
               searchSkillsToolDefinition,
@@ -1481,14 +1660,41 @@ export class AgentService {
         requiresApproval: definition.requiresApproval
       }));
 
+      // 历史轮次也从附件存储重新读取内容；图片和文本共享预算，避免多轮附件无限膨胀
+      const historyMessages: ChatMessage[] = [];
+      let historyImageBudget = 4;
+      let historyTextBudget = attachmentTextBudget;
+      for (const message of hooks.history ?? []) {
+        if (!message.attachmentIds?.length) {
+          historyMessages.push(message);
+          continue;
+        }
+        const loaded = await loadAttachmentContext(
+          attachmentService,
+          input.sessionId,
+          message.attachmentIds,
+          { imageLimit: historyImageBudget, textBudget: historyTextBudget }
+        );
+        historyImageBudget = Math.max(0, historyImageBudget - loaded.images.length);
+        historyTextBudget = Math.max(0, historyTextBudget - loaded.textBytes);
+        historyMessages.push({
+          ...message,
+          content: `${message.content}${toAttachmentPrompt(loaded.items)}`,
+          ...(loaded.images.length
+            ? { images: [...(message.images ?? []), ...loaded.images] }
+            : {})
+        });
+      }
       const conversationMessages = [
         modeMessage,
-        ...(hooks.history ?? []),
+        ...historyMessages,
         ...(shouldAddUserMessage ? [userMessage] : [])
       ];
+      const environmentRoots =
+        input.references?.length || input.imagePaths?.length ? input.rootPaths : [];
       const messages = appendEnvironmentContext(
         conversationMessages,
-        buildEnvironmentContext()
+        buildEnvironmentContext({ roots: environmentRoots })
       );
       const loop = new AgentLoop({
         provider,
@@ -1504,6 +1710,7 @@ export class AgentService {
         ),
         executeTool,
         prepareContext: (messages) => context.prepare(messages, tools),
+        sanitizeToolInput: (call) => sanitizeImageConfigInput(call.name, call.arguments),
         ...(hooks.approveTool ? { approveTool: hooks.approveTool } : {}),
         eventBus,
         ...(providerConfig.extraParams ? { extraParams: providerConfig.extraParams } : {}),

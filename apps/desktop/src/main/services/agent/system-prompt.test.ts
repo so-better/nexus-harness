@@ -47,13 +47,15 @@ describe('agent system prompt', () => {
     const context = buildEnvironmentContext({
       now: new Date('2026-11-20T12:34:00Z'),
       platform: 'darwin',
-      timeZone: 'Asia/Shanghai'
+      timeZone: 'Asia/Shanghai',
+      roots: ['/Users/lingkai/Desktop/my-codes']
     });
 
     expect(context).toContain('<environment>');
     expect(context).toContain('平台：macOS');
     expect(context).toContain('2026');
     expect(context).toContain('时区：Asia/Shanghai');
+    expect(context).toContain('授权目录：\n- /Users/lingkai/Desktop/my-codes');
     expect(context).toContain('</environment>');
     expect(estimateTextTokens(context)).toBeLessThan(100);
     expect(() => buildEnvironmentContext({ timeZone: '' })).not.toThrow();

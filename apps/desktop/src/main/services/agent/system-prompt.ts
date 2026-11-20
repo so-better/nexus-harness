@@ -59,6 +59,7 @@ export interface EnvironmentPromptOptions {
   now?: Date;
   platform?: NodeJS.Platform;
   timeZone?: string;
+  roots?: readonly string[];
 }
 
 /**
@@ -67,7 +68,8 @@ export interface EnvironmentPromptOptions {
 export const buildEnvironmentContext = ({
   now = new Date(),
   platform = process.platform,
-  timeZone
+  timeZone,
+  roots = []
 }: EnvironmentPromptOptions = {}): string => {
   const format = (zone: string | undefined): string =>
     new Intl.DateTimeFormat('zh-CN', {
@@ -91,6 +93,9 @@ export const buildEnvironmentContext = ({
     `平台：${PLATFORM_NAMES[platform] ?? platform}`,
     `当前时间：${formatted}`,
     `时区：${zone || '本地'}`,
+    ...(roots.length
+      ? ['授权目录：', ...roots.map((root) => `- ${root}`)]
+      : []),
     '</environment>'
   ].join('\n');
 };

@@ -91,13 +91,18 @@ const load = async (): Promise<void> => {
   try {
     const result = await readOutputFile(props.file.sessionId, props.file.id);
     if (current !== request) return;
-    const response = await fetch(`data:${props.file.mime};base64,${result.base64}`);
-    const blob = await response.blob();
-    if (current !== request) return;
-    objectUrl = URL.createObjectURL(blob);
-    src.value = objectUrl;
+    if (isVideo.value) {
+      const response = await fetch(`data:${props.file.mime};base64,${result.base64}`);
+      const blob = await response.blob();
+      if (current !== request) return;
+      objectUrl = URL.createObjectURL(blob);
+      src.value = objectUrl;
+    } else {
+      // 图片直接使用 data URL，避免 blob/fetch 在部分 CSP 或 IPC 场景下触发加载失败
+      src.value = `data:${props.file.mime};base64,${result.base64}`;
+    }
     unregisterDownload?.();
-    unregisterDownload = registerMediaDownload(objectUrl, () => saveAs(props.file));
+    unregisterDownload = registerMediaDownload(src.value, () => saveAs(props.file));
     status.value = 'ready';
   } catch (reason) {
     if (current !== request) return;

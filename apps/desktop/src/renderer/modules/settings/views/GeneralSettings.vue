@@ -76,7 +76,7 @@
  * 通用设置：语言、开机自启与版本信息。
  */
 
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import {
   NSelect,
   NSwitch,
@@ -90,6 +90,7 @@ import MediaSearchSettings from './MediaSearchSettings.vue';
 import {
   getAutoLaunch,
   getNotificationBadge,
+  onGeneralSettingsChanged,
   setAutoLaunch,
   setLanguage,
   setNotificationBadge
@@ -171,7 +172,20 @@ const changeLanguage = async (value: AppLanguage): Promise<void> => {
   }
 };
 
-onMounted(load);
+let unsubscribeSettings: (() => void) | undefined;
+
+onMounted(async () => {
+  await load();
+  unsubscribeSettings = onGeneralSettingsChanged((state) => {
+    autoLaunch.value = state.autoLaunch;
+    badgeStyle.value = state.notificationBadge;
+    setLocale(state.language);
+  });
+});
+
+onBeforeUnmount(() => {
+  unsubscribeSettings?.();
+});
 </script>
 
 <style scoped lang="less">

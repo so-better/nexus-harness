@@ -21,6 +21,15 @@ export const searchWorkspaceFiles = async (
   unwrap(await nexus.workspace.searchFiles({ sessionId, query, limit: 20 }));
 
 /**
+ * 读取工作区图片用于缩略图；主进程会重新校验 root、敏感路径与大小。
+ */
+export const readWorkspaceImage = async (
+  sessionId: string,
+  path: string
+): Promise<{ mime: string; base64: string }> =>
+  unwrap(await nexus.workspace.readImage({ sessionId, path }));
+
+/**
  * 订阅主进程发起的目录授权请求。
  */
 export const onWorkspaceAuthorization = (

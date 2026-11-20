@@ -49,6 +49,7 @@
       :models="models"
       :mode="mode"
       :session-id="session?.id"
+      :ensure-session="ensureSession"
       :provider-id="providerId"
       :model-id="modelId"
       @choose-root="emit('choose-root')"
@@ -57,7 +58,7 @@
       @update-model="emit('update-model', $event)"
       @update-mode="emit('update-mode', $event)"
       @open-settings="emit('open-settings')"
-      @send="(prompt, images, references) => emit('send', prompt, images, references)"
+      @send="(prompt, images, references, attachmentIds) => emit('send', prompt, images, references, attachmentIds)"
       @stop="emit('stop')"
     />
 
@@ -77,7 +78,8 @@
         @approve="emit('approve', $event)"
         @reject="emit('reject', $event)"
         @edit-message="
-          (messageId, content, references) => emit('edit-message', messageId, content, references)
+          (messageId, content, references, attachmentIds) =>
+            emit('edit-message', messageId, content, references, attachmentIds)
         "
         @regenerate-message="(messageId) => emit('regenerate-message', messageId)"
         @request-root="emit('request-root')"
@@ -119,6 +121,7 @@
           :models="models"
           :mode="mode"
           :session-id="session?.id"
+          :ensure-session="ensureSession"
           :usage="projection.usage"
           :provider-id="providerId"
           :model-id="modelId"
@@ -127,7 +130,7 @@
           @update-provider="emit('update-provider', $event)"
           @update-model="emit('update-model', $event)"
           @update-mode="emit('update-mode', $event)"
-          @send="(prompt, images, references) => emit('send', prompt, images, references)"
+          @send="(prompt, images, references, attachmentIds) => emit('send', prompt, images, references, attachmentIds)"
           @stop="emit('stop')"
         />
       </div>
@@ -178,6 +181,7 @@ const props = defineProps<{
   focusSessionId?: string | undefined;
   exporting?: boolean | undefined;
   workspaceAuth?: WorkspaceAuthorizationRequest | null | undefined;
+  ensureSession: () => Promise<string | undefined>;
 }>();
 
 const emit = defineEmits<{
@@ -187,12 +191,17 @@ const emit = defineEmits<{
   'update-model': [id: string];
   'update-mode': [mode: AgentMode];
   'open-settings': [];
-  send: [prompt: string, imagePaths?: string[], references?: MessageFileReference[]];
+  send: [prompt: string, imagePaths?: string[], references?: MessageFileReference[], attachmentIds?: string[]];
   stop: [];
   approve: [approvalId: string];
   reject: [approvalId: string];
   'answer-user': [requestId: string, answers: AskUserAnswer[] | undefined];
-  'edit-message': [messageId: string, content: string, references?: MessageFileReference[]];
+  'edit-message': [
+    messageId: string,
+    content: string,
+    references?: MessageFileReference[],
+    attachmentIds?: string[]
+  ];
   'regenerate-message': [messageId: string];
   'request-root': [];
   'allow-workspace': [];

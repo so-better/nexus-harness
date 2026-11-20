@@ -3,7 +3,11 @@
  */
 
 import { z } from 'zod';
-import { messageFileReferenceSchema, type NexusEvent } from '../events';
+import {
+  messageFileReferenceSchema,
+  type MessageAttachment,
+  type NexusEvent
+} from '../events';
 import type { AskUserResolveInput, AskUserResolveResult } from '../ask-user';
 import type {
   PluginPublic,
@@ -137,8 +141,14 @@ export type ProviderTestInput = z.infer<typeof providerTestInputSchema>;
 export type Unsubscribe = () => void;
 
 /**
- * preload 暴露到 window.nexus 的桥接接口。
+ * 通用设置快照，供 Agent 管理与渲染层同步。
  */
+export interface GeneralSettingsState {
+  language: AppLanguage;
+  autoLaunch: boolean;
+  notificationBadge: NotificationBadgeStyle;
+}
+
 /**
  * 数据迁移备份导出结果。
  */
@@ -154,11 +164,17 @@ export interface BackupImportResult {
   restartRequired: true;
 }
 
+/**
+ * 数据迁移备份状态。
+ */
 export interface BackupStatus {
   pendingRestore: boolean;
   lastExportPath?: string;
 }
 
+/**
+ * preload 暴露到 window.nexus 的桥接接口。
+ */
 export interface NexusBridge {
   app: {
     getInfo: () => Promise<Result<AppInfo>>;
@@ -198,6 +214,7 @@ export interface NexusBridge {
     exportBackup: () => Promise<Result<BackupExportResult | null>>;
     importBackup: () => Promise<Result<BackupImportResult | null>>;
     backupStatus: () => Promise<Result<BackupStatus>>;
+    onGeneralChanged: (handler: (state: GeneralSettingsState) => void) => Unsubscribe;
   };
   cache: {
     getInfo: () => Promise<Result<CacheInfo>>;
@@ -239,6 +256,11 @@ export interface NexusBridge {
     meta: (input: ArtifactReadInput) => Promise<Result<ArtifactMetaResult>>;
     saveAs: (input: ArtifactSaveAsInput) => Promise<Result<ArtifactSaveAsResult>>;
   };
+  attachments: {
+    upload: (input: z.infer<typeof attachmentUploadInputSchema>) => Promise<Result<MessageAttachment>>;
+    remove: (input: z.infer<typeof attachmentRemoveInputSchema>) => Promise<Result<{ removed: boolean }>>;
+    read: (input: AttachmentReadInput) => Promise<Result<AttachmentPreviewResult>>;
+  };
   files: {
     saveAs: (input: FileSaveAsInput) => Promise<Result<FileSaveAsResult>>;
     read: (input: FileReadInput) => Promise<Result<FileReadResult>>;
@@ -246,6 +268,7 @@ export interface NexusBridge {
   workspace: {
     chooseRoot: (input?: WorkspaceChooseRootInput) => Promise<Result<WorkspaceRootSelection>>;
     searchFiles: (input: WorkspaceFileSearchInput) => Promise<Result<WorkspaceFileReference[]>>;
+    readImage: (input: WorkspaceImageReadInput) => Promise<Result<WorkspaceImagePreviewResult>>;
     onAuthorizationRequested: (
       handler: (request: WorkspaceAuthorizationRequest) => void
     ) => Unsubscribe;
@@ -429,7 +452,8 @@ export const agentRunInputSchema = z.object({
   regenerateMessageId: z.string().min(1).optional(),
   maxSteps: z.number().int().positive().max(50).optional(),
   imagePaths: z.array(z.string().min(1)).max(4).optional(),
-  references: z.array(messageFileReferenceSchema).max(64).optional()
+  references: z.array(messageFileReferenceSchema).max(64).optional(),
+  attachmentIds: z.array(z.string().min(1)).max(8).optional()
 });
 
 export const agentStartResultSchema = z.object({ runId: z.string().min(1) });
@@ -613,7 +637,8 @@ export const workspaceFileReferenceSchema = z.object({
   root: z.string().min(1),
   relativePath: z.string().min(1),
   name: z.string().min(1),
-  isImage: z.boolean()
+  isImage: z.boolean(),
+  bytes: z.number().nonnegative().optional()
 });
 
 export const workspaceAuthorizationRequestSchema = z.object({
@@ -647,6 +672,18 @@ export const workspaceFileSearchInputSchema = z.object({
 
 export type WorkspaceFileReference = z.infer<typeof workspaceFileReferenceSchema>;
 export type WorkspaceFileSearchInput = z.infer<typeof workspaceFileSearchInputSchema>;
+export const workspaceImageReadInputSchema = z.object({
+  sessionId: z.string().min(1),
+  path: z.string().min(1)
+});
+
+export interface WorkspaceImagePreviewResult {
+  mime: string;
+  base64: string;
+}
+
+export type WorkspaceImageReadInput = z.infer<typeof workspaceImageReadInputSchema>;
+
 
 export const outputFileSchema = z.object({
   id: z.string().min(1),
@@ -658,6 +695,36 @@ export const outputFileSchema = z.object({
   source: z.enum(['generated', 'downloaded']),
   createdAt: z.number().nonnegative()
 });
+
+// 50MB 文件转 Base64 后约 69.9M 字符；先限制编码长度，避免在主进程解码超大字符串
+export const MAX_ATTACHMENT_BASE64_LENGTH = 70_000_000;
+
+export const attachmentUploadInputSchema = z.object({
+  sessionId: z.string().min(1),
+  name: z.string().min(1).max(200),
+  mime: z.string().min(1).max(200).optional(),
+  base64: z.string().min(1).max(MAX_ATTACHMENT_BASE64_LENGTH)
+});
+
+export const attachmentRemoveInputSchema = z.object({
+  sessionId: z.string().min(1),
+  attachmentId: z.string().min(1)
+});
+export const attachmentReadInputSchema = z.object({
+  sessionId: z.string().min(1),
+  attachmentId: z.string().min(1)
+});
+
+export interface AttachmentReadInput {
+  sessionId: string;
+  attachmentId: string;
+}
+
+export interface AttachmentPreviewResult {
+  mime: string;
+  base64: string;
+}
+
 
 export const fileSaveAsInputSchema = z.object({
   sessionId: z.string().min(1),

@@ -10,6 +10,17 @@
     </div>
     <div class="nh-composer__send-group">
       <AgentModeSelect :mode="mode" :disabled="running" @update-mode="emit('update-mode', $event)" />
+      <NButton
+        type="primary"
+        tertiary
+        attr-type="button"
+        :disabled="!canAttach"
+        :title="t('chat.attachmentAdd')"
+        @click="emit('attach')"
+      >
+        <template #icon><AppIcon name="upload" :size="14" /></template>
+        {{ t('chat.attachmentAdd') }}
+      </NButton>
       <NButton v-if="running" type="error" secondary @click="emit('stop')">
         <template #icon>
           <AppIcon name="stop" />
@@ -44,9 +55,10 @@ defineProps<{
   mode: AgentMode;
   canSend: boolean;
   canReference: boolean;
+  canAttach: boolean;
 }>();
 
-const emit = defineEmits<{ stop: []; 'update-mode': [mode: AgentMode] }>();
+const emit = defineEmits<{ stop: []; attach: []; 'update-mode': [mode: AgentMode] }>();
 </script>
 
 <style scoped lang="less">

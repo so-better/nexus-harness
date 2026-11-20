@@ -14,19 +14,21 @@
         :actions-disabled="actionsDisabled"
         :workspace-auth="workspaceAuth ?? null"
         :workspace-auth-tool-exists="workspaceAuthToolExists"
+        :run-thinking="message.id === thinkingTargetId"
         @content-growth="handleContentGrowth"
         @answer-user="(requestId, answers) => emit('answer-user', requestId, answers)"
         @approve="emit('approve', $event)"
         @reject="emit('reject', $event)"
         @edit-message="
-          (content, references) => emit('edit-message', message.id, content, references)
+          (content, references, attachmentIds) =>
+            emit('edit-message', message.id, content, references, attachmentIds)
         "
         @regenerate-message="emit('regenerate-message', message.id)"
         @request-root="emit('request-root')"
         @allow-workspace="emit('allow-workspace')"
         @reject-workspace="emit('reject-workspace')"
       />
-      <ThinkingIndicator v-if="showThinking" />
+      <RunThinkingMessage v-if="showThinking && !thinkingTargetId" />
     </div>
   </div>
 </template>
@@ -44,13 +46,18 @@ import { shouldShowRunThinking } from '../agent-generation';
 import type { WorkspaceAuthorizationRequest } from '@shared/ipc/contracts';
 import type { ChatApproval, ChatAskUser, ChatMessageView } from '../types';
 import ChatMessageItem from './ChatMessageItem.vue';
-import ThinkingIndicator from './ThinkingIndicator.vue';
+import RunThinkingMessage from './RunThinkingMessage.vue';
 
 const emit = defineEmits<{
   'answer-user': [requestId: string, answers: AskUserAnswer[] | undefined];
   approve: [approvalId: string];
   reject: [approvalId: string];
-  'edit-message': [messageId: string, content: string, references?: MessageFileReference[]];
+  'edit-message': [
+    messageId: string,
+    content: string,
+    references?: MessageFileReference[],
+    attachmentIds?: string[]
+  ];
   'regenerate-message': [messageId: string];
   'request-root': [];
   'allow-workspace': [];
@@ -87,6 +94,11 @@ const lastAssistantId = computed(
 const showThinking = computed(() =>
   shouldShowRunThinking(Boolean(props.thinking), props.messages)
 );
+const thinkingTargetId = computed(() => {
+  if (!showThinking.value) return undefined;
+  const last = props.messages.at(-1);
+  return last?.role === 'assistant' ? last.id : undefined;
+});
 
 /**
  * 按投影给出的 messageId 关联提问，同一消息保留全部提问。

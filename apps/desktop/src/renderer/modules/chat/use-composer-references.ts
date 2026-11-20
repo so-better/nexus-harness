@@ -16,7 +16,13 @@ interface ComposerReferenceOptions {
   sessionId: Ref<string | undefined>;
   disabled: Ref<boolean>;
   running: Ref<boolean>;
-  send: (prompt: string, imagePaths?: string[], references?: MessageFileReference[]) => void;
+  hasAttachments: Ref<boolean>;
+  send: (
+    prompt: string,
+    imagePaths?: string[],
+    references?: MessageFileReference[],
+    attachmentIds?: string[]
+  ) => void;
 }
 
 export const useComposerReferences = (options: ComposerReferenceOptions) => {
@@ -55,7 +61,7 @@ export const useComposerReferences = (options: ComposerReferenceOptions) => {
   const send = (): void => {
     const prompt = options.draft.value.trim();
     if (
-      (!prompt && !selectedReferences.value.length) ||
+      (!prompt && !selectedReferences.value.length && !options.hasAttachments.value) ||
       options.disabled.value ||
       options.running.value
     )
@@ -65,7 +71,8 @@ export const useComposerReferences = (options: ComposerReferenceOptions) => {
       .map((file) => file.path);
     const references = selectedReferences.value.map((file) => ({
       path: file.path,
-      name: file.name
+      name: file.name,
+      ...(file.bytes !== undefined ? { bytes: file.bytes } : {})
     }));
     selectedReferences.value = [];
     options.draft.value = '';

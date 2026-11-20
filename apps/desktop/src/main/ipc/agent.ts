@@ -34,6 +34,7 @@ import { generateSessionTitle } from '../services/session/session-title';
 import { getPluginHost } from '../services/plugins/plugin-host-instance';
 import { notifyAgentEvent } from '../services/notifications/notification-service';
 import { SessionHistoryService } from '../services/session/session-history';
+import { AttachmentService } from '../services/attachments/attachment-service';
 import { loadImageSettings } from '../services/settings/image-settings';
 import { loadSearchSettings } from '../services/settings/search-settings';
 import {
@@ -90,12 +91,20 @@ export const registerAgentIpc = (): void => {
   const sessions = new SessionService(db, events);
   const runs = new RunStore(db);
   const history = new SessionHistoryService(events);
+  const attachments = new AttachmentService(db);
   const agentService = new AgentService({
     database: db,
     skills: new SkillService(),
     mcp: getMcpService(),
     imageSettings: loadImageSettings,
-    searchSettings: loadSearchSettings
+    searchSettings: loadSearchSettings,
+    generalSettings: {
+      onChange: (state) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+          window.webContents.send(IPC_CHANNELS.settingsGeneralChanged, state);
+        }
+      }
+    }
   });
 
   const broadcastSession = (session: SessionSummary): void => {
@@ -200,7 +209,16 @@ export const registerAgentIpc = (): void => {
                 payload: {
                   messageId: branchMessageId,
                   content: parsed.data.prompt,
-                  ...(parsed.data.references?.length ? { references: parsed.data.references } : {})
+                  ...(parsed.data.references?.length ? { references: parsed.data.references } : {}),
+                  ...(parsed.data.attachmentIds?.length
+                    ? {
+                        attachments: parsed.data.attachmentIds
+                          .map((id) => attachments.get(id, session.id))
+                          .filter((attachment): attachment is NonNullable<typeof attachment> =>
+                            Boolean(attachment)
+                          )
+                      }
+                    : {})
                 }
               })
             );

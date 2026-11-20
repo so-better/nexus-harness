@@ -21,6 +21,7 @@ import type {
   ThemeSource
 } from '@shared/ipc/contracts';
 import { unwrap } from '@/app/ipc';
+import type { GeneralSettingsState } from '@shared/ipc/contracts';
 
 /**
  * 读取应用版本信息。
@@ -53,7 +54,8 @@ export const getImageSettings = async (): Promise<ImageSettings | null> =>
   unwrap(await nexus.settings.getImage());
 
 export const setImageSettings = async (value: ImageSettings): Promise<ImageSettings> =>
-  unwrap(await nexus.settings.setImage(value));
+  // Vue 的响应式配置是 Proxy，直接传 IPC 会抛 "An object could not be cloned"
+  unwrap(await nexus.settings.setImage(JSON.parse(JSON.stringify(value)) as ImageSettings));
 
 export const getSearchSettings = async (): Promise<SearchSettings | null> =>
   unwrap(await nexus.settings.getSearch());
@@ -134,6 +136,11 @@ export const importBackup = async (): Promise<BackupImportResult | null> =>
 
 export const getBackupStatus = async (): Promise<BackupStatus> =>
   unwrap(await nexus.settings.backupStatus());
+
+export const onGeneralSettingsChanged = (
+  handler: (state: GeneralSettingsState) => void
+): (() => void) =>
+  nexus.settings.onGeneralChanged(handler);
 
 import type {
   NotificationBadgeStyle,

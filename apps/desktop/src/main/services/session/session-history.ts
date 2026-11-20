@@ -98,7 +98,10 @@ export class SessionHistoryService {
           const images = loadHistoryImages(payload.images);
           messages.push({
             role: 'user',
-            content: appendFileReferences(payload.content, payload.references),
+            content: `${appendFileReferences(payload.content, payload.references)}${payload.attachments?.length ? `\n\n${payload.attachments.map((item) => `[附件] ${item.name}`).join('\n')}` : ''}`,
+            ...(payload.attachments?.length
+              ? { attachmentIds: payload.attachments.map((item) => item.id) }
+              : {}),
             ...(images.length ? { images } : {})
           });
           lastAssistant = undefined;

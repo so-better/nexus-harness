@@ -251,6 +251,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
         if (event.runId) existing.runId = event.runId;
         attachUsage(payload.messageId);
         if (payload.references?.length) existing.references = payload.references;
+        if (payload.attachments?.length) existing.attachments = payload.attachments;
         lastAssistant = payload.role === 'assistant' ? existing : undefined;
       } else {
         const timeline: ChatTimelineSegment[] = [
@@ -284,6 +285,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
           files: [],
           timeline,
           ...(payload.references?.length ? { references: payload.references } : {}),
+          ...(payload.attachments?.length ? { attachments: payload.attachments } : {}),
           ...(event.runId ? { runId: event.runId } : {})
         };
         if (payload.error) pendingFailure = undefined;

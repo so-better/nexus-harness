@@ -10,6 +10,7 @@
     message.streaming ||
     timeline.length ||
     message.references?.length ||
+    message.attachments?.length ||
     toolEntries.length ||
     askUsers.length ||
     message.files?.length ||
@@ -25,6 +26,7 @@
         message.streaming ||
         timeline.length ||
         message.references?.length ||
+        message.attachments?.length ||
         toolEntries.length ||
         askUsers.length ||
         message.files?.length ||
@@ -34,15 +36,27 @@
           toolEntries.length > 0 || askUsers.some((ask) => ask.status === 'pending'),
         'nh-message__bubble--interruption': hasInterruption && !contentText && !timeline.length,
         'nh-message__bubble--editing': editing
-      }">
+      }" @dragover.prevent @drop.prevent="onEditDrop">
         <template v-if="editing">
-          <div v-if="editingReferences.length" class="nh-message__edit-files">
+          <div
+            v-if="editingReferences.length || editingAttachments.length"
+            class="nh-message__edit-files"
+          >
             <UserFileChip
               v-for="file in editingReferences"
               :key="file.path"
               :file="file"
+              :session-id="sessionId"
+              :is-image="isImageFile(file.name)"
               removable
               @remove="removeEditingReference(file.path)"
+            />
+            <AttachmentChip
+              v-for="attachment in editingAttachments"
+              :key="attachment.id"
+              :attachment="attachment"
+              removable
+              @remove="removeEditingAttachment(attachment)"
             />
           </div>
           <NPopover
@@ -59,6 +73,7 @@
                 type="textarea"
                 :autosize="{ minRows: 2, maxRows: 6 }"
                 @keydown="onEditKeydown"
+                @paste="onEditPaste"
                 @blur="onEditBlur"
               />
             </template>
@@ -85,7 +100,7 @@
               size="small"
               type="primary"
               secondary
-              :disabled="!draft.trim() && !editingReferences.length"
+              :disabled="(!draft.trim() && !editingReferences.length && !editingAttachments.length) || editingUploading"
               @click="saveEdit"
             >
               {{ t('app.send') }}
@@ -222,8 +237,13 @@
         </template>
 
         <template v-else>
-          <UserMessageContent v-if="message.content || message.references?.length" :content="message.content"
-            :references="message.references" />
+          <UserMessageContent
+            v-if="message.content || message.references?.length || message.attachments?.length"
+            :content="message.content"
+            :references="message.references"
+            :attachments="message.attachments"
+            :session-id="sessionId"
+          />
           <PluginSlot location="message.user.footer" :context="{
             location: 'message.user.footer',
             sessionId,
@@ -284,7 +304,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { NButton, NInput, NPopover, useMessage, type InputInst } from 'naive-ui';
 import { t } from '@/app/i18n';
 import type { AskUserAnswer } from '@shared/ask-user';
-import type { MessageFileReference } from '@shared/events';
+import type { MessageAttachment, MessageFileReference } from '@shared/events';
+import { isImageFile } from '@shared/files';
 import type { ChatApproval, ChatAskUser, ChatMessageView, ChatToolCall } from '../types';
 import type {
   OutputFile,
@@ -299,6 +320,7 @@ import InlineMediaFile from './InlineMediaFile.vue';
 import ToolCallCard from './ToolCallCard.vue';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import UserMessageContent from './UserMessageContent.vue';
+import AttachmentChip from './AttachmentChip.vue';
 import UserFileChip from './UserFileChip.vue';
 import ThinkingIndicator from './ThinkingIndicator.vue';
 import MarkdownSegments from '../render/MarkdownSegments.vue';
@@ -307,6 +329,8 @@ import WorkspaceAuthCard from './WorkspaceAuthCard.vue';
 import ComposerFileReference from './ComposerFileReference.vue';
 import SkillPalette from './SkillPalette.vue';
 import { splitUserMessageReferences } from '../message-references';
+import { filesFromClipboard } from '../clipboard-files';
+import { useComposerAttachments } from '../use-composer-attachments';
 import { useFileReference } from '../use-file-reference';
 import { useSkillPalette } from '../use-skill-palette';
 import { buildToolEntries, unmatchedAskUsers } from '../ask-tool-entries';
@@ -325,6 +349,7 @@ const props = withDefaults(
     actionsDisabled?: boolean;
     workspaceAuth?: WorkspaceAuthorizationRequest | null;
     workspaceAuthToolExists?: boolean;
+    runThinking?: boolean;
   }>(),
   {
     grouped: false,
@@ -335,7 +360,8 @@ const props = withDefaults(
     isLastAssistant: false,
     actionsDisabled: false,
     workspaceAuth: null,
-    workspaceAuthToolExists: false
+    workspaceAuthToolExists: false,
+    runThinking: false
   }
 );
 
@@ -344,7 +370,11 @@ const emit = defineEmits<{
   'answer-user': [requestId: string, answers: AskUserAnswer[] | undefined];
   approve: [approvalId: string];
   reject: [approvalId: string];
-  'edit-message': [content: string, references?: MessageFileReference[]];
+  'edit-message': [
+    content: string,
+    references?: MessageFileReference[],
+    attachmentIds?: string[]
+  ];
   'regenerate-message': [];
   'request-root': [];
   'allow-workspace': [];
@@ -382,6 +412,36 @@ const editFileReference = useFileReference({
   toggleMode: () => undefined
 });
 const editSkillPalette = useSkillPalette(draft, editInput);
+const {
+  attachments: editingAttachments,
+  uploading: editingUploading,
+  addFiles: addEditingFiles,
+  remove: deleteEditingAttachment,
+  detach: detachEditingAttachment,
+  clear: clearEditingAttachmentList,
+  setAttachments: setEditingAttachmentList
+} = useComposerAttachments({
+  sessionId: computed(() => props.sessionId),
+  ensureSession: async () => props.sessionId,
+  disabled: computed(() => props.actionsDisabled),
+  running: computed(() => props.actionsDisabled)
+});
+
+// 编辑态已存在的附件只能从本次编辑中移除，不能立即删文件；取消编辑后原消息仍需可回放
+const existingAttachmentIds = ref<string[]>([]);
+
+const removeEditingAttachment = (attachment: MessageAttachment): void => {
+  if (existingAttachmentIds.value.includes(attachment.id)) {
+    detachEditingAttachment(attachment.id);
+    return;
+  }
+  void deleteEditingAttachment(attachment);
+};
+
+const clearEditingAttachments = (): void => {
+  existingAttachmentIds.value = [];
+  clearEditingAttachmentList();
+};
 
 const {
   references: editFileCandidates,
@@ -406,6 +466,26 @@ const {
 const onEditBlur = (): void => {
   closeEditReferences();
   editSkillOpen.value = false;
+};
+
+/**
+ * 编辑态粘贴、选择或拖入附件，与主输入区共用同一上传逻辑。
+ */
+const onEditPaste = (event: ClipboardEvent): void => {
+  const files = filesFromClipboard(event.clipboardData);
+  if (!files.length) return;
+  event.preventDefault();
+  void addEditingFiles(files);
+};
+
+
+const onEditDrop = (event: DragEvent): void => {
+  if (!editing.value) return;
+  const files = [...(event.dataTransfer?.files ?? [])];
+  if (files.length) {
+    event.preventDefault();
+    void addEditingFiles(files);
+  }
 };
 
 /**
@@ -489,6 +569,9 @@ const startEdit = async (): Promise<void> => {
   editingReferences.value = props.message.references?.length
     ? props.message.references
     : parts.references;
+  const initialAttachments = props.message.attachments ?? [];
+  existingAttachmentIds.value = initialAttachments.map((attachment) => attachment.id);
+  setEditingAttachmentList(initialAttachments);
   editing.value = true;
   await nextTick();
   editInput.value?.focus();
@@ -505,14 +588,19 @@ const startEdit = async (): Promise<void> => {
  */
 const saveEdit = (): void => {
   const content = draft.value.trim();
-  if (!content && !editingReferences.value.length) return;
+  if (editingUploading.value) return;
+  if (!content && !editingReferences.value.length && !editingAttachments.value.length) return;
   editing.value = false;
   emit(
     'edit-message',
     content,
-    editingReferences.value.length ? editingReferences.value : undefined
+    editingReferences.value.length ? editingReferences.value : undefined,
+    editingAttachments.value.length
+      ? editingAttachments.value.map((attachment) => attachment.id)
+      : undefined
   );
   editingReferences.value = [];
+  clearEditingAttachments();
 };
 
 /**
@@ -522,6 +610,7 @@ const cancelEdit = (): void => {
   editing.value = false;
   draft.value = '';
   editingReferences.value = [];
+  clearEditingAttachments();
 };
 
 /**
@@ -640,13 +729,15 @@ const isTyping = computed(() =>
     content: props.message.content
   })
 );
-const showThinking = computed(() =>
-  shouldShowMessageThinking({
-    isTyping: isTyping.value,
-    hasInterruption: hasInterruption.value,
-    hasPendingAsk: hasPendingAsk.value,
-    hasStreamingText: hasStreamingText(props.message, isTyping.value)
-  })
+const showThinking = computed(
+  () =>
+    Boolean(props.runThinking) ||
+    shouldShowMessageThinking({
+      isTyping: isTyping.value,
+      hasInterruption: hasInterruption.value,
+      hasPendingAsk: hasPendingAsk.value,
+      hasStreamingText: hasStreamingText(props.message, isTyping.value)
+    })
 );
 watch(
   () => props.message.content,
@@ -882,4 +973,5 @@ const timeLabel = computed(() =>
   border-radius: 50%;
   background: var(--nh-color-warning);
 }
+
 </style>

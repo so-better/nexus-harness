@@ -1,11 +1,19 @@
 <template>
-  <form class="nh-composer" :class="{ 'nh-composer--hero': hero }" @submit.prevent="submit">
+  <form
+    class="nh-composer"
+    :class="{ 'nh-composer--hero': hero }"
+    @submit.prevent="submit"
+    @dragover.prevent
+    @drop.prevent="onDrop"
+  >
     <div class="nh-composer__toolbar">
-      <ComposerRootPicker
-        :roots="roots"
-        @choose-root="emit('choose-root')"
-        @remove-root="emit('remove-root', $event)"
-      />
+      <div class="nh-composer__toolbar-left">
+        <ComposerRootPicker
+          :roots="roots"
+          @choose-root="emit('choose-root')"
+          @remove-root="emit('remove-root', $event)"
+        />
+      </div>
       <div class="nh-composer__toolbar-right">
         <PluginSlot
           v-if="sessionId"
@@ -45,6 +53,7 @@
           :placeholder="placeholder"
           :disabled="disabled || running"
           @keydown="onComposerKeydown"
+          @paste="onPaste"
           @blur="onInputBlur"
         />
       </template>
@@ -63,19 +72,35 @@
         @select="selectReference"
       />
     </NPopover>
-    <ComposerFileChips :files="selectedReferences" @remove="removeReference" />
+    <ComposerFileChips
+      :files="selectedReferences"
+      :attachments="attachments"
+      :session-id="sessionId"
+      @remove="removeReference"
+      @remove-attachment="remove"
+    />
     <PluginSlot
       v-if="sessionId"
       location="composer.footer"
       :context="{ location: 'composer.footer', sessionId, usage }"
+    />
+    <input
+      ref="fileInput"
+      class="nh-composer__file-input"
+      type="file"
+      multiple
+      :disabled="disabled || running || uploading"
+      @change="onFilePick"
     />
     <ComposerActions
       :disabled="disabled"
       :disabled-reason="disabledReason"
       :running="running"
       :mode="mode"
-      :can-send="Boolean(draft.trim() || selectedReferences.length)"
+      :can-send="Boolean(draft.trim() || selectedReferences.length || hasAttachments) && !uploading"
       :can-reference="roots.length > 0"
+      :can-attach="!disabled && !running && !uploading"
+      @attach="fileInput?.click()"
       @stop="emit('stop')"
       @update-mode="emit('update-mode', $event)"
     />
@@ -92,6 +117,8 @@ import { NInput, NPopover, type InputInst } from 'naive-ui';
 import type { MessageFileReference } from '@shared/events';
 import type { AgentMode, ProviderModel, ProviderPublic, SessionRoot } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
+import { filesFromClipboard } from '../clipboard-files';
+import { useComposerAttachments } from '../use-composer-attachments';
 import { useComposerReferences } from '../use-composer-references';
 import { useFileReference } from '../use-file-reference';
 import ComposerActions from './ComposerActions.vue';
@@ -113,6 +140,7 @@ const props = defineProps<{
   models: ProviderModel[];
   mode: AgentMode;
   sessionId?: string | undefined;
+  ensureSession: () => Promise<string | undefined>;
   usage?: ChatUsage | undefined;
   providerId?: string | undefined;
   modelId?: string | undefined;
@@ -120,7 +148,12 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  send: [prompt: string, imagePaths?: string[], references?: MessageFileReference[]];
+  send: [
+    prompt: string,
+    imagePaths?: string[],
+    references?: MessageFileReference[],
+    attachmentIds?: string[]
+  ];
   stop: [];
   'choose-root': [];
   'remove-root': [rootId: string];
@@ -132,7 +165,15 @@ const emit = defineEmits<{
 
 const draft = ref('');
 const inputRef = ref<InputInst | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
 const placeholder = computed(() => t('chat.composerPlaceholder'));
+
+const { attachments, uploading, hasAttachments, addFiles, remove, clear } = useComposerAttachments({
+  sessionId: computed(() => props.sessionId),
+  ensureSession: props.ensureSession,
+  disabled: computed(() => props.disabled),
+  running: computed(() => props.running)
+});
 
 const {
   open: skillOpen,
@@ -156,7 +197,17 @@ const { selectedReferences, addReference, removeReference, send } = useComposerR
   sessionId: computed(() => props.sessionId),
   disabled: computed(() => props.disabled),
   running: computed(() => props.running),
-  send: (prompt, imagePaths, references) => emit('send', prompt, imagePaths, references)
+  hasAttachments,
+  send: (prompt, imagePaths, references) => {
+    emit(
+      'send',
+      prompt,
+      imagePaths,
+      references,
+      attachments.value.map((attachment) => attachment.id)
+    );
+    clear();
+  }
 });
 
 /**
@@ -165,6 +216,28 @@ const { selectedReferences, addReference, removeReference, send } = useComposerR
 const submit = (): void => {
   closeReferences();
   send();
+};
+
+/**
+ * 处理文件选择、粘贴与拖拽上传。
+ */
+const onFilePick = (event: Event): void => {
+  const input = event.target as HTMLInputElement;
+  const files = [...(input.files ?? [])];
+  input.value = '';
+  void addFiles(files);
+};
+
+const onPaste = (event: ClipboardEvent): void => {
+  const files = filesFromClipboard(event.clipboardData);
+  if (!files.length) return;
+  event.preventDefault();
+  void addFiles(files);
+};
+
+const onDrop = (event: DragEvent): void => {
+  const files = [...(event.dataTransfer?.files ?? [])];
+  if (files.length) void addFiles(files);
 };
 
 /**
@@ -253,6 +326,17 @@ const {
   min-width: 0;
   align-items: center;
   gap: 8px;
+}
+
+.nh-composer__toolbar-left {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+}
+
+.nh-composer__file-input {
+  display: none;
 }
 
 </style>

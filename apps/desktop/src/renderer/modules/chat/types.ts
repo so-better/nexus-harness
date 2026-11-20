@@ -7,7 +7,7 @@
  */
 import type { OutputFile } from '@shared/ipc/contracts';
 import type { AskQuestion, AskUserAnswer } from '@shared/ask-user';
-import type { MessageFileReference } from '@shared/events';
+import type { MessageAttachment, MessageFileReference } from '@shared/events';
 
 export type ToolCallStatus =
   | 'requested'
@@ -60,6 +60,7 @@ export interface ChatMessageView {
   usage?: ChatUsage;
   files?: OutputFile[];
   references?: MessageFileReference[];
+  attachments?: MessageAttachment[];
   timeline?: ChatTimelineSegment[];
 }
 

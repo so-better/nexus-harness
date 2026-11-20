@@ -10,10 +10,25 @@ import { askQuestionSchema, askUserAnswerSchema } from './ask-user';
  */
 export const messageFileReferenceSchema = z.object({
   path: z.string().min(1),
-  name: z.string().min(1)
+  name: z.string().min(1),
+  bytes: z.number().nonnegative().optional()
 });
 
 export type MessageFileReference = z.infer<typeof messageFileReferenceSchema>;
+
+/**
+ * 用户上传的附件元数据；内容保存在本机附件目录，不保存真实路径到消息事件。
+ */
+export const messageAttachmentSchema = z.object({
+  id: z.string().min(1),
+  sessionId: z.string().min(1),
+  name: z.string().min(1),
+  mime: z.string().min(1),
+  bytes: z.number().nonnegative(),
+  createdAt: z.number().nonnegative()
+});
+
+export type MessageAttachment = z.infer<typeof messageAttachmentSchema>;
 
 /**
  * 事件 payload 映射；新增事件时先在此登记，再实现发布与订阅。
@@ -82,12 +97,14 @@ export const eventPayloadSchemas = {
     reasoning: z.string().optional(),
     error: z.boolean().optional(),
     images: z.array(z.object({ path: z.string(), mime: z.string() })).optional(),
-    references: z.array(messageFileReferenceSchema).max(64).optional()
+    references: z.array(messageFileReferenceSchema).max(64).optional(),
+    attachments: z.array(messageAttachmentSchema).max(8).optional()
   }),
   'message.edited': z.object({
     messageId: z.string(),
     content: z.string(),
-    references: z.array(messageFileReferenceSchema).max(64).optional()
+    references: z.array(messageFileReferenceSchema).max(64).optional(),
+    attachments: z.array(messageAttachmentSchema).max(8).optional()
   }),
   'message.regenerated': z.object({
     messageId: z.string(),

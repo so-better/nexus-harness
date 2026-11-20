@@ -32,6 +32,8 @@ export interface ChatMessage {
    * 宿主元数据，Provider 忽略；用于压缩摘要保留审批结论。
    */
   approvalStatus?: 'approved' | 'rejected';
+  /** 用户消息附带的附件 ID；Provider 忽略，宿主可据此恢复附件内容。 */
+  attachmentIds?: string[];
 }
 
 export interface ToolSchema {

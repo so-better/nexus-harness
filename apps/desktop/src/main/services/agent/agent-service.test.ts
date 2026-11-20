@@ -10,6 +10,7 @@ import type { NexusEvent } from '@shared/events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDatabase } from '../storage/database';
 import { AgentService } from './agent-service';
+import { AttachmentService } from '../attachments/attachment-service';
 
 describe('AgentService', () => {
   let root = '';
@@ -78,6 +79,7 @@ describe('AgentService', () => {
     expect(currentPrompt).toContain(`继续\n\n@${join(root, 'a.txt')}`);
     expect(currentPrompt).toContain('<environment>');
     expect(currentPrompt).toContain('平台：');
+    expect(currentPrompt).toContain(`授权目录：\n- ${root}`);
     expect(events[0]).toMatchObject({
       type: 'message.completed',
       payload: {
@@ -649,6 +651,131 @@ describe('AgentService', () => {
         .all('session-1') as Array<{ name: string; mime: string }>;
       expect(files).toEqual([{ name: 'report.md', mime: 'text/markdown' }]);
       expect(events.some((event) => event.type === 'file.created')).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('loads text attachments into the current user message and records metadata', async () => {
+    const requests: ProviderRequest[] = [];
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: false, vision: false, reasoning: false },
+      async *stream(request) {
+        requests.push(request);
+        yield { type: 'text-delta', text: '收到附件' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const db = createDatabase(join(root, 'nexus.db'));
+    db.prepare(
+      'INSERT INTO sessions (id, title, created_at, updated_at, last_active_at) VALUES (?, ?, ?, ?, ?)'
+    ).run('session-attachment', '附件', Date.now(), Date.now(), Date.now());
+    const attachments = new AttachmentService(db, join(root, 'attachments'));
+    const attachment = await attachments.save({
+      sessionId: 'session-attachment',
+      name: 'notes.txt',
+      mime: 'text/plain',
+      content: Buffer.from('attachment content')
+    });
+    const service = new AgentService({
+      createProvider: () => provider,
+      database: db,
+      attachmentBaseDir: join(root, 'attachments')
+    });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+    const events: NexusEvent[] = [];
+
+    try {
+      await service.run(
+        {
+          sessionId: 'session-attachment',
+          prompt: '看看附件',
+          rootPaths: [],
+          providerId: providerConfig.id,
+          modelId: 'mock-model',
+          attachmentIds: [attachment.id]
+        },
+        providerConfig,
+        { onEvent: (event) => events.push(event) }
+      );
+
+      const currentPrompt = requests[0]?.messages.at(-1)?.content ?? '';
+      expect(currentPrompt).toContain('<attachment name="notes.txt"');
+      expect(currentPrompt).toContain('attachment content');
+      expect(events[0]).toMatchObject({
+        type: 'message.completed',
+        payload: { role: 'user', attachments: [{ id: attachment.id, name: 'notes.txt' }] }
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it('reloads historical attachment content for follow-up turns', async () => {
+    const requests: ProviderRequest[] = [];
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: false, vision: false, reasoning: false },
+      async *stream(request) {
+        requests.push(request);
+        yield { type: 'text-delta', text: '已读取历史附件' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const db = createDatabase(join(root, 'nexus-history.db'));
+    db.prepare(
+      'INSERT INTO sessions (id, title, created_at, updated_at, last_active_at) VALUES (?, ?, ?, ?, ?)'
+    ).run('session-history', '历史附件', Date.now(), Date.now(), Date.now());
+    const attachments = new AttachmentService(db, join(root, 'history-attachments'));
+    const attachment = await attachments.save({
+      sessionId: 'session-history',
+      name: 'history.txt',
+      mime: 'text/plain',
+      content: Buffer.from('historical attachment content')
+    });
+    const service = new AgentService({
+      createProvider: () => provider,
+      database: db,
+      attachmentBaseDir: join(root, 'history-attachments')
+    });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+
+    try {
+      await service.run(
+        {
+          sessionId: 'session-history',
+          prompt: '继续总结',
+          rootPaths: [],
+          providerId: providerConfig.id,
+          modelId: 'mock-model'
+        },
+        providerConfig,
+        {
+          history: [{ role: 'user', content: '之前的问题', attachmentIds: [attachment.id] }]
+        }
+      );
+
+      const historyContent = requests[0]?.messages[1]?.content ?? '';
+      expect(historyContent).toContain('之前的问题');
+      expect(historyContent).toContain('<attachment name="history.txt"');
+      expect(historyContent).toContain('historical attachment content');
     } finally {
       db.close();
     }

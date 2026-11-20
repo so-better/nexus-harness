@@ -24,6 +24,7 @@ describe('backup service', () => {
       mcp: join(root, 'mcp'),
       settings: join(root, 'settings'),
       files: join(root, 'files'),
+      attachments: join(root, 'attachments'),
       artifacts: join(root, 'artifacts'),
       checkpoints: join(root, 'checkpoints'),
       logs: join(root, 'logs')
@@ -78,6 +79,7 @@ describe('backup service', () => {
       ...sourcePaths,
       root: targetRoot,
       files: join(targetRoot, 'files'),
+      attachments: join(targetRoot, 'attachments'),
       artifacts: join(targetRoot, 'artifacts'),
       settings: join(targetRoot, 'settings'),
       checkpoints: join(targetRoot, 'checkpoints'),

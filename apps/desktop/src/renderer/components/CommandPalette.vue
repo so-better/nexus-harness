@@ -29,9 +29,9 @@
           <p class="nh-command-palette__group-label">{{ group.label }}</p>
           <button
             v-for="entry in group.items"
+            :key="entry.command.id"
             :id="`command-option-${entry.index}`"
             :data-command-index="entry.index"
-            :key="entry.command.id"
             type="button"
             role="option"
             class="nh-command-palette__item"
