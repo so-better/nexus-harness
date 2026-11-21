@@ -5,7 +5,7 @@
     :title="runtime.openedView?.title ?? ''"
     :bordered="false"
     class="nh-plugin-view-modal"
-    style="width: min(1080px, calc(100vw - 48px))"
+    style="width: min(1120px, calc(100vw - 48px))"
     @update:show="
       (value) => {
         if (!value) runtime.closeView();
@@ -29,8 +29,29 @@ const runtime = usePluginRuntimeStore();
 </script>
 
 <style scoped lang="less">
+.nh-plugin-view-modal :deep(.n-card) {
+  overflow: hidden;
+  border: 1px solid var(--nh-border-subtle);
+  border-radius: 14px;
+  box-shadow: var(--nh-shadow-float);
+}
+
+.nh-plugin-view-modal :deep(.n-card-header) {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--nh-border-subtle);
+  background: color-mix(in srgb, var(--nh-color-bg-elevated) 72%, transparent);
+}
+
+.nh-plugin-view-modal :deep(.n-card-header__main) {
+  color: var(--nh-color-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
 .nh-plugin-view-modal :deep(.n-card__content) {
-  max-height: min(720px, calc(100vh - 160px));
+  max-height: min(720px, calc(100vh - 180px));
+  padding: 18px 24px 24px;
   overflow: auto;
+  background: color-mix(in srgb, var(--nh-color-bg-base) 78%, transparent);
 }
 </style>

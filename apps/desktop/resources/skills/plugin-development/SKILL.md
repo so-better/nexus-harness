@@ -3,7 +3,7 @@ name: plugin-development
 description: 当用户要创建、修改、调试或发布 Nexus 插件时使用；覆盖本地插件项目、用户插件、内置插件复制、manifest、renderer/main 入口、权限、插槽、事件与验证流程。
 metadata:
   tags: [插件开发, plugin, manifest, renderer, main, slots, views, permissions, usage, 用户插件]
-  version: 1.1.0
+  version: 1.2.0
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -98,7 +98,7 @@ export function deactivate() {
 - `onSlot:<slotId>`：插槽首次渲染时。
 - `onEvent:<eventName>`：对应领域事件到来时。
 - 状态栏贡献：状态栏首次渲染时。
-- 视图/命令贡献：扩展页打开或用户启用插件时。
+- 视图/命令贡献：命令调用、`ctx.views.open` 或扩展页打开时。
 - 皮肤贡献：用户选择该皮肤时。
 
 ## 权限
@@ -174,7 +174,7 @@ interface MainPluginContext {
 
 ## 视图与用量
 
-- 声明 `views` 贡献点并申请 `ui.panel`；`ctx.views.register` 挂载视图，`ctx.views.open(id)` 打开宿主大尺寸视图弹窗。
+- 声明 `views` 贡献点并申请 `ui.panel`；`ctx.views.register` 挂载视图，`ctx.views.open(id)` 打开宿主大尺寸视图弹窗。视图的入口和展示位置由插件自行设计，宿主不自动列出。
 - 需要分析数据时申请 `usage:read`，调用 `ctx.usage.getStats({ sessionId?, from?, to?, bucket? })`；返回总量、时间序列、会话、模型和 Provider 分布，不需要读取数据库。
 - 视图与命令可按需激活；视图打开失败应给出可诊断错误，不要静默失败。
 

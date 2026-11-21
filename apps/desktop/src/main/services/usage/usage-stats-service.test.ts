@@ -76,6 +76,27 @@ describe('getUsageStats', () => {
         cost: 0.03
       })
     );
+    db.prepare('UPDATE sessions SET deleted_at = ? WHERE id = ?').run(START + DAY, 'session-2');
+    db.prepare(
+      'INSERT INTO sessions (id, title, created_at, updated_at, last_active_at) VALUES (?, ?, ?, ?, ?)'
+    ).run('deleted-session', 'Deleted session', START, START, START);
+    db.prepare('UPDATE sessions SET deleted_at = ? WHERE id = ?').run(START, 'deleted-session');
+    insert.run(
+      'event-deleted',
+      'deleted-session',
+      'run-deleted',
+      1,
+      'usage.recorded',
+      1,
+      START,
+      JSON.stringify({
+        provider: 'openai',
+        model: 'model-a',
+        inputTokens: 999,
+        outputTokens: 999,
+        cost: 0
+      })
+    );
   });
 
   afterEach(async () => {
@@ -87,17 +108,17 @@ describe('getUsageStats', () => {
     const result = getUsageStats(db);
 
     expect(result.totals).toMatchObject({
-      inputTokens: 350,
-      outputTokens: 110,
-      totalTokens: 460,
-      cost: 0.06,
-      calls: 3
+      inputTokens: 150,
+      outputTokens: 30,
+      totalTokens: 180,
+      cost: 0.03,
+      calls: 2
     });
-    expect(result.series).toHaveLength(2);
+    expect(result.series).toHaveLength(1);
     expect(result.series[0]?.key).toBe(String(START - (START % DAY)));
-    expect(result.sessions[0]?.title).toBe('Session two');
-    expect(result.models.map((item) => item.key)).toEqual(['model-b', 'model-a']);
-    expect(result.providers.map((item) => item.key)).toEqual(['anthropic', 'openai']);
+    expect(result.sessions[0]?.title).toBe('Session one');
+    expect(result.models.map((item) => item.key)).toEqual(['model-a']);
+    expect(result.providers.map((item) => item.key)).toEqual(['openai']);
   });
 
   it('filters by session and groups by run', () => {
@@ -107,5 +128,12 @@ describe('getUsageStats', () => {
     expect(result.series).toHaveLength(1);
     expect(result.series[0]?.key).toBe('run-1');
     expect(result.series[0]?.calls).toBe(2);
+  });
+
+  it('applies the time range before day bucketing', () => {
+    const result = getUsageStats(db, { from: START + DAY - 1, bucket: 'day' });
+
+    expect(result.totals.totalTokens).toBe(0);
+    expect(result.series).toHaveLength(0);
   });
 });

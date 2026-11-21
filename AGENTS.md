@@ -807,6 +807,7 @@ metadata:
 - 所有可扩展区域从第一天就通过标准插槽挂载，即使暂时没有插件加载。
 - 所有能力调用从第一天就经过权限网关，不能等插件系统再补。
 - 贡献点注册表与 manifest schema 先于宿主实现定义，接口只增不改。
+- **插件契约必须同步更新 Skill**：每次修改插件 manifest、`ctx` API、权限、贡献点、事件签名或内置插件示例时，必须在同一次提交更新 `apps/desktop/resources/skills/plugin-development/SKILL.md`，并递增其 `metadata.version`；AGENTS 中相关契约描述也必须同步。未更新 Skill 视为插件改动未完成。
 - 新功能完成时必须回答：是否产生事件、是否暴露插槽/钩子、是否经过权限网关。
 
 #### 4.5.1 模型
@@ -855,7 +856,7 @@ metadata:
   "activationEvents": ["onView:usage.panel", "onSlot:usage.inline", "onEvent:usage.recorded"],
   "permissions": ["storage", "events:usage.recorded", "ui.panel", "ui.slot", "ui.statusbar", "ui.command"],
   "contributes": {
-    "views": [{ "id": "usage.panel", "title": "用量", "location": "sidebar" }],
+    "views": [{ "id": "usage.panel", "title": "用量" }],
     "messageSlots": [{ "id": "usage.inline", "location": "message.assistant.footer" }],
     "statusBar": [{ "id": "usage.status", "align": "right" }],
     "commands": [{ "id": "usage.reset", "title": "重置统计" }],
@@ -875,7 +876,7 @@ metadata:
 
 | 贡献点 | 用途 |
 | --- | --- |
-| `views` | 侧栏、主区、底部面板 |
+| `views` | 插件自定义视图，通过 `ctx.views.open` 打开，宿主不自动列出 |
 | `messageSlots` | 会话流、输入区、工具调用与审批等插槽 |
 | `statusBar` | 状态栏条目 |
 | `commands` | 命令面板与快捷键绑定 |
@@ -992,7 +993,9 @@ interface SlotContext {
 
 - 通过 `messageSlots` 在会话标题栏和每条 AI 回复尾部分别显示会话与消息 token 用量。
 - 通过只读 `SlotContext.usage` 读取宿主投影的用量，不自行累计跨会话总量。
-- 不修改宿主布局，只在插槽内补充文本。
+- 通过 `usage:read` 和 `ctx.usage.getStats` 读取会话/全局统计，通过 `views` 与 `ctx.views.open` 打开看板。
+- 通过 `events:usage.recorded` 与事件元数据在看板打开时刷新。
+- 视图入口由插件自己提供，宿主不在扩展弹窗自动列出。
 - 正确处理启用、禁用、热重载。
 
 内置皮肤插件（`apps/desktop/resources/plugins/nexus.skin-*`）是全局皮肤参考实现，演示插件代码用语义色绘制背景；皮肤只声明贡献点，具体视觉完全由插件 renderer 决定：
@@ -1888,6 +1891,7 @@ CHANGELOG.md         # 版本变更记录
 - [ ] MCP 工具仅注入已启用、信任且连接的 Server，调用始终审批。
 - [ ] MCP 连接有缓存、空闲 TTL、失败负缓存、超时与并发上限，工具名已净化。
 - [ ] 插件入口路径限制在插件目录内，扩展能力经宿主权限网关。
+- [ ] 插件 manifest、ctx、权限、贡献点、事件或示例有改动时，已同步更新 `plugin-development` Skill（含版本号）和 AGENTS 契约。
 - [ ] 新功能已同步发出领域事件、暴露标准插槽，并经过权限网关。
 - [ ] 插件 slots 与皮肤在宿主容器内渲染并正确清理；皮肤代码不访问隔离层外的宿主 DOM 或注入全局 CSS。
 - [ ] 事件钩子只读订阅，不能修改或拦截工具调用与审批；高频事件默认不暴露。

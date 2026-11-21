@@ -16,52 +16,19 @@
       </NButton>
     </div>
   </div>
-
-  <div v-if="views.length" class="nh-plugin-extras">
-    <h4>{{ t('plugins.views') }}</h4>
-    <div class="nh-plugin-extras__list">
-      <NButton
-        v-for="view in views"
-        :key="view.id"
-        size="small"
-        secondary
-        @click="selectedView = view"
-      >
-        {{ view.title }} · {{ view.location }}
-      </NButton>
-    </div>
-  </div>
-
-  <NModal
-    :show="Boolean(selectedView)"
-    preset="card"
-    :title="selectedView?.title ?? ''"
-    :bordered="false"
-    style="width: min(720px, calc(100vw - 48px))"
-    @update:show="
-      (value) => {
-        if (!value) selectedView = null;
-      }
-    "
-  >
-    <PluginViewHost :view="selectedView" />
-  </NModal>
 </template>
 
 <script setup lang="ts">
 /**
- * 插件命令与视图入口，以及视图弹窗。
+ * 插件命令入口；视图由插件自行选择入口并通过 ctx.views.open 打开。
  */
 
-import { ref } from 'vue';
-import { NButton, NModal } from 'naive-ui';
+import { NButton } from 'naive-ui';
 import { t } from '@/app/i18n';
-import { usePluginRuntimeStore, type PluginCommand, type PluginView } from '../runtime.store';
-import PluginViewHost from './PluginViewHost.vue';
+import { usePluginRuntimeStore, type PluginCommand } from '../runtime.store';
 
-defineProps<{ commands: PluginCommand[]; views: PluginView[] }>();
+defineProps<{ commands: PluginCommand[] }>();
 const runtime = usePluginRuntimeStore();
-const selectedView = ref<PluginView | null>(null);
 
 const runCommand = (id: string): void => {
   const command = runtime.commands.get(id);

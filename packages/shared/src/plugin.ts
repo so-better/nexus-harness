@@ -48,8 +48,7 @@ const eventPermission = pluginEventPermissionSchema;
 
 const pluginViewSchema = z.object({
   id: z.string().min(1),
-  title: z.string().min(1),
-  location: z.enum(['sidebar', 'main', 'bottom'])
+  title: z.string().min(1)
 });
 
 const pluginSlotSchema = z.object({

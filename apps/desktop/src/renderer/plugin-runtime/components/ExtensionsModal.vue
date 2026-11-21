@@ -33,7 +33,7 @@
           />
         </div>
 
-        <PluginExtras :commands="commandList" :views="viewList" />
+        <PluginExtras :commands="commandList" />
       </NTabPane>
       <NTabPane name="skills" :tab="t('skills.tab')">
         <ExtensionsSkillsPanel />
@@ -53,7 +53,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { NButton, NEmpty, NModal, NTabPane, NTabs, useMessage } from 'naive-ui';
 import { t } from '@/app/i18n';
-import { usePluginRuntimeStore, type PluginCommand, type PluginView } from '../runtime.store';
+import { usePluginRuntimeStore, type PluginCommand } from '../runtime.store';
 import PluginCard from './PluginCard.vue';
 import PluginExtras from './PluginExtras.vue';
 import ExtensionsSkillsPanel from './ExtensionsSkillsPanel.vue';
@@ -77,7 +77,6 @@ watch(
   }
 );
 const commandList = computed<PluginCommand[]>(() => [...runtime.commands.values()]);
-const viewList = computed<PluginView[]>(() => [...runtime.views.values()]);
 
 const importPlugin = async (): Promise<void> => {
   importing.value = true;

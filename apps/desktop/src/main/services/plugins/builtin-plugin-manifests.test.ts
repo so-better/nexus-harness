@@ -22,7 +22,7 @@ describe('built-in plugin manifests', () => {
         id?: unknown;
         renderer?: unknown;
         permissions?: unknown;
-        contributes?: { skins?: unknown[] };
+        contributes?: { skins?: unknown[]; views?: unknown[]; messageSlots?: unknown[] };
       };
 
       expect(manifest.id).toBe(directory.name);
@@ -33,6 +33,12 @@ describe('built-in plugin manifests', () => {
         expect(manifest.permissions).toContain('ui.skin');
         expect(Array.isArray(manifest.contributes?.skins)).toBe(true);
         expect(manifest.contributes?.skins?.length).toBeGreaterThan(0);
+      }
+      if (manifest.contributes?.views?.length) {
+        expect(manifest.permissions).toContain('ui.panel');
+      }
+      if (manifest.contributes?.messageSlots?.length) {
+        expect(manifest.permissions).toContain('ui.slot');
       }
     }
   });

@@ -42,7 +42,7 @@ const plugin: PluginPublic = {
   permissions: ['ui.skin', 'ui.command', 'ui.panel', 'usage:read'],
   activationEvents: [],
   contributes: {
-    views: [{ id: 'usage.dashboard', title: 'Usage', location: 'main' }],
+    views: [{ id: 'usage.dashboard', title: 'Usage' }],
     messageSlots: [],
     statusBar: [],
     commands: [{ id: 'usage.check', title: 'Check usage' }],

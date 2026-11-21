@@ -85,8 +85,8 @@ export const getUsageStats = (db: DatabaseSync, input: UsageStatsInput = {}): Us
            json_extract(e.payload, '$.model') AS model,
            json_extract(e.payload, '$.provider') AS provider
     FROM events e
-    LEFT JOIN sessions s ON s.id = e.session_id
-    WHERE ${conditions.join(' AND ')}
+    JOIN sessions s ON s.id = e.session_id
+    WHERE ${conditions.join(' AND ')} AND s.deleted_at IS NULL
   )`;
   const aggregate = `SUM(inputTokens) AS inputTokens,
                      SUM(outputTokens) AS outputTokens,
@@ -119,7 +119,7 @@ export const getUsageStats = (db: DatabaseSync, input: UsageStatsInput = {}): Us
                GROUP BY start
                ORDER BY start ASC`
             )
-            .all(size, size, ...params) as unknown as SeriesRow[];
+            .all(...params, size, size) as unknown as SeriesRow[];
         })();
 
   const sessionRows = db

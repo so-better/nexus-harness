@@ -72,7 +72,6 @@ export interface PluginView {
   pluginId: string;
   id: string;
   title: string;
-  location: 'sidebar' | 'main' | 'bottom';
   mount: (element: HTMLElement, ctx: PluginContext) => () => void;
   context: PluginContext;
 }
@@ -299,7 +298,6 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
               pluginId: plugin.id,
               id,
               title: contribution.title,
-              location: contribution.location,
               mount,
               context: ctx
             });
