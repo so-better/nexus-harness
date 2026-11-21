@@ -33,7 +33,6 @@ const labels = () =>
         last7: '7 days',
         last30: '30 days',
         allTime: 'All time',
-        refresh: 'Refresh',
         input: 'Input',
         output: 'Output',
         total: 'Total',
@@ -54,7 +53,6 @@ const labels = () =>
         last7: '7 天',
         last30: '30 天',
         allTime: '全部时间',
-        refresh: '刷新',
         input: '输入',
         output: '输出',
         total: '总计',
@@ -144,8 +142,22 @@ const mountUsage = (element, context, session, ctx) => {
   const text = labels();
   const value = usageText(context.usage, session, text);
   if (!value) return () => undefined;
-  injectTriggerStyles(element);
 
+  if (!session) {
+    const label = create('span', 'nh-token-usage__inline', value);
+    label.style.cssText = [
+      'display:inline-block',
+      'margin-top:6px',
+      'color:var(--nh-color-text-secondary)',
+      'font-family:var(--nh-font-mono)',
+      'font-size:10px',
+      'line-height:1.2'
+    ].join(';');
+    element.appendChild(label);
+    return () => label.remove();
+  }
+
+  injectTriggerStyles(element);
   const button = create('button', 'nh-token-usage__trigger');
   const activate = () => openDashboard(ctx);
   const icon = chartIcon();
@@ -481,9 +493,14 @@ const injectStyles = (element) => {
       --usage-card: color-mix(in srgb, var(--nh-color-bg-elevated) 62%, transparent);
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 20px;
       min-height: 420px;
       color: var(--nh-color-text-primary);
+    }
+    .nh-token-usage__content {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
     }
     .nh-token-usage__toolbar {
       display: flex;
@@ -511,26 +528,39 @@ const injectStyles = (element) => {
       color: var(--nh-color-text-primary);
     }
     .nh-token-usage__button:disabled { cursor: not-allowed; opacity: .42; }
-    .nh-token-usage__button--refresh { margin-left: 2px; }
     .nh-token-usage__segment {
       display: inline-flex;
-      gap: 2px;
-      padding: 2px;
+      gap: 3px;
+      padding: 3px;
       border: 1px solid var(--nh-border-subtle);
-      border-radius: 9px;
-      background: color-mix(in srgb, var(--nh-color-bg-elevated) 42%, transparent);
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--nh-color-bg-base) 48%, transparent);
+      box-shadow: inset 0 1px 2px color-mix(in srgb, var(--nh-color-bg-base) 34%, transparent);
     }
+    .nh-token-usage__segment--scope { min-width: 250px; }
+    .nh-token-usage__segment--range { min-width: 300px; }
     .nh-token-usage__segment .nh-token-usage__button {
-      padding: 4px 8px;
+      flex: 1;
+      min-width: 0;
+      padding: 6px 12px;
       border: 0;
       border-radius: 7px;
       background: transparent;
+      color: var(--nh-color-text-secondary);
+      text-align: center;
+      white-space: nowrap;
+      transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+    }
+    .nh-token-usage__segment .nh-token-usage__button:hover:not(.is-active) {
+      background: color-mix(in srgb, var(--nh-color-accent) 9%, transparent);
+      color: var(--nh-color-text-primary);
     }
     .nh-token-usage__segment .nh-token-usage__button.is-active {
       border: 0;
-      background: var(--nh-color-bg-elevated);
-      box-shadow: 0 1px 2px color-mix(in srgb, var(--nh-color-bg-base) 28%, transparent);
-      color: var(--nh-color-text-primary);
+      background: var(--nh-color-accent);
+      box-shadow: 0 2px 8px color-mix(in srgb, var(--nh-color-accent) 32%, transparent);
+      color: var(--nh-color-bg-base);
+      font-weight: 600;
     }
     .nh-token-usage__hero {
       position: relative;
@@ -557,25 +587,26 @@ const injectStyles = (element) => {
     }
     .nh-token-usage__hero-copy { position: relative; z-index: 1; display: flex; min-width: 0; flex-direction: column; gap: 3px; }
     .nh-token-usage__eyebrow { color: var(--nh-color-text-secondary); font-size: 11px; letter-spacing: .04em; }
-    .nh-token-usage__hero-value { font-size: 30px; font-weight: 680; letter-spacing: -.035em; line-height: 1.1; }
+    .nh-token-usage__hero-value { font-size: 30px; font-weight: 680; letter-spacing: .04em; line-height: 1.1; font-variant-numeric: tabular-nums; }
     .nh-token-usage__hero-sub { color: var(--nh-color-text-secondary); font-size: 11px; }
     .nh-token-usage__hero-stat { position: relative; z-index: 1; display: flex; align-items: baseline; gap: 5px; color: var(--nh-color-text-secondary); font-size: 11px; }
-    .nh-token-usage__hero-stat strong { color: var(--nh-color-text-primary); font-family: var(--nh-font-mono); font-size: 20px; font-weight: 600; }
+    .nh-token-usage__hero-stat strong { color: var(--nh-color-text-primary); font-family: var(--nh-font-mono); font-size: 20px; font-weight: 600; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
     .nh-token-usage__metrics {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
+      gap: 20px;
     }
     .nh-token-usage__metric {
       min-width: 0;
-      padding: 12px;
+      padding: 14px;
       border: 1px solid var(--nh-border-subtle);
       border-radius: 10px;
       background: var(--usage-card);
     }
     .nh-token-usage__metric-label { display: block; color: var(--nh-color-text-secondary); font-size: 11px; }
-    .nh-token-usage__metric strong { display: block; margin-top: 4px; font-size: 20px; font-weight: 650; letter-spacing: -.02em; }
-    .nh-token-usage__grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(260px, .8fr); gap: 12px; }
+    .nh-token-usage__metric strong { display: block; margin-top: 5px; font-size: 20px; font-weight: 650; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+    .nh-token-usage__grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(260px, .8fr); gap: 18px; }
+    .nh-token-usage__grid-stack { display: flex; min-width: 0; flex-direction: column; gap: 18px; }
     .nh-token-usage__panel {
       min-width: 0;
       padding: 14px;
@@ -608,7 +639,7 @@ const injectStyles = (element) => {
     .nh-token-usage__donut-segment:nth-of-type(6n+4) { stroke: var(--nh-color-warning); }
     .nh-token-usage__donut-segment:nth-of-type(6n+5) { stroke: var(--nh-color-danger); }
     .nh-token-usage__donut-segment:nth-of-type(6n) { stroke: var(--nh-color-text-secondary); }
-    .nh-token-usage__donut-value { fill: var(--nh-color-text-primary); font-size: 18px; font-weight: 650; }
+    .nh-token-usage__donut-value { fill: var(--nh-color-text-primary); font-size: 18px; font-weight: 650; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
     .nh-token-usage__donut-caption { fill: var(--nh-color-text-secondary); font-size: 9px; }
     .nh-token-usage__legend { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 7px; }
     .nh-token-usage__legend-row { display: flex; min-width: 0; align-items: center; gap: 6px; color: var(--nh-color-text-secondary); font-size: 11px; }
@@ -620,14 +651,14 @@ const injectStyles = (element) => {
     .nh-token-usage__legend-dot--4 { background: var(--nh-color-danger); }
     .nh-token-usage__legend-dot--5 { background: var(--nh-color-text-secondary); }
     .nh-token-usage__legend-label { overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
-    .nh-token-usage__legend-value { color: var(--nh-color-text-primary); font-family: var(--nh-font-mono); font-weight: 500; }
+    .nh-token-usage__legend-value { color: var(--nh-color-text-primary); font-family: var(--nh-font-mono); font-weight: 500; letter-spacing: .03em; font-variant-numeric: tabular-nums; }
     .nh-token-usage__section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
     .nh-token-usage__session-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) 100px; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid color-mix(in srgb, var(--nh-border-subtle) 60%, transparent); }
     .nh-token-usage__session-row:first-of-type { border-top: 0; }
     .nh-token-usage__session-rank { color: var(--nh-color-text-disabled); font-family: var(--nh-font-mono); font-size: 10px; }
     .nh-token-usage__session-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
     .nh-token-usage__session-copy strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-    .nh-token-usage__session-copy span { color: var(--nh-color-text-secondary); font-size: 10px; }
+    .nh-token-usage__session-copy span { color: var(--nh-color-text-secondary); font-size: 10px; letter-spacing: .01em; font-variant-numeric: tabular-nums; }
     .nh-token-usage__session-bar { display: block; height: 4px; overflow: hidden; border-radius: 4px; background: color-mix(in srgb, var(--nh-color-border) 40%, transparent); }
     .nh-token-usage__session-fill { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--nh-color-accent), var(--nh-color-idle)); }
     .nh-token-usage__dot { stroke: var(--nh-color-bg-base); stroke-width: 1.2; }
@@ -639,6 +670,8 @@ const injectStyles = (element) => {
     @media (max-width: 760px) {
       .nh-token-usage__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .nh-token-usage__grid { grid-template-columns: 1fr; }
+      .nh-token-usage__segment--scope, .nh-token-usage__segment--range { min-width: 0; flex: 1; }
+      .nh-token-usage__spacer { display: none; }
     }
     @media (prefers-reduced-motion: reduce) {
       .nh-token-usage__dashboard, .nh-token-usage__button { transition: none; }
@@ -657,15 +690,21 @@ const mountDashboard = (element, ctx) => {
   const range7 = create('button', 'nh-token-usage__button', text.last7);
   const range30 = create('button', 'nh-token-usage__button', text.last30);
   const rangeAll = create('button', 'nh-token-usage__button', text.allTime);
-  const refresh = create('button', 'nh-token-usage__button nh-token-usage__button--refresh', text.refresh);
-  const scopeGroup = create('div', 'nh-token-usage__segment');
-  const rangeGroup = create('div', 'nh-token-usage__segment');
+  const scopeGroup = create('div', 'nh-token-usage__segment nh-token-usage__segment--scope');
+  const rangeGroup = create('div', 'nh-token-usage__segment nh-token-usage__segment--range');
   const spacer = create('span', 'nh-token-usage__spacer');
+  scopeGroup.setAttribute('role', 'tablist');
+  rangeGroup.setAttribute('role', 'tablist');
+  scopeSession.setAttribute('role', 'tab');
+  scopeAll.setAttribute('role', 'tab');
+  range7.setAttribute('role', 'tab');
+  range30.setAttribute('role', 'tab');
+  rangeAll.setAttribute('role', 'tab');
   scopeGroup.append(scopeSession, scopeAll);
   rangeGroup.append(range7, range30, rangeAll);
-  toolbar.append(scopeGroup, spacer, rangeGroup, refresh);
+  toolbar.append(scopeGroup, spacer, rangeGroup);
 
-  const content = create('div');
+  const content = create('div', 'nh-token-usage__content');
   root.append(toolbar, content);
   element.appendChild(root);
 
@@ -681,9 +720,14 @@ const mountDashboard = (element, ctx) => {
     scopeSession.classList.toggle('is-active', state.scope === 'session');
     scopeAll.classList.toggle('is-active', state.scope === 'all');
     scopeSession.disabled = !activeSessionId;
+    scopeSession.setAttribute('aria-selected', String(state.scope === 'session'));
+    scopeAll.setAttribute('aria-selected', String(state.scope === 'all'));
     range7.classList.toggle('is-active', state.days === 7);
     range30.classList.toggle('is-active', state.days === 30);
     rangeAll.classList.toggle('is-active', state.days === 0);
+    range7.setAttribute('aria-selected', String(state.days === 7));
+    range30.setAttribute('aria-selected', String(state.days === 30));
+    rangeAll.setAttribute('aria-selected', String(state.days === 0));
   };
 
   const render = (stats) => {
@@ -779,7 +823,6 @@ const mountDashboard = (element, ctx) => {
   range7.addEventListener('click', () => change({ days: 7 }));
   range30.addEventListener('click', () => change({ days: 30 }));
   rangeAll.addEventListener('click', () => change({ days: 0 }));
-  refresh.addEventListener('click', refreshStats);
 
   const unsubscribe = ctx.events.on('usage.recorded', () => {
     clearTimeout(timer);

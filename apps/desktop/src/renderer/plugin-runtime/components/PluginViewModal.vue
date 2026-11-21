@@ -1,31 +1,53 @@
 <template>
   <NModal
-    :show="Boolean(runtime.openedView)"
+    :show="visible"
     preset="card"
-    :title="runtime.openedView?.title ?? ''"
+    :title="openedView?.title ?? ''"
     :bordered="false"
     class="nh-plugin-view-modal"
     style="width: min(1120px, calc(100vw - 48px))"
-    @update:show="
-      (value) => {
-        if (!value) runtime.closeView();
-      }
-    "
+    @update:show="handleShowChange"
+    @after-leave="handleAfterLeave"
   >
-    <PluginViewHost v-if="runtime.openedView" :view="runtime.openedView" />
+    <PluginViewHost v-if="openedView" :view="openedView" />
   </NModal>
 </template>
 
 <script setup lang="ts">
 /**
  * 宿主级插件视图弹窗：由插件通过 ctx.views.open 或命令打开完整视图。
+ * 内容在离场动画结束后卸载，避免关闭时布局先消失导致动画错位。
  */
 
+import { ref, watch } from 'vue';
 import { NModal } from 'naive-ui';
-import { usePluginRuntimeStore } from '../runtime.store';
+import { usePluginRuntimeStore, type PluginView } from '../runtime.store';
 import PluginViewHost from './PluginViewHost.vue';
 
 const runtime = usePluginRuntimeStore();
+const visible = ref(false);
+const openedView = ref<PluginView | null>(null);
+
+watch(
+  () => runtime.openedView,
+  (view) => {
+    if (view) {
+      openedView.value = view;
+      visible.value = true;
+      return;
+    }
+    visible.value = false;
+  },
+  { immediate: true }
+);
+
+const handleShowChange = (value: boolean): void => {
+  if (!value) runtime.closeView();
+};
+
+const handleAfterLeave = (): void => {
+  if (!visible.value) openedView.value = null;
+};
 </script>
 
 <style scoped lang="less">
