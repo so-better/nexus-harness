@@ -60,7 +60,7 @@ const themeSource = ref<ThemeSource>('system');
 const skinOptions = computed<SelectOption[]>(() => [
   { label: t('settings.skinNone'), value: '' },
   ...pluginRuntime.skins.map((skin) => ({
-    label: `${skin.title} · ${skin.pluginName}`,
+    label: skin.title === skin.pluginName ? skin.title : `${skin.title} · ${skin.pluginName}`,
     value: `${skin.pluginId}:${skin.id}`
   }))
 ]);
