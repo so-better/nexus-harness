@@ -15,6 +15,7 @@ describe('agent system prompt', () => {
     const prompt = buildAgentSystemPrompt({ mode: 'build', hasWorkspace: true });
 
     expect(prompt).toContain('Nexus Agent');
+    expect(prompt).toContain('元信息');
     expect(prompt).toContain('不可信');
     expect(prompt).toContain('事实/工具');
     expect(prompt).toContain('不编造事实');
@@ -28,9 +29,9 @@ describe('agent system prompt', () => {
   it('keeps every mode and workspace variant within the prompt budget', () => {
     for (const mode of ['plan', 'build'] as const) {
       for (const hasWorkspace of [true, false]) {
-        expect(
-          estimateTextTokens(buildAgentSystemPrompt({ mode, hasWorkspace }))
-        ).toBeLessThan(600);
+        expect(estimateTextTokens(buildAgentSystemPrompt({ mode, hasWorkspace }))).toBeLessThan(
+          600
+        );
       }
     }
   });
@@ -48,10 +49,15 @@ describe('agent system prompt', () => {
       now: new Date('2026-11-20T12:34:00Z'),
       platform: 'darwin',
       timeZone: 'Asia/Shanghai',
-      roots: ['/Users/lingkai/Desktop/my-codes']
+      roots: ['/Users/lingkai/Desktop/my-codes'],
+      providerName: 'DeepSeek',
+      model: 'deepseek-chat'
     });
 
     expect(context).toContain('<environment>');
+    expect(context).toContain('应用：Nexus');
+    expect(context).toContain('提供商：DeepSeek');
+    expect(context).toContain('模型：deepseek-chat');
     expect(context).toContain('平台：macOS');
     expect(context).toContain('2026');
     expect(context).toContain('时区：Asia/Shanghai');

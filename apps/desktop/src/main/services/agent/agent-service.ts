@@ -1796,7 +1796,11 @@ export class AgentService {
         input.references?.length || input.imagePaths?.length ? input.rootPaths : [];
       const messages = appendEnvironmentContext(
         conversationMessages,
-        buildEnvironmentContext({ roots: environmentRoots })
+        buildEnvironmentContext({
+          roots: environmentRoots,
+          providerName: providerConfig.name,
+          model: modelConfig.id
+        })
       );
       const loop = new AgentLoop({
         provider,
