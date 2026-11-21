@@ -7,14 +7,25 @@ import { readFile, readdir, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { isSensitivePath } from '@nexus/runtime-utils';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
-import type { PluginPublic, PluginWorkspaceEntry } from '@shared/plugin';
+import {
+  pluginIdSchema,
+  pluginLogInputSchema,
+  pluginNotifyInputSchema,
+  pluginReportErrorInputSchema,
+  pluginSetEnabledInputSchema,
+  pluginSettingsSetInputSchema,
+  pluginStorageInputSchema,
+  pluginStorageSetInputSchema,
+  pluginWorkspaceListInputSchema,
+  pluginWorkspaceReadInputSchema,
+  type PluginPublic,
+  type PluginWorkspaceEntry
+} from '@shared/plugin';
 import { fail, ok, type Result } from '@shared/ipc/result';
 import { getPluginHost } from '../services/plugins/plugin-host-instance';
 import { importPluginDirectory } from '../services/plugins/plugin-import-service';
 import { getAppDataPaths } from '../services/storage/paths';
 import { getDatabase } from '../services/storage/database';
-
-const isString = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 
 export const registerPluginIpc = (): void => {
   const host = getPluginHost();
@@ -31,13 +42,9 @@ export const registerPluginIpc = (): void => {
   ipcMain.handle(
     IPC_CHANNELS.pluginSetEnabled,
     async (_event, rawInput: unknown): Promise<Result<PluginPublic[]>> => {
-      if (!rawInput || typeof rawInput !== 'object')
-        return fail('PLUGIN_INVALID_INPUT', '插件参数不合法');
-      const { id, enabled } = rawInput as { id?: unknown; enabled?: unknown };
-      if (!isString(id) || typeof enabled !== 'boolean') {
-        return fail('PLUGIN_INVALID_INPUT', '插件参数不合法');
-      }
-      return ok(await host.setEnabled(id, enabled));
+      const parsed = pluginSetEnabledInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '插件参数不合法');
+      return ok(await host.setEnabled(parsed.data.id, parsed.data.enabled));
     }
   );
 
@@ -121,19 +128,10 @@ export const registerPluginIpc = (): void => {
   ipcMain.handle(
     IPC_CHANNELS.pluginWorkspaceRead,
     async (_event, rawInput: unknown): Promise<Result<string>> => {
-      if (!rawInput || typeof rawInput !== 'object')
-        return fail('PLUGIN_INVALID_INPUT', '插件工作区参数不合法');
-      const { pluginId, sessionId, path } = rawInput as {
-        pluginId?: unknown;
-        sessionId?: unknown;
-        path?: unknown;
-      };
-      if (
-        !isString(pluginId) ||
-        !isString(sessionId) ||
-        !isString(path) ||
-        !canReadWorkspace(pluginId)
-      ) {
+      const parsed = pluginWorkspaceReadInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '插件工作区参数不合法');
+      const { pluginId, sessionId, path } = parsed.data;
+      if (!canReadWorkspace(pluginId)) {
         return fail('PLUGIN_PERMISSION_DENIED', '缺少工作区读取权限');
       }
       const filePath = await resolveWorkspacePath(sessionId, path);
@@ -155,17 +153,13 @@ export const registerPluginIpc = (): void => {
   ipcMain.handle(
     IPC_CHANNELS.pluginWorkspaceList,
     async (_event, rawInput: unknown): Promise<Result<PluginWorkspaceEntry[]>> => {
-      if (!rawInput || typeof rawInput !== 'object')
-        return fail('PLUGIN_INVALID_INPUT', '插件工作区参数不合法');
-      const { pluginId, sessionId, path } = rawInput as {
-        pluginId?: unknown;
-        sessionId?: unknown;
-        path?: unknown;
-      };
-      if (!isString(pluginId) || !isString(sessionId) || !canReadWorkspace(pluginId)) {
+      const parsed = pluginWorkspaceListInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '插件工作区参数不合法');
+      const { pluginId, sessionId, path } = parsed.data;
+      if (!canReadWorkspace(pluginId)) {
         return fail('PLUGIN_PERMISSION_DENIED', '缺少工作区读取权限');
       }
-      const directory = await resolveWorkspacePath(sessionId, isString(path) ? path : '.');
+      const directory = await resolveWorkspacePath(sessionId, path ?? '.');
       if (!directory) return fail('PLUGIN_PATH_DENIED', '路径不在会话工作区内');
       try {
         const entries = await readdir(directory, { withFileTypes: true });
@@ -186,11 +180,9 @@ export const registerPluginIpc = (): void => {
   );
 
   ipcMain.handle(IPC_CHANNELS.pluginStorageGet, (_event, rawInput: unknown): Result<unknown> => {
-    if (!rawInput || typeof rawInput !== 'object')
-      return fail('PLUGIN_INVALID_INPUT', '插件存储参数不合法');
-    const { pluginId, key } = rawInput as { pluginId?: unknown; key?: unknown };
-    if (!isString(pluginId) || !isString(key))
-      return fail('PLUGIN_INVALID_INPUT', '插件存储参数不合法');
+    const parsed = pluginStorageInputSchema.safeParse(rawInput);
+    if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '插件存储参数不合法');
+    const { pluginId, key } = parsed.data;
     if (!canUsePermission(pluginId, 'storage')) {
       return fail('PLUGIN_PERMISSION_DENIED', '缺少 storage 权限');
     }
@@ -200,15 +192,9 @@ export const registerPluginIpc = (): void => {
   ipcMain.handle(
     IPC_CHANNELS.pluginStorageSet,
     (_event, rawInput: unknown): Result<{ ok: boolean }> => {
-      if (!rawInput || typeof rawInput !== 'object')
-        return fail('PLUGIN_INVALID_INPUT', '插件存储参数不合法');
-      const { pluginId, key, value } = rawInput as {
-        pluginId?: unknown;
-        key?: unknown;
-        value?: unknown;
-      };
-      if (!isString(pluginId) || !isString(key))
-        return fail('PLUGIN_INVALID_INPUT', '插件存储参数不合法');
+      const parsed = pluginStorageSetInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '插件存储参数不合法');
+      const { pluginId, key, value } = parsed.data;
       if (!canUsePermission(pluginId, 'storage')) {
         return fail('PLUGIN_PERMISSION_DENIED', '缺少 storage 权限');
       }
@@ -220,11 +206,9 @@ export const registerPluginIpc = (): void => {
   ipcMain.handle(
     IPC_CHANNELS.pluginStorageDelete,
     (_event, rawInput: unknown): Result<{ ok: boolean }> => {
-      if (!rawInput || typeof rawInput !== 'object')
-        return fail('PLUGIN_INVALID_INPUT', '插件存储参数不合法');
-      const { pluginId, key } = rawInput as { pluginId?: unknown; key?: unknown };
-      if (!isString(pluginId) || !isString(key))
-        return fail('PLUGIN_INVALID_INPUT', '插件存储参数不合法');
+      const parsed = pluginStorageInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '插件存储参数不合法');
+      const { pluginId, key } = parsed.data;
       if (!canUsePermission(pluginId, 'storage')) {
         return fail('PLUGIN_PERMISSION_DENIED', '缺少 storage 权限');
       }
@@ -235,30 +219,20 @@ export const registerPluginIpc = (): void => {
 
   ipcMain.handle(
     IPC_CHANNELS.pluginSettingsGet,
-    (_event, pluginId: unknown): Result<Record<string, unknown>> => {
-      if (!isString(pluginId)) return fail('PLUGIN_INVALID_INPUT', '插件 id 不合法');
-      return ok(host.getSettings(pluginId));
+    (_event, rawPluginId: unknown): Result<Record<string, unknown>> => {
+      const parsed = pluginIdSchema.safeParse(rawPluginId);
+      if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '插件 id 不合法');
+      return ok(host.getSettings(parsed.data));
     }
   );
 
   ipcMain.handle(
     IPC_CHANNELS.pluginSettingsSet,
     (_event, rawInput: unknown): Result<Record<string, unknown>> => {
-      if (!rawInput || typeof rawInput !== 'object')
-        return fail('PLUGIN_INVALID_INPUT', '插件设置参数不合法');
-      const { pluginId, values } = rawInput as { pluginId?: unknown; values?: unknown };
-      if (!isString(pluginId) || !values || typeof values !== 'object' || Array.isArray(values)) {
-        return fail('PLUGIN_INVALID_INPUT', '插件设置参数不合法');
-      }
-      const normalized: Record<string, string | number | boolean | null> = {};
-      for (const [key, value] of Object.entries(values)) {
-        if (value !== null && !['string', 'number', 'boolean'].includes(typeof value)) {
-          return fail('PLUGIN_INVALID_INPUT', `设置项类型不合法：${key}`);
-        }
-        normalized[key] = value as string | number | boolean | null;
-      }
+      const parsed = pluginSettingsSetInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '插件设置参数不合法');
       try {
-        return ok(host.setSettings(pluginId, normalized));
+        return ok(host.setSettings(parsed.data.pluginId, parsed.data.values));
       } catch (error) {
         return fail(
           'PLUGIN_SETTINGS_FAILED',
@@ -270,10 +244,11 @@ export const registerPluginIpc = (): void => {
 
   ipcMain.handle(
     IPC_CHANNELS.pluginUninstall,
-    async (_event, pluginId: unknown): Promise<Result<PluginPublic[]>> => {
-      if (!isString(pluginId)) return fail('PLUGIN_INVALID_INPUT', '插件 id 不合法');
+    async (_event, rawPluginId: unknown): Promise<Result<PluginPublic[]>> => {
+      const parsed = pluginIdSchema.safeParse(rawPluginId);
+      if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '插件 id 不合法');
       try {
-        return ok(await host.uninstall(pluginId));
+        return ok(await host.uninstall(parsed.data));
       } catch (error) {
         return fail(
           'PLUGIN_UNINSTALL_FAILED',
@@ -284,29 +259,19 @@ export const registerPluginIpc = (): void => {
   );
 
   ipcMain.handle(IPC_CHANNELS.pluginLog, (_event, rawInput: unknown): Result<{ ok: boolean }> => {
-    if (!rawInput || typeof rawInput !== 'object')
-      return fail('PLUGIN_INVALID_INPUT', '插件日志参数不合法');
-    const { pluginId, level, message } = rawInput as {
-      pluginId?: unknown;
-      level?: unknown;
-      message?: unknown;
-    };
-    if (!isString(pluginId) || !isString(message))
-      return fail('PLUGIN_INVALID_INPUT', '插件日志参数不合法');
-    host.log(pluginId, typeof level === 'string' ? level : 'info', message);
+    const parsed = pluginLogInputSchema.safeParse(rawInput);
+    if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '插件日志参数不合法');
+    host.log(parsed.data.pluginId, parsed.data.level, parsed.data.message);
     return ok({ ok: true });
   });
 
   ipcMain.handle(
     IPC_CHANNELS.pluginNotify,
     (_event, rawInput: unknown): Result<{ ok: boolean }> => {
-      if (!rawInput || typeof rawInput !== 'object')
-        return fail('PLUGIN_INVALID_INPUT', '插件通知参数不合法');
-      const { pluginId, message } = rawInput as { pluginId?: unknown; message?: unknown };
-      if (!isString(pluginId) || !isString(message))
-        return fail('PLUGIN_INVALID_INPUT', '插件通知参数不合法');
+      const parsed = pluginNotifyInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '插件通知参数不合法');
       if (Notification?.isSupported?.()) {
-        new Notification({ title: pluginId, body: message }).show();
+        new Notification({ title: parsed.data.pluginId, body: parsed.data.message }).show();
       }
       return ok({ ok: true });
     }
@@ -315,12 +280,9 @@ export const registerPluginIpc = (): void => {
   ipcMain.handle(
     IPC_CHANNELS.pluginReportError,
     (_event, rawInput: unknown): Result<{ ok: boolean }> => {
-      if (!rawInput || typeof rawInput !== 'object')
-        return fail('PLUGIN_INVALID_INPUT', '插件错误参数不合法');
-      const { pluginId, error } = rawInput as { pluginId?: unknown; error?: unknown };
-      if (!isString(pluginId) || typeof error !== 'string')
-        return fail('PLUGIN_INVALID_INPUT', '插件错误参数不合法');
-      host.reportError(pluginId, error);
+      const parsed = pluginReportErrorInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '插件错误参数不合法');
+      host.reportError(parsed.data.pluginId, parsed.data.error);
       return ok({ ok: true });
     }
   );

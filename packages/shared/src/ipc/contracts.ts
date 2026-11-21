@@ -409,6 +409,9 @@ export const terminalResizeInputSchema = z.object({
 });
 
 export const terminalCloseInputSchema = z.object({ id: z.string().min(1) });
+export const terminalAiAccessInputSchema = z
+  .object({ id: z.string().min(1), allowed: z.boolean() })
+  .strict();
 export const terminalBusyInputSchema = z.object({
   ids: z.array(z.string().min(1)).min(1).max(64)
 });

@@ -1,10 +1,7 @@
 <template>
   <div class="nh-user-message">
     <p v-if="parts.text" class="nh-user-message__text">{{ parts.text }}</p>
-    <div
-      v-if="parts.references.length || attachments?.length"
-      class="nh-user-message__references"
-    >
+    <div v-if="parts.references.length || attachments?.length" class="nh-user-message__references">
       <UserFileChip
         v-for="file in parts.references"
         :key="file.path"

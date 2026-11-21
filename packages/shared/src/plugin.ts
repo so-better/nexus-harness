@@ -146,3 +146,48 @@ export interface PluginWorkspaceEntry {
 
 export const pluginSettingValueSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 export type PluginSettingValue = z.infer<typeof pluginSettingValueSchema>;
+
+/** 插件 IPC 输入契约：所有跨进程插件操作先经过这些 schema。 */
+export const pluginIdSchema = z.string().min(1);
+export const pluginSetEnabledInputSchema = z
+  .object({ id: pluginIdSchema, enabled: z.boolean() })
+  .strict();
+export const pluginStorageInputSchema = z
+  .object({ pluginId: pluginIdSchema, key: z.string().min(1) })
+  .strict();
+export const pluginStorageSetInputSchema = pluginStorageInputSchema
+  .extend({ value: z.unknown() })
+  .strict();
+export const pluginSettingsSetInputSchema = z
+  .object({
+    pluginId: pluginIdSchema,
+    values: z.record(z.string(), pluginSettingValueSchema)
+  })
+  .strict();
+export const pluginWorkspaceReadInputSchema = z
+  .object({ pluginId: pluginIdSchema, sessionId: z.string().min(1), path: z.string().min(1) })
+  .strict();
+export const pluginWorkspaceListInputSchema = z
+  .object({
+    pluginId: pluginIdSchema,
+    sessionId: z.string().min(1),
+    path: z.string().min(1).optional()
+  })
+  .strict();
+export const pluginLogInputSchema = z
+  .object({
+    pluginId: pluginIdSchema,
+    level: z.enum(['debug', 'info', 'warn', 'error']),
+    message: z.string().min(1)
+  })
+  .strict();
+export const pluginNotifyInputSchema = z
+  .object({
+    pluginId: pluginIdSchema,
+    message: z.string().min(1),
+    level: z.enum(['info', 'warning', 'error']).optional()
+  })
+  .strict();
+export const pluginReportErrorInputSchema = z
+  .object({ pluginId: pluginIdSchema, error: z.string().min(1) })
+  .strict();

@@ -63,6 +63,9 @@ export const setSessionMode = async (id: string, mode: AgentMode): Promise<Sessi
 /**
  * 读取会话已授权的工作区 root。
  */
+export const chooseRoot = async (defaultPath?: string): Promise<string[]> =>
+  unwrap(await nexus.workspace.chooseRoot(defaultPath ? { defaultPath } : undefined)).paths;
+
 export const getSessionRoots = async (id: string): Promise<SessionRoot[]> =>
   unwrap(await nexus.session.roots(id));
 

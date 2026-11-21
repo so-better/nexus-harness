@@ -96,7 +96,9 @@ watch(
   () => {
     artifact.value = undefined;
     error.value = undefined;
-    void load();
+    load().catch((error: unknown) => {
+      console.error('加载工具产物失败', error);
+    });
   }
 );
 </script>

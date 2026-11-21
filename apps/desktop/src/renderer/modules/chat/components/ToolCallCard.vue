@@ -43,9 +43,7 @@
           <pre class="nh-tool__pre">{{ tool.output }}</pre>
         </section>
         <div v-if="tool.error" class="nh-tool__error">
-          <span class="nh-tool__error-text">
-            {{ tool.error.code }}: {{ tool.error.message }}
-          </span>
+          <span class="nh-tool__error-text"> {{ tool.error.code }}: {{ tool.error.message }} </span>
           <NButton
             v-if="needsAuthorization"
             class="nh-tool__authorize"
@@ -120,9 +118,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{ 'authorize-root': [] }>();
 
-const expandedNames = ref<Array<string | number>>(
-  props.defaultExpanded ? [props.tool.id] : []
-);
+const expandedNames = ref<Array<string | number>>(props.defaultExpanded ? [props.tool.id] : []);
 
 const copied = ref<'input' | 'output'>();
 let copyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -239,7 +235,7 @@ const statusTone = computed<'success' | 'error' | 'warning' | 'info'>(() => {
   border: 0;
 }
 
-/* 覆盖 Naive Collapse 默认间距，工具行使用紧凑布局 */
+// 覆盖 Naive Collapse 默认间距，工具行使用紧凑布局
 .nh-tool :deep(.n-collapse-item__header) {
   min-height: 0;
   margin: 0 -8px;
@@ -257,12 +253,12 @@ const statusTone = computed<'success' | 'error' | 'warning' | 'info'>(() => {
   width: 100%;
 }
 
-/* 覆盖 Naive Collapse 默认内容间距，避免展开内容离头部过远 */
+// 覆盖 Naive Collapse 默认内容间距，避免展开内容离头部过远
 .nh-tool :deep(.n-collapse-item__content-inner) {
   padding: 0 !important;
 }
 
-/* 使用自定义 chevron，隐藏 Naive 默认箭头 */
+// 使用自定义 chevron，隐藏 Naive 默认箭头
 .nh-tool :deep(.n-collapse-item-arrow) {
   display: none !important;
 }

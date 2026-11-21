@@ -83,7 +83,9 @@ export const useFileReference = (options: FileReferenceOptions) => {
     query.value = before.slice(at + 1);
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
-      void search(query.value ?? '');
+      search(query.value ?? '').catch((error: unknown) => {
+        console.error('搜索文件引用失败', error);
+      });
     }, 160);
   };
 
@@ -160,7 +162,9 @@ export const useFileReference = (options: FileReferenceOptions) => {
       () => options.enabled.value
     ],
     () => {
-      void update();
+      update().catch((error: unknown) => {
+        console.error('更新文件引用失败', error);
+      });
     },
     { immediate: true }
   );

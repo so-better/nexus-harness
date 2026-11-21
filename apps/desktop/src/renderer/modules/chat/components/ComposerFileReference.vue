@@ -1,5 +1,10 @@
 <template>
-  <div ref="listRef" class="nh-references" role="listbox" :aria-label="t('chat.fileReferenceTitle')">
+  <div
+    ref="listRef"
+    class="nh-references"
+    role="listbox"
+    :aria-label="t('chat.fileReferenceTitle')"
+  >
     <div class="nh-references__header">
       <span>{{ t('chat.fileReferenceTitle') }}</span>
       <span v-if="searching" class="nh-references__hint">

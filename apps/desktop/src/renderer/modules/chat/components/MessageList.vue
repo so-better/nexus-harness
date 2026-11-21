@@ -91,9 +91,7 @@ const workspaceAuthToolExists = computed(() => {
 const lastAssistantId = computed(
   () => [...props.messages].reverse().find((message) => message.role === 'assistant')?.id
 );
-const showThinking = computed(() =>
-  shouldShowRunThinking(Boolean(props.thinking), props.messages)
-);
+const showThinking = computed(() => shouldShowRunThinking(Boolean(props.thinking), props.messages));
 const thinkingTargetId = computed(() => {
   if (!showThinking.value) return undefined;
   const last = props.messages.at(-1);
@@ -161,7 +159,9 @@ watch(
     focusRequest += 1;
     focusing.value = true;
     highlightedId.value = undefined;
-    void focusMessage(messageId, focusRequest);
+    focusMessage(messageId, focusRequest).catch((error: unknown) => {
+      console.error('定位消息失败', error);
+    });
   },
   { immediate: true }
 );

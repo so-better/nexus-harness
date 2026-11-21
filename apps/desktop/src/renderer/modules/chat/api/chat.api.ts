@@ -21,12 +21,6 @@ export const listProviders = async (): Promise<ProviderPublic[]> =>
   unwrap(await nexus.provider.list());
 
 /**
- * 通过系统对话框选择工作目录。
- */
-export const chooseRoot = async (defaultPath?: string): Promise<string[]> =>
-  unwrap(await nexus.workspace.chooseRoot(defaultPath ? { defaultPath } : undefined)).paths;
-
-/**
  * 启动 Agent Run。
  */
 export const runAgent = async (input: {

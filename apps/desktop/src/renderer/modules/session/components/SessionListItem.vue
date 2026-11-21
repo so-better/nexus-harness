@@ -161,7 +161,11 @@ const select = (): void => {
  */
 const handleMenu = (key: string | number): void => {
   if (key === 'pin') emit('toggle-pin');
-  if (key === 'rename') void startRename();
+  if (key === 'rename') {
+    startRename().catch((error: unknown) => {
+      console.error('开始重命名失败', error);
+    });
+  }
   if (key === 'delete') deleteConfirmVisible.value = true;
 };
 

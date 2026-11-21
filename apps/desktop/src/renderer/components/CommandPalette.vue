@@ -123,7 +123,10 @@ const groups = computed(() => {
  * 把 CmdOrCtrl+K 之类的声明拆成平台相关的键帽，便于快速扫读。
  */
 const shortcutKeys = (shortcut: string): string[] => {
-  const tokens = shortcut.split('+').map((token) => token.trim()).filter(Boolean);
+  const tokens = shortcut
+    .split('+')
+    .map((token) => token.trim())
+    .filter(Boolean);
   return tokens.map((token, index) => {
     if (index === tokens.length - 1) return token.length === 1 ? token.toUpperCase() : token;
     if (token === 'CmdOrCtrl' || token === 'Mod') return isMac ? '⌘' : 'Ctrl';
@@ -186,8 +189,7 @@ const onKeydown = (event: KeyboardEvent): void => {
   if (event.key === 'ArrowUp') {
     event.preventDefault();
     if (filtered.value.length) {
-      activeIndex.value =
-        (activeIndex.value - 1 + filtered.value.length) % filtered.value.length;
+      activeIndex.value = (activeIndex.value - 1 + filtered.value.length) % filtered.value.length;
     }
     return;
   }

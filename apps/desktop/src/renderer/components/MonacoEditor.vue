@@ -9,6 +9,7 @@
 
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import * as monaco from 'monaco-editor';
+import { getPalette } from '@/app/theme-palette';
 import editorWorker from 'monaco-editor/editor/editor.worker.js?worker';
 import jsonWorker from 'monaco-editor/language/json/json.worker.js?worker';
 import cssWorker from 'monaco-editor/language/css/css.worker.js?worker';
@@ -77,17 +78,18 @@ const applyTheme = (): void => {
   const read = (name: string, fallback: string): string =>
     style.getPropertyValue(name).trim() || fallback;
   const dark = document.documentElement.dataset.theme === 'dark';
-  const bg = read('--nh-color-bg-base', dark ? '#090d13' : '#ffffff');
-  const elevated = read('--nh-color-bg-elevated', dark ? '#101720' : '#fbfcfe');
-  const hover = read('--nh-color-bg-hover', dark ? '#172233' : '#f1f6fc');
-  const text = read('--nh-color-text-primary', dark ? '#f3f7ff' : '#111827');
-  const muted = read('--nh-color-text-secondary', dark ? '#93a4bd' : '#5b6472');
-  const disabled = read('--nh-color-text-disabled', dark ? '#5b6a80' : '#9ca3af');
-  const border = read('--nh-color-border', dark ? '#243246' : '#e6ebf2');
-  const accent = read('--nh-color-accent', dark ? '#7fb6ff' : '#3b82f6');
-  const idle = read('--nh-color-idle', dark ? '#b6afff' : '#6b63c9');
-  const success = read('--nh-color-success', dark ? '#4ade80' : '#15803d');
-  const warning = read('--nh-color-warning', dark ? '#fbbf24' : '#b45309');
+  const palette = getPalette(dark ? 'dark' : 'light');
+  const bg = read('--nh-color-bg-base', palette.bgBase);
+  const elevated = read('--nh-color-bg-elevated', palette.bgElevated);
+  const hover = read('--nh-color-bg-hover', palette.bgHover);
+  const text = read('--nh-color-text-primary', palette.textPrimary);
+  const muted = read('--nh-color-text-secondary', palette.textSecondary);
+  const disabled = read('--nh-color-text-disabled', palette.textDisabled);
+  const border = read('--nh-color-border', palette.border);
+  const accent = read('--nh-color-accent', palette.accent);
+  const idle = read('--nh-color-idle', palette.idle);
+  const success = read('--nh-color-success', palette.success);
+  const warning = read('--nh-color-warning', palette.warning);
   const name = `nexus-${dark ? 'dark' : 'light'}`;
   monaco.editor.defineTheme(name, {
     base: dark ? 'vs-dark' : 'vs',

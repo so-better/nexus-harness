@@ -8,6 +8,7 @@ import { statSync } from 'node:fs';
 import { createNexusEvent } from '@nexus/core';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import {
+  terminalAiAccessInputSchema,
   terminalBusyInputSchema,
   terminalSettingsSchema,
   terminalCloseInputSchema,
@@ -198,18 +199,14 @@ export const registerTerminalIpc = (): void => {
   ipcMain.handle(
     IPC_CHANNELS.terminalSetAiAccess,
     (event, rawInput: unknown): Result<{ ok: boolean }> => {
-      if (!rawInput || typeof rawInput !== 'object') {
+      const parsed = terminalAiAccessInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
         return fail('TERMINAL_INVALID_INPUT', '终端访问参数不合法');
       }
-      const { id, allowed } = rawInput as { id?: unknown; allowed?: unknown };
-      if (
-        typeof id !== 'string' ||
-        typeof allowed !== 'boolean' ||
-        !terminalService.isOwnedBy(id, event.sender.id)
-      ) {
+      if (!terminalService.isOwnedBy(parsed.data.id, event.sender.id)) {
         return fail('TERMINAL_ACCESS_DENIED', '无权修改该终端');
       }
-      return ok({ ok: terminalService.setAiAccess(id, allowed) });
+      return ok({ ok: terminalService.setAiAccess(parsed.data.id, parsed.data.allowed) });
     }
   );
 

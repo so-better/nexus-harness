@@ -6,8 +6,13 @@
         <span class="nh-sidebar__name">{{ t('app.brand') }}</span>
       </div>
       <div class="nh-sidebar__header-actions">
-        <NButton size="small" quaternary :title="searchMode ? t('search.close') : t('search.open')"
-          :aria-label="searchMode ? t('search.close') : t('search.open')" @click="toggleSearch">
+        <NButton
+          size="small"
+          quaternary
+          :title="searchMode ? t('search.close') : t('search.open')"
+          :aria-label="searchMode ? t('search.close') : t('search.open')"
+          @click="toggleSearch"
+        >
           <template #icon>
             <AppIcon :name="searchMode ? 'close' : 'search'" />
           </template>
@@ -22,14 +27,28 @@
     </header>
 
     <div class="nh-sidebar__plugin-header">
-      <PluginSlot location="sidebar.header" :context="{ location: 'sidebar.header', sessionId: activeId }" />
+      <PluginSlot
+        location="sidebar.header"
+        :context="{ location: 'sidebar.header', sessionId: activeId }"
+      />
     </div>
 
     <div v-if="searchMode" class="nh-sidebar__search">
-      <NInput ref="searchInput" v-model:value="query" size="small" clearable :placeholder="t('search.placeholder')"
-        :aria-label="t('search.placeholder')" aria-controls="session-search-results" :aria-activedescendant="activeHitIndex >= 0 ? `session-search-hit-${activeHitIndex}` : undefined
-          " @keydown="handleSearchKeydown" @compositionstart="searchComposing = true"
-        @compositionend="searchComposing = false">
+      <NInput
+        ref="searchInput"
+        v-model:value="query"
+        size="small"
+        clearable
+        :placeholder="t('search.placeholder')"
+        :aria-label="t('search.placeholder')"
+        aria-controls="session-search-results"
+        :aria-activedescendant="
+          activeHitIndex >= 0 ? `session-search-hit-${activeHitIndex}` : undefined
+        "
+        @keydown="handleSearchKeydown"
+        @compositionstart="searchComposing = true"
+        @compositionend="searchComposing = false"
+      >
         <template #prefix>
           <AppIcon name="search" :size="14" />
         </template>
@@ -45,17 +64,33 @@
         <p v-else-if="results.length === 0" class="nh-sidebar__search-empty">
           {{ query.trim() ? t('search.empty') : t('search.prompt') }}
         </p>
-        <div v-else id="session-search-results" ref="resultsRef" class="nh-sidebar__search-results" role="listbox">
-          <SessionSearchResultItem v-for="(result, index) in results" :id="`session-search-hit-${index}`"
-            :key="result.messageId" :result="result" :active="index === activeHitIndex"
-            @mouseenter="activeHitIndex = index" @select="openSearchResult(result)" />
+        <div
+          v-else
+          id="session-search-results"
+          ref="resultsRef"
+          class="nh-sidebar__search-results"
+          role="listbox"
+        >
+          <SessionSearchResultItem
+            v-for="(result, index) in results"
+            :id="`session-search-hit-${index}`"
+            :key="result.messageId"
+            :result="result"
+            :active="index === activeHitIndex"
+            @mouseenter="activeHitIndex = index"
+            @select="openSearchResult(result)"
+          />
         </div>
       </div>
       <div v-else-if="loading" class="nh-sidebar__state">
         <NSpin size="small" />
       </div>
-      <NEmpty v-else-if="sessions.length === 0" class="nh-sidebar__state" size="small"
-        :description="t('app.emptyNoSession')">
+      <NEmpty
+        v-else-if="sessions.length === 0"
+        class="nh-sidebar__state"
+        size="small"
+        :description="t('app.emptyNoSession')"
+      >
         <template #icon>
           <AppIcon name="spark" :size="28" />
         </template>
@@ -63,10 +98,16 @@
       <div v-else class="nh-sidebar__body">
         <section v-for="group in groups" :key="group.key" class="nh-sidebar__group">
           <p class="nh-sidebar__group-title">{{ group.label }}</p>
-          <SessionListItem v-for="session in group.items" :key="session.id" :session="session"
-            :active="session.id === activeId" @select="emit('select', session.id)" @remove="emit('remove', session.id)"
+          <SessionListItem
+            v-for="session in group.items"
+            :key="session.id"
+            :session="session"
+            :active="session.id === activeId"
+            @select="emit('select', session.id)"
+            @remove="emit('remove', session.id)"
             @rename="(title: string) => emit('rename', session.id, title)"
-            @toggle-pin="emit('toggle-pin', session.id)" />
+            @toggle-pin="emit('toggle-pin', session.id)"
+          />
         </section>
       </div>
     </div>
@@ -86,7 +127,10 @@
       </NPopconfirm>
     </footer>
     <div v-if="!searchMode" class="nh-sidebar__plugin-footer">
-      <PluginSlot location="sidebar.footer" :context="{ location: 'sidebar.footer', sessionId: activeId }" />
+      <PluginSlot
+        location="sidebar.footer"
+        :context="{ location: 'sidebar.footer', sessionId: activeId }"
+      />
     </div>
   </aside>
 </template>
@@ -171,7 +215,11 @@ const closeSearch = (): void => {
  */
 const toggleSearch = (): void => {
   if (searchMode.value) closeSearch();
-  else void openSearch();
+  else {
+    openSearch().catch((error: unknown) => {
+      console.error('打开会话搜索失败', error);
+    });
+  }
 };
 
 /**
@@ -235,13 +283,17 @@ const handleSearchKeydown = (event: KeyboardEvent): void => {
   if (event.key === 'ArrowDown') {
     event.preventDefault();
     activeHitIndex.value = Math.min(activeHitIndex.value + 1, results.value.length - 1);
-    void scrollActiveHit();
+    scrollActiveHit().catch((error: unknown) => {
+      console.error('滚动搜索结果失败', error);
+    });
     return;
   }
   if (event.key === 'ArrowUp') {
     event.preventDefault();
     activeHitIndex.value = Math.max(activeHitIndex.value - 1, 0);
-    void scrollActiveHit();
+    scrollActiveHit().catch((error: unknown) => {
+      console.error('滚动搜索结果失败', error);
+    });
     return;
   }
   if (event.key === 'Enter') {

@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import markdown from './MarkdownContent.vue?raw';
-import message from '../components/ChatMessageItem.vue?raw';
+import message from '../components/AssistantMessageFlow.vue?raw';
 import media from '../components/InlineMediaFile.less?raw';
 
 describe('markdown layout contract', () => {

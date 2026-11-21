@@ -199,10 +199,6 @@ export const eventPayloadSchemas = {
     summaryRef: z.string().optional(),
     artifactIds: z.array(z.string()).optional()
   }),
-  'settings.updated': z.object({
-    key: z.string(),
-    scope: z.enum(['app', 'workspace', 'session'])
-  }),
   'skill.activated': z.object({
     skillId: z.string(),
     trigger: z.enum(['search', 'explicit'])

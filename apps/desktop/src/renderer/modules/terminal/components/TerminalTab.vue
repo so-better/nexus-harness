@@ -189,13 +189,13 @@ onMounted(() => {
       cyan: TERMINAL_COLORS.cyan,
       white: TERMINAL_COLORS.text,
       brightBlack: TERMINAL_COLORS.disabled,
-      brightRed: '#fca5a5',
-      brightGreen: '#86efac',
-      brightYellow: '#fde68a',
+      brightRed: TERMINAL_COLORS.brightRed,
+      brightGreen: TERMINAL_COLORS.brightGreen,
+      brightYellow: TERMINAL_COLORS.brightYellow,
       brightBlue: TERMINAL_COLORS.accentHover,
-      brightMagenta: '#d8d2ff',
-      brightCyan: '#a5f0fc',
-      brightWhite: '#ffffff'
+      brightMagenta: TERMINAL_COLORS.brightMagenta,
+      brightCyan: TERMINAL_COLORS.brightCyan,
+      brightWhite: TERMINAL_COLORS.brightWhite
     }
   });
   fitAddon = new FitAddon();

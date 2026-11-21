@@ -5,235 +5,44 @@
     :style="{ width: `${store.width}px`, ...terminalCssVariables }"
   >
     <div class="nh-terminal-panel__resize" @pointerdown="startResize" />
-    <header class="nh-terminal-panel__header">
-      <span class="nh-terminal-panel__title">
-        <AppIcon name="terminal" :size="14" />
-        {{ t('terminal.title') }}
-      </span>
-      <div class="nh-terminal-panel__actions">
-        <NTooltip
-          :theme="tooltipDark"
-          :theme-overrides="terminalTooltipThemeOverrides"
-          placement="bottom"
-        >
-          <template #trigger>
-            <NButton
-              text
-              size="small"
-              class="nh-terminal-panel__icon-button"
-              :aria-label="t('terminal.search')"
-              @click="toggleSearch"
-            >
-              <template #icon>
-                <AppIcon name="search" :size="17" />
-              </template>
-            </NButton>
-          </template>
-          {{ t('terminal.search') }}
-        </NTooltip>
-        <PluginSlot
-          location="terminal.toolbar"
-          :context="{ location: 'terminal.toolbar', sessionId }"
-        />
-        <NTooltip
-          :theme="tooltipDark"
-          :theme-overrides="terminalTooltipThemeOverrides"
-          placement="bottom"
-        >
-          <template #trigger>
-            <NButton
-              text
-              size="small"
-              class="nh-terminal-panel__icon-button"
-              :aria-label="t('terminal.hide')"
-              @click="store.open = false"
-            >
-              <template #icon>
-                <AppIcon name="close" :size="17" />
-              </template>
-            </NButton>
-          </template>
-          {{ t('terminal.hide') }}
-        </NTooltip>
-      </div>
-    </header>
+    <TerminalPanelHeader
+      :session-id="sessionId"
+      @toggle-search="toggleSearch"
+      @hide="store.open = false"
+    />
 
-    <div class="nh-terminal-panel__tabs" role="tablist">
-      <VueDraggable
-        class="nh-terminal-panel__tab-list"
-        :model-value="store.tabs"
-        :animation="160"
-        handle=".nh-terminal-tab__title"
-        ghost-class="nh-terminal-tab--ghost"
-        chosen-class="nh-terminal-tab--chosen"
-        drag-class="nh-terminal-tab--drag"
-        @update:model-value="updateTabOrder"
-      >
-        <div
-          v-for="tab in store.tabs"
-          :key="tab.id"
-          class="nh-terminal-tab"
-          :class="{
-            'nh-terminal-tab--active': tab.id === store.activeId,
-            'nh-terminal-tab--exited': tab.status !== 'running'
-          }"
-          role="tab"
-          :aria-selected="tab.id === store.activeId"
-          @click="store.activeId = tab.id"
-          @contextmenu.prevent.stop="openMenu($event, tab)"
-        >
-          <NInput
-            v-if="renamingId === tab.id"
-            v-model:value="renameDraft"
-            size="tiny"
-            :bordered="false"
-            @keydown.enter.prevent="commitRename"
-            @keydown.esc.prevent="cancelRename"
-            @blur="commitRename"
-          />
-          <span v-else class="nh-terminal-tab__title" @dblclick.stop="startRename(tab)">
-            {{ tab.title }}
-          </span>
-          <NPopconfirm
-            :theme-overrides="terminalPopconfirmThemeOverrides"
-            trigger="manual"
-            :show="confirmTabId === tab.id"
-            placement="bottom-end"
-            :positive-text="t('terminal.close')"
-            :negative-text="t('chat.askUserCancel')"
-            @positive-click="confirmClose"
-            @negative-click="cancelClose"
-            @update:show="
-              (value) => {
-                if (!value) cancelClose();
-              }
-            "
-          >
-            <template #trigger>
-              <NTooltip
-                :theme="tooltipDark"
-                :theme-overrides="terminalTooltipThemeOverrides"
-                placement="top"
-              >
-                <template #trigger>
-                  <button
-                    type="button"
-                    class="nh-terminal-tab__close"
-                    :aria-label="t('terminal.close')"
-                    @click.stop="requestClose([tab.id], tab.id)"
-                  >
-                    <AppIcon name="close" :size="12" />
-                  </button>
-                </template>
-                {{ t('terminal.close') }}
-              </NTooltip>
-            </template>
-            {{ t('terminal.closeRunningConfirm') }} ({{ pendingBusyCount }})
-          </NPopconfirm>
-        </div>
-      </VueDraggable>
-      <div class="nh-terminal-panel__tab-actions">
-        <NTooltip
-          :theme="tooltipDark"
-          :theme-overrides="terminalTooltipThemeOverrides"
-          placement="bottom"
-        >
-          <template #trigger>
-            <NButton
-              text
-              size="small"
-              class="nh-terminal-panel__icon-button"
-              :disabled="!sessionId"
-              :aria-label="t('terminal.newDirectory')"
-              @click="createInDirectory"
-            >
-              <template #icon>
-                <AppIcon name="folder" :size="17" />
-              </template>
-            </NButton>
-          </template>
-          {{ t('terminal.newDirectory') }}
-        </NTooltip>
-        <NTooltip
-          :theme="tooltipDark"
-          :theme-overrides="terminalTooltipThemeOverrides"
-          placement="bottom"
-        >
-          <template #trigger>
-            <NButton
-              text
-              size="small"
-              class="nh-terminal-panel__icon-button"
-              :disabled="!sessionId"
-              :aria-label="t('terminal.new')"
-              @click="create()"
-            >
-              <template #icon>
-                <AppIcon name="plus" :size="17" />
-              </template>
-            </NButton>
-          </template>
-          {{ t('terminal.new') }}
-        </NTooltip>
-      </div>
-    </div>
+    <TerminalTabBar
+      :tabs="store.tabs"
+      :active-id="store.activeId"
+      :session-id="sessionId"
+      :renaming-id="renamingId"
+      :rename-draft="renameDraft"
+      :confirm-tab-id="confirmTabId"
+      :pending-busy-count="pendingBusyCount"
+      @select="store.activeId = $event"
+      @contextmenu="openMenu"
+      @start-rename="startRename"
+      @commit-rename="commitRename"
+      @cancel-rename="cancelRename"
+      @update:rename-draft="renameDraft = $event"
+      @request-close="requestClose"
+      @confirm-close="confirmClose"
+      @cancel-close="cancelClose"
+      @update-order="updateTabOrder"
+      @create="create()"
+      @create-directory="createInDirectory"
+    />
 
     <div class="nh-terminal-panel__body">
-      <div v-if="searchOpen" class="nh-terminal-search">
-        <NInput
-          ref="searchInput"
-          v-model:value="searchTerm"
-          size="small"
-          :placeholder="t('terminal.searchPlaceholder')"
-          @keydown.enter.prevent="runSearch($event.shiftKey ? 'previous' : 'next')"
-          @keydown.esc.prevent="closeSearch"
-        />
-        <span v-if="searchNoResult" class="nh-terminal-search__empty">{{
-          t('terminal.noResult')
-        }}</span>
-        <NTooltip
-          :theme="tooltipDark"
-          :theme-overrides="terminalTooltipThemeOverrides"
-          placement="bottom"
-        >
-          <template #trigger>
-            <NButton text size="tiny" @click="runSearch('previous')">
-              <template #icon>
-                <AppIcon name="chevron-up" :size="14" />
-              </template>
-            </NButton>
-          </template>
-          {{ t('terminal.previous') }}
-        </NTooltip>
-        <NTooltip
-          :theme="tooltipDark"
-          :theme-overrides="terminalTooltipThemeOverrides"
-          placement="bottom"
-        >
-          <template #trigger>
-            <NButton text size="tiny" @click="runSearch('next')">
-              <template #icon>
-                <AppIcon name="chevron-down" :size="14" />
-              </template>
-            </NButton>
-          </template>
-          {{ t('terminal.next') }}
-        </NTooltip>
-        <NTooltip
-          :theme="tooltipDark"
-          :theme-overrides="terminalTooltipThemeOverrides"
-          placement="bottom"
-        >
-          <template #trigger>
-            <NButton text size="tiny" @click="closeSearch">
-              <template #icon>
-                <AppIcon name="close" :size="14" />
-              </template>
-            </NButton>
-          </template>
-          {{ t('terminal.closeSearch') }}
-        </NTooltip>
-      </div>
+      <TerminalSearchBar
+        v-if="searchOpen"
+        ref="searchBar"
+        :term="searchTerm"
+        :no-result="searchNoResult"
+        @update:term="searchTerm = $event"
+        @run="runSearch"
+        @close="closeSearch"
+      />
       <TerminalTab
         v-for="tab in store.tabs"
         v-show="tab.id === store.activeId"
@@ -243,37 +52,14 @@
         @search="openSearch"
         @contextmenu="openPaneMenu"
       />
-      <div
+      <TerminalContextMenu
         v-if="menu"
-        class="nh-terminal-menu-mask"
-        @mousedown="closeMenu"
-        @contextmenu.prevent="closeMenu"
+        :menu="menu"
+        :items="menuItems"
+        :menu-style="menuStyle"
+        @close="closeMenu"
+        @select="selectMenu"
       />
-      <div
-        v-if="menu"
-        ref="menuRef"
-        class="nh-terminal-menu"
-        :style="menuStyle"
-        role="menu"
-        @mousedown.stop
-        @keydown.esc.prevent="closeMenu"
-        @keydown.down.prevent="focusMenuItem(1)"
-        @keydown.up.prevent="focusMenuItem(-1)"
-      >
-        <template v-for="item in menuItems" :key="item.key">
-          <div v-if="item.divider" class="nh-terminal-menu__divider" />
-          <button
-            v-else
-            type="button"
-            class="nh-terminal-menu__item"
-            :class="{ 'nh-terminal-menu__item--danger': item.danger }"
-            :disabled="item.disabled"
-            @click.stop="selectMenu(item.key)"
-          >
-            {{ item.label }}
-          </button>
-        </template>
-      </div>
       <div v-if="!store.tabs.length" class="nh-terminal-panel__empty">
         <AppIcon name="terminal" :size="20" />
         <p>{{ t('terminal.empty') }}</p>
@@ -291,27 +77,18 @@
  */
 
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import {
-  useMessage,
-  NButton,
-  NInput,
-  NPopconfirm,
-  NTooltip,
-  type InputInst,
-  tooltipDark
-} from 'naive-ui';
+import { useMessage, NButton } from 'naive-ui';
 import type { TerminalSessionPublic } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
-import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import { useTerminalStore } from '../stores/terminal.store';
-import {
-  terminalCssVariables,
-  terminalPopconfirmThemeOverrides,
-  terminalTooltipThemeOverrides
-} from '../terminal-theme';
+import { terminalCssVariables } from '../terminal-theme';
+import type { TerminalMenuState, TerminalMenuItem } from '../terminal-menu';
+import TerminalPanelHeader from './TerminalPanelHeader.vue';
+import TerminalTabBar from './TerminalTabBar.vue';
+import TerminalSearchBar from './TerminalSearchBar.vue';
+import TerminalContextMenu from './TerminalContextMenu.vue';
 import TerminalTab from './TerminalTab.vue';
-import { VueDraggable } from 'vue-draggable-plus';
 
 const props = defineProps<{
   sessionId?: string | undefined;
@@ -322,30 +99,14 @@ const message = useMessage();
 const renamingId = ref<string>();
 const renameDraft = ref('');
 const creating = ref(false);
-interface TerminalMenuState {
-  kind: 'tab' | 'pane';
-  x: number;
-  y: number;
-  tab?: TerminalSessionPublic;
-}
-
-interface TerminalMenuItem {
-  key: string;
-  label: string;
-  disabled?: boolean;
-  danger?: boolean;
-  divider?: boolean;
-}
-
 const menu = ref<TerminalMenuState>();
-const menuRef = ref<HTMLElement>();
 const confirmTabId = ref<string>();
 const pendingCloseIds = ref<string[]>([]);
 const pendingBusyCount = ref(0);
 const searchOpen = ref(false);
 const searchTerm = ref('');
 const searchNoResult = ref(false);
-const searchInput = ref<InputInst>();
+const searchBar = ref<{ focus: () => void }>();
 
 let resizing = false;
 let startX = 0;
@@ -491,28 +252,12 @@ const closeMenu = (): void => {
   menu.value = undefined;
 };
 
-const focusFirstMenuItem = (): void => {
-  nextTick(() => menuRef.value?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus());
-};
-
-const focusMenuItem = (direction: number): void => {
-  const items = [
-    ...(menuRef.value?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])
-  ];
-  if (!items.length) return;
-  const current = items.indexOf(document.activeElement as HTMLButtonElement);
-  const next = (current + direction + items.length) % items.length;
-  items[next]?.focus();
-};
-
 const openMenu = (event: MouseEvent, tab: TerminalSessionPublic): void => {
   menu.value = { kind: 'tab', x: event.clientX, y: event.clientY, tab };
-  focusFirstMenuItem();
 };
 
 const openPaneMenu = (event: MouseEvent): void => {
   menu.value = { kind: 'pane', x: event.clientX, y: event.clientY };
-  focusFirstMenuItem();
 };
 
 const selectMenu = async (key: string): Promise<void> => {
@@ -585,8 +330,7 @@ const openSearch = (): void => {
   closeMenu();
   searchOpen.value = true;
   nextTick(() => {
-    searchInput.value?.focus();
-    searchInput.value?.select();
+    searchBar.value?.focus();
   });
 };
 
@@ -705,262 +449,15 @@ const stopResize = (): void => {
   background: color-mix(in srgb, var(--terminal-accent) 48%, transparent);
 }
 
-.nh-terminal-panel__header {
-  display: flex;
-  height: 56px;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 12px;
-  border-bottom: 1px solid var(--terminal-border);
-}
-
-.nh-terminal-panel__title {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--terminal-secondary);
-  font-size: 12px;
-}
-
-.nh-terminal-panel__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.nh-terminal-panel__icon-button {
-  width: 28px;
-  height: 28px;
-}
-
-.nh-terminal-panel__tab-actions :deep(.n-button) {
-  color: var(--terminal-secondary);
-}
-
-.nh-terminal-panel__tab-actions :deep(.n-button:hover) {
-  color: var(--terminal-text);
-}
-
-.nh-terminal-panel__actions :deep(.n-button) {
-  color: var(--terminal-secondary);
-}
-
-.nh-terminal-panel__actions :deep(.n-button:hover) {
-  color: var(--terminal-text);
-}
-
-.nh-terminal-panel__tabs {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 6px;
-  min-height: 42px;
-  padding: 6px 6px 0;
-  border-bottom: 1px solid var(--terminal-border);
-}
-
-.nh-terminal-panel__tab-list {
-  display: flex;
-  min-width: 0;
-  flex: 0 1 auto;
-  gap: 2px;
-  overflow-x: auto;
-  max-width: calc(100% - 84px);
-}
-
-.nh-terminal-panel__tab-actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 4px;
-}
-
-.nh-terminal-tab {
-  display: flex;
-  min-width: 96px;
-  max-width: 220px;
-  height: 28px;
-  align-items: center;
-  gap: 4px;
-  padding: 0 4px 0 9px;
-  border-radius: 6px 6px 0 0;
-  color: var(--terminal-secondary);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.nh-terminal-tab:hover {
-  background: var(--terminal-hover);
-  color: var(--terminal-text);
-}
-
-.nh-terminal-tab--active {
-  background: var(--terminal-hover);
-  color: var(--terminal-text);
-}
-
-.nh-terminal-tab :deep(.n-input) {
-  --n-color: var(--terminal-surface);
-  --n-color-focus: var(--terminal-surface);
-  --n-text-color: var(--terminal-text);
-  --n-border: 1px solid var(--terminal-border);
-  --n-border-focus: 1px solid var(--terminal-accent);
-  --n-border-hover: 1px solid var(--terminal-accent);
-}
-
-.nh-terminal-tab__title {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.nh-terminal-tab--ghost {
-  opacity: 0.35;
-}
-
-.nh-terminal-tab--chosen {
-  background: var(--terminal-hover);
-}
-
-.nh-terminal-tab--drag {
-  box-shadow: var(--nh-shadow-popover);
-}
-
-.nh-terminal-tab--exited .nh-terminal-tab__title {
-  opacity: 0.55;
-}
-
-.nh-terminal-tab__close {
-  display: grid;
-  width: 18px;
-  height: 18px;
-  flex: none;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--terminal-secondary);
-  cursor: pointer;
-  opacity: 0;
-}
-
-.nh-terminal-tab__close:hover {
-  background: color-mix(in srgb, var(--terminal-danger) 24%, var(--terminal-surface));
-  color: var(--terminal-text);
-}
-
-.nh-terminal-tab--active .nh-terminal-tab__close,
-.nh-terminal-tab:hover .nh-terminal-tab__close {
-  opacity: 1;
-}
-
 .nh-terminal-panel__body {
   position: relative;
   flex: 1;
   min-height: 0;
 }
 
-.nh-terminal-search {
-  position: absolute;
-  z-index: 20;
-  top: 10px;
-  right: 12px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  max-width: calc(100% - 24px);
-  padding: 4px;
-  border: 1px solid var(--terminal-border);
-  border-radius: 8px;
-  background: var(--terminal-surface);
-  box-shadow: var(--nh-shadow-popover);
-}
-
-.nh-terminal-search :deep(.n-input) {
-  width: 220px;
-
-  --n-color: var(--terminal-bg);
-  --n-color-focus: var(--terminal-bg);
-  --n-text-color: var(--terminal-text);
-  --n-border: 1px solid var(--terminal-border);
-  --n-border-focus: 1px solid var(--terminal-accent);
-  --n-border-hover: 1px solid var(--terminal-accent);
-}
-
-.nh-terminal-search__empty {
-  color: var(--terminal-danger);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-.nh-terminal-search :deep(.n-button) {
-  color: var(--terminal-secondary);
-}
-
-.nh-terminal-search :deep(.n-button:hover) {
-  color: var(--terminal-text);
-}
-
 .nh-terminal-panel__body > :deep(.nh-terminal-shell) {
   position: absolute;
   inset: 0;
-}
-
-.nh-terminal-menu-mask {
-  position: fixed;
-  z-index: 1000;
-  inset: 0;
-}
-
-.nh-terminal-menu {
-  position: fixed;
-  z-index: 1001;
-  display: flex;
-  width: 208px;
-  flex-direction: column;
-  gap: 1px;
-  padding: 6px;
-  border: 1px solid var(--terminal-border);
-  border-radius: 10px;
-  background: var(--terminal-surface);
-  box-shadow: var(--nh-shadow-popover);
-}
-
-.nh-terminal-menu__divider {
-  height: 1px;
-  margin: 4px 6px;
-  background: var(--terminal-border);
-}
-
-.nh-terminal-menu__item {
-  width: 100%;
-  height: 30px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--terminal-text);
-  font: inherit;
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.nh-terminal-menu__item:disabled {
-  color: var(--terminal-disabled);
-  cursor: not-allowed;
-}
-
-.nh-terminal-menu__item--danger {
-  color: var(--terminal-danger);
-}
-
-.nh-terminal-menu__item:hover:not(:disabled) {
-  background: var(--terminal-hover);
 }
 
 .nh-terminal-panel__empty {

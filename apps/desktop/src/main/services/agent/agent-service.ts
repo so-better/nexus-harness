@@ -578,8 +578,6 @@ const PLAN_ALLOWED_TOOLS = new Set([
   'list_dir',
   'glob',
   'grep',
-  'git_status',
-  'git_diff',
   'ask_user',
   'search_skills',
   'read_skill',

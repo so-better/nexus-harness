@@ -111,9 +111,7 @@ const importing = ref(false);
 const lastPath = ref('');
 const pendingRestart = ref(false);
 const importConfirmOpen = ref(false);
-const migrationBusy = computed(
-  () => props.busy || exporting.value || importing.value
-);
+const migrationBusy = computed(() => props.busy || exporting.value || importing.value);
 
 onMounted(async () => {
   try {

@@ -357,7 +357,7 @@ packages ──> shared（packages 之间允许，但禁止反向依赖 apps）
 
 ### 3.4 功能模块内部结构
 
-`renderer/modules/<module>/` 固定结构，按需创建子目录，不用的目录不建：
+`renderer/modules/<module>/` 按需创建子目录，不用的目录不建；常用结构如下：
 
 ```text
 modules/chat/
@@ -370,6 +370,8 @@ modules/chat/
 └─ index.ts             # 模块对外导出，避免外部深路径引用
 ```
 
+允许模块专属子目录（例如 `chat/render`、`settings/validation`），但必须维持 API、store 与展示边界。
+
 模块之间**禁止**直接引用对方 `components/`、`stores/`、`api/`；需要共享时抽到 `components/`、`composables/`、`packages/shared`。
 
 ### 3.5 能力分层
@@ -380,7 +382,7 @@ modules/chat/
 - **Skill（技能）**：声明式任务包，包含说明、资源与可选脚本，告诉 Agent“某类任务该怎么做”。技能不直接获得进程权限，只能通过工具行动。
 - **Plugin（插件）**：运行时扩展，通过贡献点添加 UI、命令、事件订阅与设置；注册工具的能力留到后续。插件负责“集成与产品化扩展”。
 
-MCP Server 不是独立能力层，而是工具来源：配置位于 `<userData>/mcp`，启动后把工具注册进 Tool 层。AI 可通过 `mcp_list`、`mcp_read`、`mcp_save`、`mcp_update`、`mcp_refresh`、`mcp_test` 管理 MCP；MCP 配置属于应用级数据，不受工作区 RootGrant 限制；读取时隐藏 `env`/`headers` 值，保存和测试时恢复原有掩码字段，写操作需要审批。
+MCP Server 不是独立能力层，而是工具来源：配置位于 `<userData>/mcp`，启动后把工具注册进 Tool 层。AI 可通过 `mcp_list`、`mcp_read`、`mcp_save`、`mcp_update`、`mcp_refresh`、`mcp_test` 管理 MCP；MCP 配置属于应用级数据，不受工作区 RootGrant 限制；读取时隐藏 `env` 与敏感 `headers` 值，保存和测试时恢复原有掩码字段，写操作需要审批。
 
 约束：
 
@@ -626,10 +628,20 @@ interface ProviderCapabilities {
 | `save_word` / `save_excel` / `save_ppt` / `save_pdf` | write | 否（写入 `files`） |
 | `search_images` / `search_videos` | network | 是 |
 | `generate_image` | network | 是（计费操作） |
+| `plugin_list` / `plugin_read` / `skill_list` / `skill_refresh` | read | 否 |
+| `mcp_list` / `mcp_read` | read | 否 |
+| `theme_get` / `skin_list` / `terminal_get_settings` / `terminal_list` / `terminal_read` / `terminal_wait` | read | 否 |
+| `cache_get_info` / `backup_status` / `general_settings_get` / `image_config_list` / `image_config_get` | read | 否 |
+| `plugin_create` / `plugin_update` / `plugin_import` / `plugin_delete` / `plugin_reload` / `plugin_set_enabled` | write | 是 |
+| `skill_create` / `skill_update` / `skill_import` / `skill_delete` | write | 是 |
+| `mcp_save` / `mcp_update` / `mcp_refresh` / `mcp_test` | write | 是 |
+| `theme_update` / `skin_apply` / `terminal_update_settings` / `terminal_create` / `terminal_write` / `terminal_close` / `terminal_request_access` | write | 是 |
+| `cache_clear` / `backup_export` / `backup_import` / `general_settings_update` | write | 是 |
+| `image_config_save` / `image_config_toggle` / `image_config_delete` | write | 是 |
 
 `save_*` 工具写入 `<userData>/files`，不触发工作区写审批，但必须记录 `file.created` 并受大小与类型限制。`save_file` 支持文本与 Base64 二进制内容；`save_word` / `save_pdf` 使用 Markdown，`save_ppt` 支持模板化版式。
 
-本地二进制读取计划在 M3 接入：按 MIME 与扩展名选择专用读取器；图片作为视觉内容发送，可抽取文本的格式转文本，其他二进制只保存文件引用，原始内容不得直接进入上下文。
+本地二进制读取已接入：按 MIME 与扩展名选择专用读取器；图片作为视觉内容发送，PDF/Office/文本等可抽取格式转文本，其他二进制只保存文件引用，原始内容不得直接进入上下文。
 
 #### MCP 工具接入
 
@@ -1020,6 +1032,7 @@ export function activate(ctx) {
 ├─ mcp/mcp.json         # 标准 MCP 配置，启动时扫描
 ├─ settings/             # 启动设置（主题等，后续迁移到 settings 表）
 ├─ files/                # AI 输出文件与会话导出，按会话存放
+├─ attachments/          # 用户上传附件与抽取内容，按会话存放
 ├─ artifacts/            # 工具产物与完整日志
 ├─ checkpoints/          # 逐文件快照，按会话/检查点存放
 └─ logs/                 # 运行日志
@@ -1042,13 +1055,14 @@ export function activate(ctx) {
 | `plugins` | 插件启用状态、权限确认与错误信息 |
 | `mcp_servers` | MCP Server 启用、信任与最近状态 |
 | `files` | AI 输出文件与会话导出元数据、存储路径 |
+| `attachments` | 上传附件元数据、抽取文本与存储路径 |
 | `artifacts` | 工具产物索引：会话、Run、标签、路径、大小与类型 |
 | `plugin_storage` | 按插件隔离的键值存储 |
 
 规则：
 
 - 所有运行期文件只写在 `<userData>` 下，不写入应用安装目录。
-- 启动时创建缺失的 `plugins`、`skills`、`mcp`、`settings`、`files`、`artifacts`、`checkpoints`、`logs` 目录。
+- 启动时创建缺失的 `plugins`、`skills`、`mcp`、`settings`、`files`、`attachments`、`artifacts`、`checkpoints`、`logs` 目录。
 - 插件、技能、MCP 目录由用户维护，应用只读取；启用/禁用等状态写数据库。
 - 文件系统是扩展的唯一事实来源，数据库只保存投影状态，启动时以扫描结果为准。
 - 唯一 RootGrant 以 `session_roots` 持久化；会话删除时清理授权记录，不删除用户文件。
@@ -1129,7 +1143,7 @@ export function activate(ctx) {
 - 设置页有 Run 运行时禁止清理缓存；AI 工具只允许当前 Run 清理，并拒绝其他活跃 Run；部分目录清理失败必须返回失败类别并提示用户，不得误报全部成功。
 - 高级：数据目录、日志、遥测开关（默认关闭）。
 - Extensions 弹窗独立管理插件、Skill、MCP，不混入设置；插件自身配置放在插件详情中。
-- 设置项必须由 zod schema 定义，未知键忽略；变更写入 `settings.updated` 事件。
+- 设置项必须由 zod schema 定义，未知键忽略；设置变更通过对应设置服务的 IPC 广播或领域服务同步，不写入会话事件流。
 - 入口使用 `Cmd/Ctrl+,` 打开设置弹窗；macOS 与 Windows 使用同一套布局。
 
 ### 4.9 Agent 循环与运行控制
@@ -1353,7 +1367,7 @@ interface AskUserAnswer {
 - 嵌套层级不超过 3 层；禁止 `!important`，除非覆盖第三方库且注释说明。
 - 类名遵循 BEM，禁止无意义类名（`box1`、`red`）。
 - 字体、动效、阴影、层级同样必须使用 token，禁止在组件内写 `transition: all 0.3s` 之类的魔法值。
-- 尺寸、间距、字号、圆角与行高使用偶数（推荐 4 的倍数），禁止 `13px`、`15px`、`7px` 等奇数数值；`1px` 边框与发丝线例外，统一使用 border token。
+- 尺寸、间距、字号、圆角与行高使用偶数，禁止 `13px`、`15px`、`7px` 等奇数数值；`1px` 边框与发丝线例外，统一使用 border token。
 - 平台材质与窗口差异统一收敛到 `platform/` 适配层，业务样式不得直接判断操作系统。
 
 插件主题：
@@ -1413,10 +1427,10 @@ interface AskUserAnswer {
 
 - 一个文件只放一个组件，文件名与组件名一致，使用 PascalCase。
 - 满足任意一条即必须拆分：
-  - 单文件超过 **200 行**（不含模板中的简单标记）。
+  - 单文件超过 **500 行**（不含模板中的简单标记）。
   - 同时承担 **3 个及以上职责**（数据获取、状态管理、展示、交互编排等）。
   - 出现可被第二个页面复用的 UI 或逻辑。
-  - props 或 emits 超过 **6 个**，应改为组合子组件或使用插槽。
+  - props 或 emits 超过 **12 个**，应改为组合子组件或使用插槽。
 - 可复用逻辑必须提取到 `composables/`；可复用 UI 提取到 `components/`。
 - 列表渲染必须有独立子组件（如 `MessageList.vue` + `MessageItem.vue`）。
 - **展示组件**：只接收 props、只 emit 事件，不访问 store、不发起 IPC。
@@ -1788,7 +1802,7 @@ CHANGELOG.md         # 版本变更记录
 | 消息操作 | 编辑重发 / 重新生成 / 停止 | 旧消息标记 `superseded`，不物理删除 |
 | 变更审阅 | 不做 | App 内不提供独立审阅面板与回滚 UI，深度审阅交给外部工具；写前审批展示实际变更 |
 | 工作区索引 | SQLite 增量索引 | 尊重 `.gitignore`，跳过二进制与大文件 |
-| 本地二进制读取 | M3 | 图片走视觉输入；其他类型按专用读取器、转文本或文件引用处理 |
+| 本地二进制读取 | 已支持基础能力 | 图片走视觉输入；PDF/Office/文本转文本；其他类型按文件引用处理 |
 | Git 集成 | 不做 | 不提供 Git 工具、状态或提交能力 |
 | 通知 | 系统通知 + Dock/托盘 | 后台完成、失败或等待时提醒 |
 | 模型配置 | 支持 `extra_params` 与自定义 headers | 上下文窗口、token 价格、连接测试 |
@@ -1823,7 +1837,7 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 所有导出成员与关键代码块有中文注释；没有 `/* ... */`，没有死代码。
 - [ ] 基础控件优先使用 Naive UI；自定义组件只用于 Naive UI 覆盖不到的区域，并补齐交互状态。
 - [ ] 所有颜色来自语义 token，深浅主题下均已检查。
-- [ ] 尺寸、间距、字号与圆角使用偶数（推荐 4 的倍数），1px 边框除外。
+- [ ] 尺寸、间距、字号与圆角使用偶数，1px 边框除外。
 - [ ] 异步调用未使用 `void` 抑制，已显式 `await` 或 `.catch()`。
 - [ ] 动效使用 token，`prefers-reduced-motion` 与 Windows 回退均已验证。
 - [ ] 长列表已虚拟化，重计算没有阻塞渲染主线程。
@@ -1922,7 +1936,6 @@ CHANGELOG.md         # 版本变更记录
 | `checkpoint.restored` | `checkpointId`、`runId` | 回滚到检查点 |
 | `file.created` | `fileId`、`runId`、`name`、`mime`、`bytes`、`source` | 生成或下载的文件保存到 `files` |
 | `usage.recorded` | `provider`、`model`、`modality`、`inputTokens`、`outputTokens`、`cacheReadTokens`、`cacheWriteTokens`、`reasoningTokens`、`images`、`cost` | 模型调用结束 |
-| `settings.updated` | `key`、`scope` | 设置变更 |
 | `plugin.activated` | `pluginId`、`version` | 插件激活 |
 | `plugin.deactivated` | `pluginId` | 插件停用 |
 | `plugin.discovered` | `pluginId`、`version`、`path` | 扫描到插件 |

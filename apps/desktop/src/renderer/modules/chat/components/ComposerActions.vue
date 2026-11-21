@@ -9,7 +9,11 @@
       </span>
     </div>
     <div class="nh-composer__send-group">
-      <AgentModeSelect :mode="mode" :disabled="running" @update-mode="emit('update-mode', $event)" />
+      <AgentModeSelect
+        :mode="mode"
+        :disabled="running"
+        @update-mode="emit('update-mode', $event)"
+      />
       <NButton
         type="primary"
         tertiary

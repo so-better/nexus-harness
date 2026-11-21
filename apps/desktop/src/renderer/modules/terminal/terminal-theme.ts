@@ -3,25 +3,41 @@
  */
 
 import type { GlobalThemeOverrides } from 'naive-ui';
+import { darkPalette } from '@/app/theme-palette';
 
 export const TERMINAL_FONT_FAMILY = '"SF Mono", "Cascadia Code", ui-monospace, monospace';
 
+/** 将调色板十六进制色转换为 xterm 可识别的 rgba。 */
+const withAlpha = (hex: string, alpha: number): string => {
+  const value = hex.replace('#', '');
+  const red = parseInt(value.slice(0, 2), 16);
+  const green = parseInt(value.slice(2, 4), 16);
+  const blue = parseInt(value.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+};
+
 export const TERMINAL_COLORS = {
-  background: '#090d13',
-  surface: '#101720',
-  hover: '#172233',
-  border: '#243246',
-  text: '#f3f7ff',
-  secondary: '#93a4bd',
-  disabled: '#5b6a80',
-  accent: '#7fb6ff',
-  accentHover: '#a9cbff',
-  selection: 'rgba(127, 182, 255, 0.28)',
-  danger: '#f87171',
-  success: '#4ade80',
-  warning: '#fbbf24',
-  cyan: '#67e3f9',
-  magenta: '#b6afff'
+  background: darkPalette.bgBase,
+  surface: darkPalette.bgElevated,
+  hover: darkPalette.bgHover,
+  border: darkPalette.border,
+  text: darkPalette.textPrimary,
+  secondary: darkPalette.textSecondary,
+  disabled: darkPalette.textDisabled,
+  accent: darkPalette.accent,
+  accentHover: darkPalette.accentHover,
+  selection: withAlpha(darkPalette.accent, 0.28),
+  danger: darkPalette.danger,
+  success: darkPalette.success,
+  warning: darkPalette.warning,
+  cyan: darkPalette.accentHover,
+  magenta: darkPalette.idle,
+  brightRed: '#fca5a5',
+  brightGreen: '#86efac',
+  brightYellow: '#fde68a',
+  brightMagenta: '#d8d2ff',
+  brightCyan: '#a5f0fc',
+  brightWhite: '#ffffff'
 } as const;
 
 /**

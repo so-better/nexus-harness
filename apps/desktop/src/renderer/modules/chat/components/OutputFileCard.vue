@@ -6,7 +6,9 @@
       </span>
       <span class="nh-output-file__copy">
         <span class="nh-output-file__name">{{ file.name }}</span>
-        <span class="nh-output-file__meta">{{ formatFileBytes(file.bytes) }} · {{ file.mime }}</span>
+        <span class="nh-output-file__meta"
+          >{{ formatFileBytes(file.bytes) }} · {{ file.mime }}</span
+        >
       </span>
       <PluginSlot
         location="filecard.actions"
@@ -74,7 +76,6 @@ const canPreview = computed(() => {
     mime === 'application/xml'
   );
 });
-
 </script>
 
 <style scoped lang="less">

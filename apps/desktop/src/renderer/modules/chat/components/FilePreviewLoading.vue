@@ -11,7 +11,11 @@
           <span v-for="line in 24" :key="line" />
         </div>
         <div class="nh-preview-loading__lines" aria-hidden="true">
-          <span v-for="(width, index) in lineWidths" :key="`${index}-${width}`" :style="{ width }" />
+          <span
+            v-for="(width, index) in lineWidths"
+            :key="`${index}-${width}`"
+            :style="{ width }"
+          />
         </div>
       </template>
       <div v-else class="nh-preview-loading__media" aria-hidden="true">
@@ -38,11 +42,31 @@ import AppIcon from '@/components/AppIcon.vue';
 defineProps<{ kind: 'image' | 'video' | 'text' }>();
 
 const lineWidths = [
-  '78%', '56%', '88%', '64%', '92%', '48%', '72%', '84%', '60%', '40%',
-  '86%', '52%', '74%', '90%', '58%', '66%', '80%', '46%', '88%', '62%',
-  '74%', '50%', '82%', '38%'
+  '78%',
+  '56%',
+  '88%',
+  '64%',
+  '92%',
+  '48%',
+  '72%',
+  '84%',
+  '60%',
+  '40%',
+  '86%',
+  '52%',
+  '74%',
+  '90%',
+  '58%',
+  '66%',
+  '80%',
+  '46%',
+  '88%',
+  '62%',
+  '74%',
+  '50%',
+  '82%',
+  '38%'
 ];
 </script>
 
 <style scoped lang="less" src="./FilePreviewLoading.less"></style>
-

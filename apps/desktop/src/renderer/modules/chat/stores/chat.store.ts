@@ -2,37 +2,32 @@
  * 聊天 store：缓存会话事件、运行状态、审批与临时工作目录。
  */
 
-import { computed, reactive, ref } from 'vue';
+import { reactive, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { t } from '@/app/i18n';
 import { appendAgentEvent } from '../event-cache';
 import type { MessageFileReference, NexusEvent } from '@shared/events';
-import type { SessionRoot } from '@shared/ipc/contracts';
 import type { AskUserAnswer } from '@shared/ask-user';
 import {
   answerAskUser as answerAskUserApi,
   cancelAgent,
   cancelAgentSession,
-  chooseRoot,
   loadEvents,
   resolveApproval,
   runAgent,
   subscribeAgentEvents
 } from '../api/chat.api';
 import { useProviderSelection } from '../provider-selection';
-import {
-  addSessionRoots,
-  getSessionRoots,
-  removeSessionRoot
-} from '@/modules/session/api/session.api';
+import { useSessionRoots } from '@/composables/use-session-roots';
 
 /**
  * 每个会话独立缓存事件，切换会话时不丢后台事件。
  */
 export const useChatStore = defineStore('chat', () => {
-  const roots = ref<SessionRoot[]>([]);
-  const rootPaths = computed(() => roots.value.map((root) => root.path));
   const error = ref<string | undefined>();
+  const { roots, rootPaths, loadRoots, addRoot, removeRoot } = useSessionRoots((message) => {
+    error.value = message;
+  });
 
   const providerSelection = useProviderSelection((message) => {
     error.value = message;
@@ -190,45 +185,6 @@ export const useChatStore = defineStore('chat', () => {
       await resolveApproval(approvalId, approved);
     } catch (reason) {
       error.value = reason instanceof Error ? reason.message : String(reason);
-    }
-  };
-
-  /**
-   * 读取会话已持久化的 root；切换会话时刷新。
-   */
-  const loadRoots = async (sessionId: string): Promise<void> => {
-    try {
-      roots.value = await getSessionRoots(sessionId);
-    } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
-    }
-  };
-
-  /**
-   * 选择并授权工作区目录，授权写入会话。
-   */
-  const addRoot = async (sessionId: string): Promise<'added' | 'cancelled' | 'failed'> => {
-    try {
-      const paths = await chooseRoot(roots.value[0]?.path);
-      if (paths.length === 0) return 'cancelled';
-      roots.value = await addSessionRoots(sessionId, [paths[0]!]);
-      return 'added';
-    } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
-      return 'failed';
-    }
-  };
-
-  /**
-   * 撤销会话 root。
-   */
-  const removeRoot = async (sessionId: string, rootId: string): Promise<boolean> => {
-    try {
-      roots.value = await removeSessionRoot(sessionId, rootId);
-      return true;
-    } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
-      return false;
     }
   };
 

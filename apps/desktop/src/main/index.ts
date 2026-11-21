@@ -155,7 +155,7 @@ if (!hasSingleInstanceLock) {
       });
       startMcpConfigWatcher();
       // 启动后预热已启用的 MCP，避免第一次对话等待进程启动
-      void getMcpService()
+      getMcpService()
         .prewarm()
         .catch((error: unknown) => console.error('MCP 预热失败', error));
       const builtinIds = new Set(

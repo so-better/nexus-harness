@@ -58,7 +58,10 @@
       @update-model="emit('update-model', $event)"
       @update-mode="emit('update-mode', $event)"
       @open-settings="emit('open-settings')"
-      @send="(prompt, images, references, attachmentIds) => emit('send', prompt, images, references, attachmentIds)"
+      @send="
+        (prompt, images, references, attachmentIds) =>
+          emit('send', prompt, images, references, attachmentIds)
+      "
       @stop="emit('stop')"
     />
 
@@ -130,7 +133,10 @@
           @update-provider="emit('update-provider', $event)"
           @update-model="emit('update-model', $event)"
           @update-mode="emit('update-mode', $event)"
-          @send="(prompt, images, references, attachmentIds) => emit('send', prompt, images, references, attachmentIds)"
+          @send="
+            (prompt, images, references, attachmentIds) =>
+              emit('send', prompt, images, references, attachmentIds)
+          "
           @stop="emit('stop')"
         />
       </div>
@@ -192,7 +198,12 @@ const emit = defineEmits<{
   'update-model': [id: string];
   'update-mode': [mode: AgentMode];
   'open-settings': [];
-  send: [prompt: string, imagePaths?: string[], references?: MessageFileReference[], attachmentIds?: string[]];
+  send: [
+    prompt: string,
+    imagePaths?: string[],
+    references?: MessageFileReference[],
+    attachmentIds?: string[]
+  ];
   stop: [];
   approve: [approvalId: string];
   reject: [approvalId: string];

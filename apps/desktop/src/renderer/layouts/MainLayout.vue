@@ -93,28 +93,19 @@
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useMessage } from 'naive-ui';
 import { storeToRefs } from 'pinia';
-import type {
-  AgentMode,
-  ProviderPublic,
-  SessionSummary,
-  WorkspaceAuthorizationRequest
-} from '@shared/ipc/contracts';
-import type { AskUserAnswer } from '@shared/ask-user';
+import type { ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
 import { setLocale, t } from '@/app/i18n';
 import { effectiveTheme } from '@/app/theme';
-import type { MessageFileReference } from '@shared/events';
 import ChatView from '@/modules/chat/views/ChatView.vue';
 import {
   onWorkspaceAuthorization,
-  onWorkspaceAuthorizationSettled,
-  resolveWorkspaceAuthorization
+  onWorkspaceAuthorizationSettled
 } from '@/modules/chat/api/workspace.api';
 import { projectEvents } from '@/modules/chat/projection';
 import { useChatStore } from '@/modules/chat/stores/chat.store';
 import SessionSidebar from '@/modules/session/components/SessionSidebar.vue';
 import {
   consumePendingSession,
-  exportSession as exportSessionApi,
   onSessionActivate,
   onSessionRootsChanged,
   subscribeSessionChanges
@@ -133,6 +124,9 @@ import AppTitleBar from './AppTitleBar.vue';
 import { useAppMeta } from './use-app-meta';
 import { useSessionStatusSync } from './use-session-status';
 import { useAppCommands } from './use-app-commands';
+import { useMainSessionActions } from './use-main-session-actions';
+import { useMainChatActions } from './use-main-chat-actions';
+import { useWorkspaceAuthorization } from './use-workspace-authorization';
 
 const sessions = useSessionStore();
 const chat = useChatStore();
@@ -149,20 +143,24 @@ const { sessions: sessionList, activeId } = storeToRefs(sessions);
 const { providers, providerId, modelId, models, roots, runningBySession } = storeToRefs(chat);
 
 const { version, platform, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
-const focusMessage = ref<{ id: string; token: number; sessionId: string }>();
-const workspaceAuthRequests = ref<Record<string, WorkspaceAuthorizationRequest>>({});
-const workspaceAuthRequest = computed(() => {
-  const sessionId = activeId.value;
-  return sessionId ? (workspaceAuthRequests.value[sessionId] ?? null) : null;
-});
-const exporting = ref(false);
+const {
+  exporting,
+  focusMessage,
+  createSession,
+  selectSession,
+  openSearchMessage,
+  ensureSession,
+  removeSession,
+  exportActiveSession,
+  renameSession,
+  clearAllSessions
+} = useMainSessionActions();
 let unsubscribeSessionChanges: (() => void) | undefined;
 let unsubscribeSessionActivate: (() => void) | undefined;
 let unsubscribeSessionRoots: (() => void) | undefined;
 let unsubscribeWorkspaceAuth: (() => void) | undefined;
 let unsubscribeWorkspaceSettled: (() => void) | undefined;
 let unsubscribeGeneralSettings: (() => void) | undefined;
-let focusSequence = 0;
 
 const activeMode = computed(
   () => sessionList.value.find((session) => session.id === activeId.value)?.mode ?? 'build'
@@ -183,6 +181,28 @@ const disabledReason = computed(() => {
   return undefined;
 });
 useSessionStatusSync(sessions, projection, activeId);
+
+const {
+  workspaceAuthRequests,
+  workspaceAuthRequest,
+  authorizeRootAndRetry,
+  chooseRoot,
+  removeRoot,
+  allowWorkspace,
+  rejectWorkspace,
+  clearWorkspaceRequest
+} = useWorkspaceAuthorization();
+
+const {
+  send,
+  updateProvider,
+  updateModel,
+  answerUser,
+  editMessage,
+  regenerateMessage,
+  changeMode,
+  stop
+} = useMainChatActions({ activeRunning, projection });
 
 watch(activeId, (id) => pluginRuntime.setActiveSession(id), { immediate: true });
 
@@ -212,295 +232,6 @@ watch(
   { immediate: true }
 );
 
-/**
- * 新建会话并使用当前 Provider。
- */
-const createSession = async (): Promise<void> => {
-  const created = await sessions.create(providerId.value, modelId.value);
-  if (!created) message.error(sessions.error ?? t('session.createFailed'));
-};
-
-/**
- * 选中会话。
- */
-const selectSession = (id: string): void => {
-  sessions.select(id);
-};
-
-/**
- * 从跨会话搜索结果打开并定位消息。
- */
-const openSearchMessage = (sessionId: string, messageId: string): void => {
-  sessions.select(sessionId);
-  focusSequence += 1;
-  focusMessage.value = { id: messageId, token: focusSequence, sessionId };
-};
-
-/**
- * 没有会话时自动创建一个，保证始终有可进入的工作上下文。
- */
-const ensureSession = async (): Promise<string | undefined> => {
-  if (sessions.activeId) return sessions.activeId;
-  if (sessions.sessions.length === 0) {
-    const created = await sessions.create(providerId.value, modelId.value);
-    return created?.id;
-  }
-  return sessions.activeId ?? undefined;
-};
-
-/**
- * 删除会话；删掉最后一个后自动补一个新会话。
- */
-const removeSession = async (id: string): Promise<void> => {
-  const removed = await sessions.remove(id);
-  if (!removed) {
-    message.error(sessions.error ?? t('session.removeFailed'));
-    return;
-  }
-  await ensureSession();
-};
-
-/**
- * 重命名会话。
- */
-const exportSession = async (id: string, format: 'markdown' | 'html' | 'pdf'): Promise<void> => {
-  try {
-    const result = await exportSessionApi(id, format);
-    if (result.saved) message.success(t('session.exported'));
-  } catch (error) {
-    message.error(error instanceof Error ? error.message : t('session.exportFailed'));
-  }
-};
-
-const exportActiveSession = async (format: 'markdown' | 'html' | 'pdf'): Promise<void> => {
-  if (!activeId.value || exporting.value) return;
-  exporting.value = true;
-  try {
-    await exportSession(activeId.value, format);
-  } finally {
-    exporting.value = false;
-  }
-};
-
-const renameSession = async (id: string, title: string): Promise<void> => {
-  const renamed = await sessions.rename(id, title);
-  if (!renamed) message.error(sessions.error ?? t('session.renameFailed'));
-};
-
-/**
- * 清除全部会话；完成后自动进入一个新会话。
- */
-const clearAllSessions = async (): Promise<void> => {
-  const cleared = await sessions.clearAll();
-  if (!cleared) {
-    message.error(sessions.error ?? t('session.clearAllFailed'));
-    return;
-  }
-  await ensureSession();
-};
-
-/**
- * 添加工作区；没有会话时先创建。
- */
-const authorizeWorkspace = async (): Promise<boolean> => {
-  if (!activeId.value) {
-    const created = await sessions.create(providerId.value, modelId.value);
-    if (!created) {
-      message.error(sessions.error ?? t('session.createFailed'));
-      return false;
-    }
-  }
-  if (!activeId.value) return false;
-
-  const result = await chat.addRoot(activeId.value);
-  if (result === 'failed') {
-    message.error(chat.error ?? t('app.rootAddFailed'));
-    return false;
-  }
-  return result === 'added';
-};
-
-/**
- * 从工具错误授权工作区，并提示用户重试原操作。
- */
-const authorizeRootAndRetry = async (): Promise<void> => {
-  if (await authorizeWorkspace()) message.info(t('app.rootAuthorizedRetry'));
-};
-
-/**
- * 添加或替换工作区。
- */
-const chooseRoot = async (): Promise<void> => {
-  await authorizeWorkspace();
-};
-
-/**
- * 清除当前会话的工作区授权。
- */
-const removeRoot = async (rootId: string): Promise<void> => {
-  if (!activeId.value) return;
-  const removed = await chat.removeRoot(activeId.value, rootId);
-  if (!removed) message.error(chat.error ?? t('app.rootRemoveFailed'));
-};
-
-/**
- * 发送消息；没有会话时先创建。
- */
-const send = async (
-  prompt: string,
-  imagePaths?: string[],
-  references?: MessageFileReference[],
-  attachmentIds?: string[]
-): Promise<void> => {
-  if (!activeId.value) {
-    const created = await sessions.create(providerId.value, modelId.value);
-    if (!created) {
-      message.error(sessions.error ?? t('session.createFailed'));
-      return;
-    }
-  }
-  if (activeId.value) {
-    const started = await chat.send(activeId.value, prompt, imagePaths, references, attachmentIds);
-    if (!started) message.error(chat.error ?? t('chat.sendFailed'));
-  }
-};
-
-/**
- * 持久化当前会话的服务商与模型选择。
- */
-const persistSelection = (): void => {
-  if (activeId.value && providerId.value && modelId.value) {
-    sessions
-      .updateModel(activeId.value, providerId.value, modelId.value)
-      .catch((error: unknown) => console.error('保存会话模型失败', error));
-  }
-};
-
-/**
- * 切换服务商并持久化。
- */
-const updateProvider = (id: string): void => {
-  chat.setProvider(id);
-  persistSelection();
-};
-
-/**
- * 切换模型并持久化。
- */
-const updateModel = (id: string): void => {
-  chat.setModel(id);
-  persistSelection();
-};
-
-/**
- * 回答 Agent 的结构化提问。
- */
-const answerUser = async (
-  requestId: string,
-  answers: AskUserAnswer[] | undefined
-): Promise<void> => {
-  const answered = await chat.answerAskUser(requestId, answers);
-  if (!answered) message.error(chat.error ?? t('chat.askUserFailed'));
-};
-
-/**
- * 编辑用户消息并重发。
- */
-const editMessage = async (
-  messageId: string,
-  content: string,
-  references?: MessageFileReference[],
-  attachmentIds?: string[]
-): Promise<void> => {
-  if (!activeId.value || activeRunning.value) return;
-  const started = await chat.editMessage(
-    activeId.value,
-    messageId,
-    content,
-    references,
-    attachmentIds
-  );
-  if (!started) message.error(chat.error ?? t('chat.editFailed'));
-};
-
-/**
- * 重新生成最后一条助手回复。
- */
-const regenerateMessage = async (messageId: string): Promise<void> => {
-  if (!activeId.value || activeRunning.value) return;
-  const lastUser = [...projection.value.messages]
-    .reverse()
-    .find((message) => message.role === 'user');
-  if (!lastUser) return;
-  const started = await chat.regenerateMessage(activeId.value, messageId, lastUser.content);
-  if (!started) message.error(chat.error ?? t('chat.regenerateFailed'));
-};
-
-/**
- * 切换 Agent 模式；运行中禁止切换。
- */
-const changeMode = async (mode: AgentMode): Promise<void> => {
-  if (!activeId.value || activeRunning.value) return;
-  const updated = await sessions.updateMode(activeId.value, mode);
-  if (!updated) message.error(sessions.error ?? t('chat.modeChangeFailed'));
-};
-
-/**
- * 停止当前会话的 Run。
- */
-const stop = async (): Promise<void> => {
-  if (activeId.value) await chat.stop(activeId.value);
-};
-
-/**
- * 移除某个会话的授权请求；其他会话的请求保持不变。
- */
-const clearWorkspaceRequest = (sessionId: string): void => {
-  const next = { ...workspaceAuthRequests.value };
-  delete next[sessionId];
-  workspaceAuthRequests.value = next;
-};
-
-/**
- * 允许当前授权请求：只使用请求中展示的路径。
- */
-const allowWorkspace = async (): Promise<void> => {
-  const request = workspaceAuthRequest.value;
-  if (!request) return;
-  try {
-    if (
-      await resolveWorkspaceAuthorization({
-        requestId: request.requestId,
-        decision: 'approved'
-      })
-    ) {
-      clearWorkspaceRequest(request.sessionId);
-    }
-  } catch (reason) {
-    message.error(reason instanceof Error ? reason.message : t('app.rootAddFailed'));
-  }
-};
-
-/**
- * 拒绝当前授权请求。
- */
-const rejectWorkspace = async (): Promise<void> => {
-  const request = workspaceAuthRequest.value;
-  if (!request) return;
-  try {
-    if (
-      await resolveWorkspaceAuthorization({
-        requestId: request.requestId,
-        decision: 'rejected'
-      })
-    ) {
-      clearWorkspaceRequest(request.sessionId);
-    }
-  } catch (reason) {
-    message.error(reason instanceof Error ? reason.message : t('app.rootAddFailed'));
-  }
-};
-
 const { commandPaletteOpen, paletteCommands, executeCommand } = useAppCommands({
   pluginRuntime,
   activeRunning,
@@ -519,7 +250,9 @@ const { commandPaletteOpen, paletteCommands, executeCommand } = useAppCommands({
     changelogOpen.value = true;
   },
   toggleTheme: () => {
-    void setTheme(effectiveTheme.value === 'dark' ? 'light' : 'dark');
+    setTheme(effectiveTheme.value === 'dark' ? 'light' : 'dark').catch((error: unknown) => {
+      console.error('切换主题失败', error);
+    });
   },
   stop,
   showError: (text) => message.error(text)

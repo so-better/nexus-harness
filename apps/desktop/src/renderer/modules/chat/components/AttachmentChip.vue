@@ -50,8 +50,7 @@ const emit = defineEmits<{ remove: [] }>();
 const imageSrc = ref('');
 const isImage = computed(
   () =>
-    props.attachment.mime.toLowerCase().startsWith('image/') ||
-    isImageFile(props.attachment.name)
+    props.attachment.mime.toLowerCase().startsWith('image/') || isImageFile(props.attachment.name)
 );
 
 const sizeLabel = computed(() => {
@@ -76,13 +75,17 @@ const loadPreview = async (): Promise<void> => {
 };
 
 onMounted(() => {
-  void loadPreview();
+  loadPreview().catch((error: unknown) => {
+    console.error('加载附件预览失败', error);
+  });
 });
 
 watch(
   () => [props.attachment.id, props.attachment.sessionId, isImage.value],
   () => {
-    void loadPreview();
+    loadPreview().catch((error: unknown) => {
+      console.error('加载附件预览失败', error);
+    });
   }
 );
 </script>

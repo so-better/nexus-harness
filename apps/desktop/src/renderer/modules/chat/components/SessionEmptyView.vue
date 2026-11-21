@@ -33,7 +33,10 @@
         @update-model="emit('update-model', $event)"
         @update-mode="emit('update-mode', $event)"
         @open-settings="emit('open-settings')"
-        @send="(prompt, images, references, attachmentIds) => emit('send', prompt, images, references, attachmentIds)"
+        @send="
+          (prompt, images, references, attachmentIds) =>
+            emit('send', prompt, images, references, attachmentIds)
+        "
         @stop="emit('stop')"
       />
     </div>
@@ -66,7 +69,12 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  send: [prompt: string, imagePaths?: string[], references?: MessageFileReference[], attachmentIds?: string[]];
+  send: [
+    prompt: string,
+    imagePaths?: string[],
+    references?: MessageFileReference[],
+    attachmentIds?: string[]
+  ];
   stop: [];
   'choose-root': [];
   'remove-root': [rootId: string];

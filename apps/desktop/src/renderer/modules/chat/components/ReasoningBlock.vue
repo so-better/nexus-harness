@@ -86,14 +86,14 @@ watch(
   line-height: 1.6;
 }
 
-/* MarkdownContent 默认 14px，推理区需降一级，避免与正文抢视觉权重 */
+// MarkdownContent 默认 14px，推理区需降一级，避免与正文抢视觉权重
 .nh-reasoning__body :deep(.nh-markdown) {
   color: var(--nh-color-text-disabled);
   font-size: 11px;
   line-height: 1.6;
 }
 
-/* 去掉最后一段自带的下外边距，避免底部比顶部空 */
+// 去掉最后一段自带的下外边距，避免底部比顶部空
 .nh-reasoning__body :deep(.nh-markdown > :last-child) {
   margin-bottom: 0;
 }

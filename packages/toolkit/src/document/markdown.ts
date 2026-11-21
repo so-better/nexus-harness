@@ -207,4 +207,4 @@ export const parseMarkdownBlocks = (markdown: string): Block[] => {
   return blocks.filter((block) => block.type !== 'list' || block.items.length > 0);
 };
 
-/* ═══════════════════════ Word / Excel 生成 ═══════════════════════ */
+// ═══════════════════════ Word / Excel 生成 ═══════════════════════

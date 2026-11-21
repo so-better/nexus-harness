@@ -67,18 +67,30 @@
             <template #trigger>
               <p class="nh-mcp__result-hint" tabindex="0">{{ t('mcp.testSkippedHint') }}</p>
             </template>
-            <span style="display:block;max-width:420px;overflow-wrap:anywhere;white-space:normal;">{{ t('mcp.testSkippedHint') }}</span>
+            <span
+              style="display: block; max-width: 420px; overflow-wrap: anywhere; white-space: normal"
+              >{{ t('mcp.testSkippedHint') }}</span
+            >
           </NTooltip>
           <div v-else-if="result.ok" class="nh-mcp__metrics">
-            <span><strong>{{ result.tools ?? 0 }}</strong> tools</span>
-            <span><strong>{{ result.resources ?? 0 }}</strong> resources</span>
-            <span><strong>{{ result.prompts ?? 0 }}</strong> prompts</span>
+            <span
+              ><strong>{{ result.tools ?? 0 }}</strong> tools</span
+            >
+            <span
+              ><strong>{{ result.resources ?? 0 }}</strong> resources</span
+            >
+            <span
+              ><strong>{{ result.prompts ?? 0 }}</strong> prompts</span
+            >
           </div>
           <NTooltip v-else placement="top-end">
             <template #trigger>
               <p class="nh-mcp__result-error" tabindex="0">{{ result.error }}</p>
             </template>
-            <span style="display:block;max-width:420px;overflow-wrap:anywhere;white-space:normal;">{{ result.error }}</span>
+            <span
+              style="display: block; max-width: 420px; overflow-wrap: anywhere; white-space: normal"
+              >{{ result.error }}</span
+            >
           </NTooltip>
         </div>
       </div>
@@ -97,7 +109,10 @@
             <template #trigger>
               <span class="nh-mcp__server-error" tabindex="0">{{ server.error }}</span>
             </template>
-            <span style="display:block;max-width:420px;overflow-wrap:anywhere;white-space:normal;">{{ server.error }}</span>
+            <span
+              style="display: block; max-width: 420px; overflow-wrap: anywhere; white-space: normal"
+              >{{ server.error }}</span
+            >
           </NTooltip>
           <NSwitch
             size="small"
@@ -120,7 +135,6 @@
         class="nh-mcp-editor"
       />
     </section>
-
   </section>
 </template>
 

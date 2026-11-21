@@ -15,7 +15,6 @@
  * 首 token 前的助手占位：让运行级光标位于助手消息列，而不是挂在用户操作栏下方。
  */
 import ThinkingIndicator from './ThinkingIndicator.vue';
-
 </script>
 
 <style scoped lang="less">

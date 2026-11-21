@@ -225,19 +225,27 @@ const onFilePick = (event: Event): void => {
   const input = event.target as HTMLInputElement;
   const files = [...(input.files ?? [])];
   input.value = '';
-  void addFiles(files);
+  addFiles(files).catch((error: unknown) => {
+    console.error('添加附件失败', error);
+  });
 };
 
 const onPaste = (event: ClipboardEvent): void => {
   const files = filesFromClipboard(event.clipboardData);
   if (!files.length) return;
   event.preventDefault();
-  void addFiles(files);
+  addFiles(files).catch((error: unknown) => {
+    console.error('添加附件失败', error);
+  });
 };
 
 const onDrop = (event: DragEvent): void => {
   const files = [...(event.dataTransfer?.files ?? [])];
-  if (files.length) void addFiles(files);
+  if (files.length) {
+    addFiles(files).catch((error: unknown) => {
+      console.error('添加附件失败', error);
+    });
+  }
 };
 
 /**

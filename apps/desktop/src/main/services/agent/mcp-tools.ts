@@ -286,7 +286,7 @@ export const executeMcpTool = async (
       const current = await service.readRaw();
       const raw = restoreMaskedValues(parsed.data.raw, current);
       await service.saveRaw(raw);
-      void service.prewarm().catch((error: unknown) => console.error('MCP 预热失败', error));
+      service.prewarm().catch((error: unknown) => console.error('MCP 预热失败', error));
       return success({ servers: await service.getStatus(), prewarming: true });
     } catch (error) {
       return failure(
@@ -319,7 +319,7 @@ export const executeMcpTool = async (
       }
       const restored = restoreMaskedValues(`${JSON.stringify(raw, null, 2)}\n`, current);
       await service.saveRaw(restored);
-      void service.prewarm().catch((error: unknown) => console.error('MCP 预热失败', error));
+      service.prewarm().catch((error: unknown) => console.error('MCP 预热失败', error));
       return success({ servers: await service.getStatus(), prewarming: true });
     } catch (error) {
       return failure(

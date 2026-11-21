@@ -69,9 +69,8 @@ const loadPreview = async (): Promise<void> => {
   imageSrc.value = '';
   if (!showImage.value || !props.sessionId) return;
   try {
-    const result = await getImagePreview(
-      `workspace:${props.sessionId}:${props.file.path}`,
-      () => readWorkspaceImage(props.sessionId!, props.file.path)
+    const result = await getImagePreview(`workspace:${props.sessionId}:${props.file.path}`, () =>
+      readWorkspaceImage(props.sessionId!, props.file.path)
     );
     imageSrc.value = `data:${result.mime};base64,${result.base64}`;
   } catch {
@@ -80,13 +79,17 @@ const loadPreview = async (): Promise<void> => {
 };
 
 onMounted(() => {
-  void loadPreview();
+  loadPreview().catch((error: unknown) => {
+    console.error('加载图片预览失败', error);
+  });
 });
 
 watch(
   () => [props.file.path, props.sessionId, showImage.value],
   () => {
-    void loadPreview();
+    loadPreview().catch((error: unknown) => {
+      console.error('加载图片预览失败', error);
+    });
   }
 );
 </script>

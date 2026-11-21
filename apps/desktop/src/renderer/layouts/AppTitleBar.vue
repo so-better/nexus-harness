@@ -23,12 +23,7 @@
       >
         <template #icon><AppIcon :name="maximized ? 'restore' : 'maximize'" /></template>
       </NButton>
-      <NButton
-        text
-        :aria-label="t('window.close')"
-        :title="t('window.close')"
-        @click="close"
-      >
+      <NButton text :aria-label="t('window.close')" :title="t('window.close')" @click="close">
         <template #icon><AppIcon name="close" /></template>
       </NButton>
     </div>
@@ -63,7 +58,9 @@ const maximized = ref(false);
 let unsubscribe: (() => void) | undefined;
 
 const minimize = (): void => {
-  void minimizeWindow();
+  minimizeWindow().catch((error: unknown) => {
+    console.error('最小化窗口失败', error);
+  });
 };
 
 const toggleMaximize = async (): Promise<void> => {
@@ -71,7 +68,9 @@ const toggleMaximize = async (): Promise<void> => {
 };
 
 const close = (): void => {
-  void closeWindow();
+  closeWindow().catch((error: unknown) => {
+    console.error('关闭窗口失败', error);
+  });
 };
 
 onMounted(async () => {

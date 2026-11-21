@@ -193,7 +193,8 @@ const saveMaxSteps = async (showError = true): Promise<void> => {
     savedMaxSteps.value = saved.maxSteps;
   } catch (reason) {
     maxSteps.value = previous;
-    if (showError) message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
+    if (showError)
+      message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
   } finally {
     savingSteps.value = false;
   }
@@ -240,7 +241,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   unsubscribeSettings?.();
   // 通过 Esc 关闭弹窗时输入框不会触发 blur，卸载前补一次静默保存
-  void saveMaxSteps(false);
+  saveMaxSteps(false).catch((error: unknown) => {
+    console.error('保存最大步骤失败', error);
+  });
 });
 </script>
 

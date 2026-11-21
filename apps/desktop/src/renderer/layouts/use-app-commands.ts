@@ -50,7 +50,9 @@ export const useAppCommands = (options: AppCommandOptions) => {
       commandPaletteOpen.value = false;
       return;
     }
-    void openCommandPalette();
+    openCommandPalette().catch((error: unknown) => {
+      console.error('打开命令面板失败', error);
+    });
   };
 
   const executeCommand = async (id: string): Promise<void> => {
@@ -191,7 +193,9 @@ export const useAppCommands = (options: AppCommandOptions) => {
     );
     if (!command) return;
     event.preventDefault();
-    void executeCommand(command.id);
+    executeCommand(command.id).catch((error: unknown) => {
+      console.error('执行命令失败', error);
+    });
   };
 
   onMounted(() => window.addEventListener('keydown', onGlobalKeydown));

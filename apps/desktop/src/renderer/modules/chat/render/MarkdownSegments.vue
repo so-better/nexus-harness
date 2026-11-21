@@ -57,6 +57,6 @@ const lastMdIndex = computed(() => {
   margin: 12px 0;
   border: 1px solid var(--nh-border-subtle);
   border-radius: 9px;
-  background: #fff;
+  background: var(--nh-color-bg-base);
 }
 </style>
