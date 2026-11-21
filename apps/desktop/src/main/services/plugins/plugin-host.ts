@@ -112,7 +112,7 @@ export class PluginHost {
 
     const entries = await readdir(this.options.directory, { withFileTypes: true }).catch(() => []);
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
       const directory = join(this.options.directory, entry.name);
       try {
         const raw = JSON.parse(await readFile(join(directory, 'plugin.json'), 'utf8')) as unknown;

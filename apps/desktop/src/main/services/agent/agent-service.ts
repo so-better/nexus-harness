@@ -66,6 +66,7 @@ import { executeSkinTool, skinToolDefinitions } from './skin-tools';
 import { executeTerminalTool, terminalToolDefinitions } from './terminal-tools';
 import { executeCacheTool, cacheToolDefinitions } from './cache-tools';
 import { executeBackupTool, backupToolDefinitions } from './backup-tools';
+import { executePluginTool, pluginToolDefinitions } from './plugin-tools';
 import {
   generalSettingsToolDefinitions,
   executeGeneralSettingsTool
@@ -591,7 +592,8 @@ const PLAN_ALLOWED_TOOLS = new Set([
   'terminal_read',
   'terminal_wait',
   'cache_get_info',
-  'backup_status'
+  'backup_status',
+  'plugin_list'
 ]);
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -831,6 +833,9 @@ export class AgentService {
             ...(this.database ? { database: this.database } : {}),
             runId
           });
+        }
+        if (call.name.startsWith('plugin_')) {
+          return executePluginTool(call.name, call.arguments);
         }
         if (call.name.startsWith('backup_')) {
           return executeBackupTool(call.name, call.arguments, {
@@ -1712,6 +1717,7 @@ export class AgentService {
         ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? terminalToolDefinitions : []),
         ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? cacheToolDefinitions : []),
         ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? backupToolDefinitions : []),
+        ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? pluginToolDefinitions : []),
         ...(this.skills
           ? [
               searchSkillsToolDefinition,

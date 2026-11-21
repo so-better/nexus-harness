@@ -19,7 +19,7 @@ describe('syncBuiltinSkills', () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it('ships the nine selected built-in skills', async () => {
+  it('ships the ten selected built-in skills', async () => {
     const target = join(root, 'installed');
     const installed = await syncBuiltinSkills({
       sourceDir: join(process.cwd(), 'apps/desktop/resources/skills'),
@@ -34,6 +34,7 @@ describe('syncBuiltinSkills', () => {
         'documentation-writer',
         'fix-failing-tests',
         'office-report',
+        'plugin-development',
         'safe-refactor',
         'token-efficient-workflow'
       ].sort()

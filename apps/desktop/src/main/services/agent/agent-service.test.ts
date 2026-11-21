@@ -5,7 +5,12 @@
 import { mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MockProvider, type ChatMessage, type ChatProvider, type ProviderRequest } from '@nexus/providers';
+import {
+  MockProvider,
+  type ChatMessage,
+  type ChatProvider,
+  type ProviderRequest
+} from '@nexus/providers';
 import type { NexusEvent } from '@shared/events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDatabase } from '../storage/database';
@@ -156,7 +161,14 @@ describe('AgentService', () => {
       'cache_clear',
       'backup_status',
       'backup_export',
-      'backup_import'
+      'backup_import',
+      'plugin_list',
+      'plugin_read',
+      'plugin_reload',
+      'plugin_set_enabled',
+      'plugin_import',
+      'plugin_create',
+      'plugin_update'
     ]);
   });
 

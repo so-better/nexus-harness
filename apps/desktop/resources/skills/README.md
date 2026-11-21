@@ -13,6 +13,7 @@
 - `data-analysis`：分析 CSV、Excel、PDF 表格等本地数据。
 - `documentation-writer`：编写与真实代码一致的文档。
 - `token-efficient-workflow`：减少无关上下文，同时保留验证证据。
+- `plugin-development`：开发、调试、导入和定制 Nexus 插件。
 
 ## 规则
 
