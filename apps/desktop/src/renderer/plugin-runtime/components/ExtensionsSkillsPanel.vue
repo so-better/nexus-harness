@@ -11,11 +11,29 @@
         </NButton>
       </div>
     </div>
+    <NInput
+      v-model:value="query"
+      class="nh-extension-panel__search"
+      size="small"
+      clearable
+      :placeholder="t('skills.searchPlaceholder')"
+    >
+      <template #prefix>
+        <AppIcon name="search" :size="14" />
+      </template>
+    </NInput>
     <NEmpty v-if="!skills.length" class="nh-extension-empty" :description="t('skills.empty')">
       <template #icon><AppIcon name="spark" :size="30" /></template>
     </NEmpty>
+    <NEmpty
+      v-else-if="!filteredSkills.length"
+      class="nh-extension-empty"
+      :description="t('skills.searchEmpty')"
+    >
+      <template #icon><AppIcon name="search" :size="30" /></template>
+    </NEmpty>
     <div v-else class="nh-extension-list">
-      <article v-for="skill in skills" :key="skill.id" class="nh-extension-item">
+      <article v-for="skill in filteredSkills" :key="skill.id" class="nh-extension-item">
         <div class="nh-extension-item__top">
           <div>
             <strong>{{ skill.name }}</strong>
@@ -56,8 +74,8 @@
  * 扩展页 Skill 列表：导入包含 SKILL.md 的目录、刷新与删除。
  */
 
-import { onMounted, ref } from 'vue';
-import { NButton, NEmpty, NPopconfirm, NTag, useMessage } from 'naive-ui';
+import { computed, onMounted, ref } from 'vue';
+import { NButton, NEmpty, NInput, NPopconfirm, NTag, useMessage } from 'naive-ui';
 import type { SkillSummary } from '@shared/skills';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
@@ -68,6 +86,7 @@ const skills = ref<SkillSummary[]>([]);
 const loading = ref(false);
 const busy = ref(false);
 const deleting = ref<string>();
+const query = ref('');
 
 const load = async (): Promise<void> => {
   loading.value = true;
@@ -106,6 +125,16 @@ const removeSkill = async (id: string): Promise<void> => {
   }
 };
 
+const filteredSkills = computed(() => {
+  const value = query.value.trim().toLowerCase();
+  if (!value) return skills.value;
+  return skills.value.filter((skill) =>
+    [skill.name, skill.id, skill.description ?? '', ...skill.tags].some((item) =>
+      item.toLowerCase().includes(value)
+    )
+  );
+});
+
 onMounted(load);
 </script>
 
@@ -118,12 +147,29 @@ onMounted(load);
 
 .nh-extension-empty {
   display: flex;
-  min-height: 220px;
+  min-height: 280px;
   align-items: center;
   justify-content: center;
+  padding: 32px;
   border: 1px dashed var(--nh-border-subtle);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--nh-color-bg-elevated) 55%, transparent);
+  border-radius: 14px;
+  background:
+    radial-gradient(
+      ellipse at 50% 32%,
+      color-mix(in srgb, var(--nh-color-accent) 7%, transparent),
+      transparent 58%
+    ),
+    color-mix(in srgb, var(--nh-color-bg-elevated) 52%, transparent);
+}
+
+.nh-extension-empty :deep(.n-empty__icon) {
+  opacity: 0.72;
+}
+
+.nh-extension-empty :deep(.n-empty__description) {
+  margin-top: 8px;
+  color: color-mix(in srgb, var(--nh-color-text-secondary) 72%, transparent);
+  font-size: 13px;
 }
 
 .nh-extension-panel__header {
@@ -143,6 +189,10 @@ onMounted(load);
   display: flex;
   flex: none;
   gap: 6px;
+}
+
+.nh-extension-panel__search {
+  margin-bottom: 2px;
 }
 
 .nh-extension-list {

@@ -21,10 +21,34 @@
             </NButton>
           </div>
         </div>
-        <NEmpty v-if="!runtime.plugins.length" :description="t('plugins.empty')" />
+        <NInput
+          v-model:value="pluginQuery"
+          class="nh-extensions__search"
+          size="small"
+          clearable
+          :placeholder="t('plugins.searchPlaceholder')"
+        >
+          <template #prefix>
+            <AppIcon name="search" :size="14" />
+          </template>
+        </NInput>
+        <NEmpty
+          v-if="!runtime.plugins.length"
+          class="nh-extensions__empty"
+          :description="t('plugins.empty')"
+        >
+          <template #icon><AppIcon name="plug" :size="34" /></template>
+        </NEmpty>
+        <NEmpty
+          v-else-if="!filteredPlugins.length"
+          class="nh-extensions__empty"
+          :description="t('plugins.searchEmpty')"
+        >
+          <template #icon><AppIcon name="search" :size="34" /></template>
+        </NEmpty>
         <div v-else class="nh-extensions__list">
           <PluginCard
-            v-for="plugin in runtime.plugins"
+            v-for="plugin in filteredPlugins"
             :key="plugin.id"
             :plugin="plugin"
             :busy="busyId === plugin.id"
@@ -51,7 +75,8 @@
  */
 
 import { computed, onMounted, ref, watch } from 'vue';
-import { NButton, NEmpty, NModal, NTabPane, NTabs, useMessage } from 'naive-ui';
+import { NButton, NEmpty, NInput, NModal, NTabPane, NTabs, useMessage } from 'naive-ui';
+import AppIcon from '@/components/AppIcon.vue';
 import { t } from '@/app/i18n';
 import { usePluginRuntimeStore, type PluginCommand } from '../runtime.store';
 import PluginCard from './PluginCard.vue';
@@ -65,6 +90,7 @@ const runtime = usePluginRuntimeStore();
 const message = useMessage();
 const busyId = ref<string>();
 const importing = ref(false);
+const pluginQuery = ref('');
 
 onMounted(() => {
   runtime.activateForExtensions().catch(() => undefined);
@@ -77,6 +103,15 @@ watch(
   }
 );
 const commandList = computed<PluginCommand[]>(() => [...runtime.commands.values()]);
+const filteredPlugins = computed(() => {
+  const query = pluginQuery.value.trim().toLowerCase();
+  if (!query) return runtime.plugins;
+  return runtime.plugins.filter((plugin) =>
+    [plugin.name, plugin.id, plugin.description ?? ''].some((value) =>
+      value.toLowerCase().includes(query)
+    )
+  );
+});
 
 const importPlugin = async (): Promise<void> => {
   importing.value = true;
@@ -129,6 +164,37 @@ const remove = async (id: string): Promise<void> => {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 14px;
+}
+
+.nh-extensions__search {
+  margin-bottom: 10px;
+}
+
+.nh-extensions__empty {
+  display: flex;
+  min-height: 280px;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  border: 1px dashed var(--nh-border-subtle);
+  border-radius: 14px;
+  background:
+    radial-gradient(
+      ellipse at 50% 32%,
+      color-mix(in srgb, var(--nh-color-accent) 7%, transparent),
+      transparent 58%
+    ),
+    color-mix(in srgb, var(--nh-color-bg-elevated) 52%, transparent);
+}
+
+.nh-extensions__empty :deep(.n-empty__icon) {
+  opacity: 0.72;
+}
+
+.nh-extensions__empty :deep(.n-empty__description) {
+  margin-top: 8px;
+  color: color-mix(in srgb, var(--nh-color-text-secondary) 72%, transparent);
+  font-size: 13px;
 }
 
 .nh-extensions__header-actions {
