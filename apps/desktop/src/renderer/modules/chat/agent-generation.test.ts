@@ -34,6 +34,7 @@ const message = (overrides: Partial<ChatMessageView> = {}): ChatMessageView => (
 describe('agent generation state', () => {
   it('shows run thinking only while actively running without blockers', () => {
     expect(isAgentThinking(projection(), false)).toBe(true);
+    expect(isAgentThinking(projection({ running: false, status: 'idle' }), false, true)).toBe(true);
     expect(isAgentThinking(projection({ status: 'waiting_approval' }), false)).toBe(false);
     expect(isAgentThinking(projection(), true)).toBe(false);
     expect(

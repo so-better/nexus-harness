@@ -20,6 +20,7 @@
       <ChatView
         :session="sessions.activeSession"
         :projection="projection"
+        :running="activeRunning"
         :roots="roots"
         :providers="providers"
         :models="models"

@@ -5,9 +5,11 @@ import type { ChatMessageView, ChatProjection } from './types';
 
 export const isAgentThinking = (
   projection: ChatProjection,
-  hasWorkspaceAuth: boolean
+  hasWorkspaceAuth: boolean,
+  starting = false
 ): boolean => {
-  if (!projection.running || projection.status !== 'running') return false;
+  if (!projection.running && !starting) return false;
+  if (!starting && projection.status !== 'running') return false;
   if (hasWorkspaceAuth) return false;
   if (projection.approvals.some((approval) => approval.status === 'pending')) return false;
   if (projection.askUsers.some((ask) => ask.status === 'pending')) return false;

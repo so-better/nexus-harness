@@ -43,7 +43,7 @@
     <SessionEmptyView
       v-if="isEmpty"
       :disabled-reason="disabledReason"
-      :running="projection.running"
+      :running="visualRunning"
       :roots="roots"
       :providers="providers"
       :models="models"
@@ -72,7 +72,7 @@
         :ask-users="projection.askUsers"
         :approvals="projection.approvals"
         :thinking="isThinking"
-        :actions-disabled="projection.running"
+        :actions-disabled="visualRunning"
         :workspace-auth="workspaceAuth"
         @answer-user="(requestId, answers) => emit('answer-user', requestId, answers)"
         @approve="emit('approve', $event)"
@@ -115,7 +115,7 @@
         <ComposerBox
           :disabled="Boolean(disabledReason)"
           :disabled-reason="disabledReason"
-          :running="projection.running"
+          :running="visualRunning"
           :roots="roots"
           :providers="providers"
           :models="models"
@@ -169,6 +169,7 @@ import type { ChatProjection } from '../types';
 const props = defineProps<{
   session?: SessionSummary | undefined;
   projection: ChatProjection;
+  running?: boolean | undefined;
   roots: SessionRoot[];
   providers: ProviderPublic[];
   models: ProviderModel[];
@@ -209,12 +210,14 @@ const emit = defineEmits<{
   export: [format: SessionExportFormat];
 }>();
 
+const visualRunning = computed(() => props.running || props.projection.running);
+const starting = computed(() => Boolean(props.running) && !props.projection.running);
 const isEmpty = computed(() => !props.session || props.projection.messages.length === 0);
 const pendingApprovals = computed(() =>
   props.projection.approvals.filter((approval) => approval.status === 'pending')
 );
 const isThinking = computed(() =>
-  isAgentThinking(props.projection, Boolean(props.workspaceAuth))
+  isAgentThinking(props.projection, Boolean(props.workspaceAuth), starting.value)
 );
 
 /**

@@ -284,7 +284,15 @@ export const registerAgentIpc = (): void => {
           runHistory = history.load(session.id, branchMessageId);
         }
 
-        if (session.titleSource === 'auto' && session.title === '新会话') {
+        const shouldGenerateTitle =
+          session.titleSource === 'auto' && session.title === '新会话';
+        let titleGenerationStarted = false;
+        /**
+         * 自动标题会占用一次模型请求，推迟到首个输出或 Run 结束后再发起，避免抢首 token。
+         */
+        const startTitleGeneration = (): void => {
+          if (!shouldGenerateTitle || titleGenerationStarted) return;
+          titleGenerationStarted = true;
           generateSessionTitle(
             createAgentProvider(provider),
             parsed.data.modelId,
@@ -314,7 +322,7 @@ export const registerAgentIpc = (): void => {
               }
             })
             .catch((error: unknown) => console.error('自动标题生成失败', error));
-        }
+        };
 
         const runId = randomUUID();
         const controller = new AbortController();
@@ -485,6 +493,17 @@ export const registerAgentIpc = (): void => {
               },
               onEvent: (agentEvent) => {
                 if (
+                  !titleGenerationStarted &&
+                  (agentEvent.type === 'message.delta' ||
+                    agentEvent.type === 'message.reasoning.delta' ||
+                    agentEvent.type === 'tool.requested' ||
+                    agentEvent.type === 'run.completed' ||
+                    agentEvent.type === 'run.failed' ||
+                    agentEvent.type === 'run.cancelled')
+                ) {
+                  startTitleGeneration();
+                }
+                if (
                   agentEvent.type === 'run.completed' ||
                   agentEvent.type === 'run.failed' ||
                   agentEvent.type === 'run.cancelled'
@@ -505,6 +524,7 @@ export const registerAgentIpc = (): void => {
           .then(() => undefined)
           .catch((error: unknown) => {
             console.error('Agent 运行失败', error);
+            startTitleGeneration();
             if (!terminalEventSent) {
               terminalEventSent = true;
               enqueueFailure({
