@@ -80,6 +80,19 @@ const toConfig = (id: string, server: McpServerConfig): McpConfig => ({
 
 const CONNECT_TIMEOUT_MS = 10_000;
 const CALL_TIMEOUT_MS = 60_000;
+const CONNECT_CONCURRENCY = 3;
+const CONNECT_RETRY_COOLDOWN_MS = 60_000;
+
+/** 配置指纹；配置变化后允许立即重试，不受失败冷却影响。 */
+const configKey = (config: McpConfig): string =>
+  JSON.stringify([
+    config.transport,
+    config.command,
+    config.args,
+    config.env,
+    config.url,
+    config.headers
+  ]);
 
 const withTimeout = async <T>(
   promise: Promise<T>,
@@ -97,6 +110,22 @@ const withTimeout = async <T>(
   } finally {
     if (timer) clearTimeout(timer);
   }
+};
+
+const forEachConcurrent = async <T>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> => {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const item = items[next];
+      next += 1;
+      if (item !== undefined) await worker(item);
+    }
+  });
+  await Promise.all(workers);
 };
 
 const normalizeResult = (result: unknown): { text: string; attachments: McpAttachment[] } => {
@@ -161,6 +190,9 @@ export class McpService {
   private readonly connectionKeys = new Map<string, string>();
   private readonly lastErrors = new Map<string, string>();
   private statusHydrated = false;
+  private listToolsPromise: Promise<AgentToolDefinition[]> | undefined;
+  private generation = 0;
+  private readonly retryAt = new Map<string, { key: string; until: number }>();
 
   constructor(private readonly baseDir?: string) {}
 
@@ -202,17 +234,26 @@ export class McpService {
     }
   }
 
-  private async persistStatus(): Promise<void> {
-    try {
-      await mkdir(this.directory, { recursive: true });
-      await writeFile(
-        join(this.directory, 'status.json'),
-        `${JSON.stringify(Object.fromEntries(this.lastErrors), null, 2)}\n`,
-        'utf8'
-      );
-    } catch {
-      // 状态持久化失败不影响 MCP 调用
-    }
+  private statusWrite: Promise<void> = Promise.resolve();
+
+  /**
+   * 串行化状态写入，避免并行连接时多个 Server 竞争同一个 status.json。
+   */
+  private persistStatus(): Promise<void> {
+    const write = this.statusWrite.then(async () => {
+      try {
+        await mkdir(this.directory, { recursive: true });
+        await writeFile(
+          join(this.directory, 'status.json'),
+          `${JSON.stringify(Object.fromEntries(this.lastErrors), null, 2)}\n`,
+          'utf8'
+        );
+      } catch {
+        // 状态持久化失败不影响 MCP 调用
+      }
+    });
+    this.statusWrite = write;
+    return write;
   }
 
   private async clearPersistedStatus(): Promise<void> {
@@ -271,7 +312,8 @@ export class McpService {
     }
     await mkdir(this.directory, { recursive: true });
     await writeFile(join(this.directory, 'mcp.json'), `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
-    await this.dispose();
+    // 连接由文件监听或下一次 listTools 按新配置重建；这里只清理旧失败冷却
+    this.retryAt.clear();
     await this.clearPersistedStatus();
   }
 
@@ -318,6 +360,7 @@ export class McpService {
       }
       const listed = await withTimeout(client.listTools(), `MCP ${config.id} 列举工具超时`);
       this.lastErrors.delete(config.id);
+      this.retryAt.delete(config.id);
       await this.persistStatus();
       const tools = (listed.tools ?? []).slice(0, 100).map((tool) => ({
         name: tool.name,
@@ -353,6 +396,10 @@ export class McpService {
     } catch (error) {
       await client?.close().catch(() => undefined);
       this.lastErrors.set(config.id, error instanceof Error ? error.message : String(error));
+      this.retryAt.set(config.id, {
+        key: configKey(config),
+        until: Date.now() + CONNECT_RETRY_COOLDOWN_MS
+      });
       await this.persistStatus();
       if (throwOnError) throw error;
       console.error(`MCP Server ${config.id} 不可用`, error);
@@ -418,12 +465,51 @@ export class McpService {
     return { results };
   }
 
-  async listTools(): Promise<AgentToolDefinition[]> {
+  /**
+   * 连接所有已启用的 MCP Server；并发调用复用同一次连接过程。
+   */
+  async listTools(signal?: AbortSignal): Promise<AgentToolDefinition[]> {
+    if (signal?.aborted) return [];
+    let pending = this.listToolsPromise;
+    if (!pending) {
+      pending = this.loadTools();
+      this.listToolsPromise = pending;
+      const clear = (): void => {
+        if (this.listToolsPromise === pending) this.listToolsPromise = undefined;
+      };
+      pending.then(clear, clear);
+    }
+    if (!signal) return pending;
+
+    // 预热可以被多个 Run 共享；停止某个 Run 时只停止等待，不打断后台预热
+    return new Promise((resolve, reject) => {
+      const onAbort = (): void => resolve([]);
+      signal.addEventListener('abort', onAbort, { once: true });
+      pending.then(
+        (value) => {
+          signal.removeEventListener('abort', onAbort);
+          resolve(value);
+        },
+        (error: unknown) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(error);
+        }
+      );
+    });
+  }
+
+  /**
+   * 在应用启动或配置变更后预热 MCP，避免首次发送时阻塞首 token。
+   */
+  async prewarm(): Promise<void> {
+    await this.listTools();
+  }
+
+  private async loadTools(): Promise<AgentToolDefinition[]> {
+    const generation = this.generation;
     const configs = (await this.readConfigs()).filter((config) => config.enabled !== false);
     const enabledIds = new Set(configs.map((config) => config.id));
     // 配置被禁用或删除后，关闭旧连接，避免已连接的 Server 继续暴露工具
-    const configKey = (config: McpConfig): string =>
-      JSON.stringify([config.transport, config.command, config.args, config.env, config.url, config.headers]);
     let pruned = false;
     for (const [id, server] of [...this.connected]) {
       if (enabledIds.has(id)) continue;
@@ -431,12 +517,20 @@ export class McpService {
       this.connected.delete(id);
       this.connectionKeys.delete(id);
       this.lastErrors.delete(id);
+      this.retryAt.delete(id);
       pruned = true;
     }
     if (pruned) await this.persistStatus();
-    for (const config of configs) {
+    const now = Date.now();
+    const pending = configs.filter((config) => {
+      if (this.connected.has(config.id) && this.connectionKeys.get(config.id) === configKey(config)) {
+        return false;
+      }
+      const retry = this.retryAt.get(config.id);
+      return !retry || retry.key !== configKey(config) || retry.until <= now;
+    });
+    await forEachConcurrent(pending, CONNECT_CONCURRENCY, async (config) => {
       const key = configKey(config);
-      if (this.connected.has(config.id) && this.connectionKeys.get(config.id) === key) continue;
       const previous = this.connected.get(config.id);
       if (previous) {
         await previous.client.close().catch(() => undefined);
@@ -444,12 +538,17 @@ export class McpService {
         this.connectionKeys.delete(config.id);
       }
       const connected = await this.connect(config);
+      if (generation !== this.generation) {
+        if (connected) await connected.client.close().catch(() => undefined);
+        return;
+      }
       if (connected) {
         this.connected.set(config.id, connected);
         this.connectionKeys.set(config.id, key);
       }
-    }
+    });
 
+    if (generation !== this.generation) return [];
     this.toolAliases.clear();
     const used = new Set<string>();
     const aliasFor = (serverId: string, toolName: string): string => {
@@ -648,11 +747,14 @@ export class McpService {
   }
 
   async dispose(): Promise<void> {
+    this.generation += 1;
+    this.listToolsPromise = undefined;
     for (const server of this.connected.values()) {
       await server.client.close().catch(() => undefined);
     }
     this.connected.clear();
     this.connectionKeys.clear();
     this.lastErrors.clear();
+    this.retryAt.clear();
   }
 }

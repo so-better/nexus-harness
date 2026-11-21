@@ -633,7 +633,7 @@ interface ProviderCapabilities {
 
 #### MCP 工具接入
 
-- 启动时扫描 `<userData>/mcp/mcp.json`，校验 `mcpServers` 配置后按需启动 Server；文件变化后的下次 Run 会重新读取。
+- 启动时扫描 `<userData>/mcp/mcp.json`，校验 `mcpServers` 配置后在后台预热已启用 Server；配置保存或文件变化后重新预热，后续 Run 复用连接。
 - 启动时从 `resources/mcp/mcp.json` 补齐 `userData/mcp` 中缺失的内置 Server；已存在的同名 Server 保持用户配置不变。内置模板默认 `enabled: true`，这是产品选择；Run 前可能启动 `npx`/`uvx` 等外部进程，首次使用可能下载依赖或失败，用户需在扩展页查看状态。已有配置的 `enabled` 不自动迁移。用户可通过 `enabled` 字段停用单个 Server，工具调用仍需审批。删除内置 Server 后下次启动会重新补齐，永久停用请设置 `enabled: false`。
 - Server 提供的工具以 `mcp_<serverId>_<toolName>` 命名注册，名称净化到 `[a-zA-Z0-9_-]{1,64}`，权限为 `execute`，始终审批。
 - 工具注册后参与正常工具选择，Agent 不需要了解 MCP 协议；调用时按普通工具走审批与事件流。
@@ -641,7 +641,7 @@ interface ProviderCapabilities {
 - 内置模板默认启用；用户可在扩展页逐个关闭，关闭后不会启动对应进程。
 - 只有已启用、已信任且已连接的 Server 工具会进入工具 schema；未启用或断开时从 schema 移除。
 - 每个 Server 通过 `enabled` 单独启用或关闭；内置模板默认启用，关闭后不启动对应进程。首次使用应展示将执行的命令与环境变量。
-- `autoStart` 控制是否随应用启动；关闭时在首次工具调用时按需启动，仍要求已启用与信任。
+- 已启用的 Server 会在应用启动后自动预热；避免首次发送时等待 `npx`/`uvx` 进程启动。
 - 配置变更后刷新工具 schema，在下次模型调用时生效；已发出的工具调用不受影响。
 - 进程崩溃按退避重启，连续失败标记不可用；配置删除后注销其工具。
 - Server 不可用时调用返回 `MCP_SERVER_UNAVAILABLE`，不得在循环内无休止重试。
@@ -661,14 +661,13 @@ interface ProviderCapabilities {
   "command": "npx",
   "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed"],
   "env": {},
-  "enabled": true,
-  "autoStart": false
+  "enabled": true
 }
 ```
 
 - `id` 必须与目录名一致；`transport` 支持 `stdio` 与 `http`。
 - `stdio` 使用 `command` / `args` / `env`；`http` 使用 `url` / `headers`。
-- `autoStart` 默认 `false`；首次启用必须由用户在扩展页确认。
+- 配置保存后会立即重新预热；首次启用仍需用户在扩展页确认命令与环境变量。
 
 执行顺序固定为：
 
@@ -1086,7 +1085,7 @@ export function activate(ctx) {
 | 用户安装插件 | 插件代码 | 加载前校验 manifest 与入口路径、权限清单、能力网关、异常隔离；渲染层插件加载前移除 `window.nexus` |
 | 恶意皮肤代码 | 插件 `skins` | 固定隔离层挂载、禁止访问宿主 DOM、不接受全局 CSS、切换时清理 |
 | 插件目录篡改 | `<userData>/plugins` | 入口 `realpath` 限制、权限网关、事件审计 |
-| MCP 服务不可信 | 外部 MCP Server | 逐服务启用与信任、工具命名空间隔离、默认不自动启动 |
+| MCP 服务不可信 | 外部 MCP Server | 逐服务启用与信任、工具命名空间隔离、启动时后台预热但工具调用仍审批 |
 | 渲染层 XSS | Markdown、插件 UI | 禁用原始 HTML、CSP、输出转义、不向渲染层暴露 Node |
 | 不可信输出文件 | 下载或生成的文件 | 限制大小与类型、不内联预览、不自动打开或执行 |
 | 图像生成滥用 | `generate_image` | 内容策略、逐次审批、预算与速率限制 |

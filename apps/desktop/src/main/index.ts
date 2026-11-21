@@ -3,6 +3,7 @@
  */
 
 import { app, BrowserWindow, nativeTheme, protocol } from 'electron';
+import { watch, type FSWatcher } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { createNexusEvent } from '@nexus/core';
@@ -32,7 +33,7 @@ import { SessionService } from './services/session/session-service';
 import { syncBuiltinPlugins } from './services/plugins/builtin-plugin-service';
 import { syncBuiltinMcpConfig } from './services/mcp/builtin-mcp-service';
 import { syncBuiltinSkills } from './services/skills/builtin-skill-service';
-import { disposeMcpService } from './services/mcp/mcp-service-instance';
+import { disposeMcpService, getMcpService } from './services/mcp/mcp-service-instance';
 import { initializeAutoLaunch } from './services/settings/startup-settings';
 import { applyPendingRestore } from './services/settings/backup-service';
 import { terminalService } from './services/terminal/terminal-service';
@@ -89,6 +90,39 @@ const setupMainWindow = (window: BrowserWindow): BrowserWindow => {
   return window;
 };
 
+let mcpConfigWatcher: FSWatcher | undefined;
+let mcpReloadTimer: ReturnType<typeof setTimeout> | undefined;
+let mcpReloadChain: Promise<void> = Promise.resolve();
+
+/**
+ * 重新加载 MCP；配置变化后释放旧连接并后台预热，避免发送时等待。
+ */
+const reloadMcp = (): void => {
+  mcpReloadChain = mcpReloadChain
+    .catch(() => undefined)
+    .then(async () => {
+      await disposeMcpService();
+      await getMcpService().prewarm();
+    })
+    .catch((error: unknown) => console.error('MCP 重新加载失败', error));
+};
+
+/**
+ * 监听 mcp.json 的外部修改；状态文件与测试结果不会触发重载。
+ */
+const startMcpConfigWatcher = (): void => {
+  try {
+    mcpConfigWatcher = watch(getAppDataPaths().mcp, { persistent: false }, (_event, filename) => {
+      if (filename !== 'mcp.json') return;
+      if (mcpReloadTimer) clearTimeout(mcpReloadTimer);
+      mcpReloadTimer = setTimeout(reloadMcp, 300);
+    });
+    mcpConfigWatcher.on('error', (error) => console.error('MCP 配置监听失败', error));
+  } catch (error) {
+    console.error('MCP 配置监听启动失败', error);
+  }
+};
+
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!hasSingleInstanceLock) {
@@ -119,6 +153,11 @@ if (!hasSingleInstanceLock) {
       }).catch((error: unknown) => {
         console.error('内置 Skill 同步失败', error);
       });
+      startMcpConfigWatcher();
+      // 启动后预热已启用的 MCP，避免第一次对话等待进程启动
+      void getMcpService()
+        .prewarm()
+        .catch((error: unknown) => console.error('MCP 预热失败', error));
       const builtinIds = new Set(
         await syncBuiltinPlugins({
           sourceDir: getBuiltinPluginsDirectory(),
@@ -190,6 +229,8 @@ if (!hasSingleInstanceLock) {
     });
 
   app.on('will-quit', () => {
+    mcpConfigWatcher?.close();
+    if (mcpReloadTimer) clearTimeout(mcpReloadTimer);
     getPluginHost()
       ?.dispose()
       .catch((error: unknown) => {
