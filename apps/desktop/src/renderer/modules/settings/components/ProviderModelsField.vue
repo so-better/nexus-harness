@@ -12,9 +12,18 @@
 
     <template v-else>
       <div class="nh-models-field__header">
-        <span class="nh-models-field__summary">
-          {{ t('settings.selected') }} {{ models.length }} / {{ rows.length }}
-        </span>
+        <div class="nh-models-field__header-main">
+          <NCheckbox
+            :checked="allSelected"
+            :indeterminate="someSelected"
+            @update:checked="toggleAll"
+          >
+            {{ t('settings.selectAll') }}
+          </NCheckbox>
+          <span class="nh-models-field__summary">
+            {{ t('settings.selected') }} {{ models.length }} / {{ rows.length }}
+          </span>
+        </div>
         <NButton size="small" secondary :loading="testing" @click="emit('test')">
           <template #icon>
             <AppIcon name="refresh" :size="14" />
@@ -171,6 +180,12 @@ watch(manualModelId, () => {
 
 const isSelected = (id: string): boolean => props.models.some((model) => model.id === id);
 
+const selectedCount = computed(() => rows.value.filter((model) => isSelected(model.id)).length);
+const allSelected = computed(
+  () => rows.value.length > 0 && selectedCount.value === rows.value.length
+);
+const someSelected = computed(() => selectedCount.value > 0 && !allSelected.value);
+
 /**
  * 允许在模型列表接口不可用时手动添加模型 ID。
  */
@@ -211,6 +226,22 @@ const toggleModel = (id: string, checked: boolean): void => {
   const next = props.models.filter((model) => model.id !== id);
   emit('update:models', next);
   if (props.defaultModelId === id) emit('update:defaultModelId', next[0]?.id ?? '');
+};
+
+/**
+ * 全选或清空当前模型列表；保留已选模型的预算配置。
+ */
+const toggleAll = (checked: boolean): void => {
+  if (checked) {
+    const next = rows.value.map(
+      (model) => props.models.find((item) => item.id === model.id) ?? model
+    );
+    emit('update:models', next);
+    if (!props.defaultModelId) emit('update:defaultModelId', next[0]?.id ?? '');
+    return;
+  }
+  emit('update:models', []);
+  if (props.defaultModelId) emit('update:defaultModelId', '');
 };
 
 /**
@@ -310,6 +341,12 @@ const updateModel = (
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+}
+
+.nh-models-field__header-main {
+  display: flex;
+  align-items: center;
   gap: 12px;
 }
 

@@ -14,6 +14,7 @@
           </div>
           <NSelect
             class="nh-general__language"
+            :menu-props="selectMenuProps"
             :value="locale"
             :options="languageOptions"
             :placeholder="t('settings.pleaseSelect')"
@@ -42,6 +43,7 @@
           </div>
           <NSelect
             class="nh-general__language"
+            :menu-props="selectMenuProps"
             :value="badgeStyle"
             :options="badgeOptions"
             :placeholder="t('settings.pleaseSelect')"
@@ -97,6 +99,7 @@
  * 通用设置：语言、开机自启与版本信息。
  */
 
+import { selectMenuProps } from '@/app/menu-props';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { NInputNumber, NSelect, NSwitch, useMessage, type SelectOption } from 'naive-ui';
 import {

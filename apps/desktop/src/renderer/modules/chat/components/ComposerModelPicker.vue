@@ -16,6 +16,8 @@
         trigger="click"
         placement="bottom-start"
         :options="providerOptions"
+        :menu-props="dropdownMenuProps"
+        scrollable
         @select="onProviderChange"
       >
         <button
@@ -33,6 +35,8 @@
         trigger="click"
         placement="bottom-start"
         :options="modelOptions"
+        :menu-props="dropdownMenuProps"
+        scrollable
         @select="onModelChange"
       >
         <NButton text size="small" class="nh-composer__selector" :disabled="models.length === 0">
@@ -54,6 +58,7 @@ import { NButton, NDropdown, type DropdownOption } from 'naive-ui';
 import type { ProviderModel, ProviderPublic } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
+import { dropdownMenuProps } from '@/app/menu-props';
 
 const props = defineProps<{
   providers: ProviderPublic[];

@@ -68,6 +68,8 @@
               trigger="click"
               placement="bottom-end"
               :options="menuOptions"
+              :menu-props="dropdownMenuProps"
+              scrollable
               @select="handleMenu"
               @update:show="menuOpen = $event"
             >
@@ -97,6 +99,7 @@
  * 会话列表项：展示状态与相对时间，通过更多菜单执行置顶、重命名与删除。
  */
 
+import { dropdownMenuProps } from '@/app/menu-props';
 import { computed, h, nextTick, ref } from 'vue';
 import {
   NButton,

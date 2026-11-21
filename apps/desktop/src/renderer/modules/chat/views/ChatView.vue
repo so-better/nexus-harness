@@ -23,6 +23,8 @@
           trigger="click"
           placement="bottom-end"
           :options="exportOptions"
+          :menu-props="dropdownMenuProps"
+          scrollable
           @select="selectExport"
         >
           <NButton
@@ -149,6 +151,7 @@
  * 会话主区：欢迎页、消息流、审批与输入区。
  */
 
+import { dropdownMenuProps } from '@/app/menu-props';
 import { computed, nextTick, watch } from 'vue';
 import { NButton, NDropdown, NTag, type DropdownOption } from 'naive-ui';
 import type {

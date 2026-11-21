@@ -80,8 +80,35 @@ const codeRenderer: RendererObject['code'] = ({ text, lang }: Tokens.Code) => {
 };
 
 const marked = new Marked({ gfm: true, breaks: true });
+
+/**
+ * GFM 自动链接会在 JSON 字符串里把结尾引号也吞进 URL；
+ * 这里在引号、尖括号和反引号处截断，保留后续原文为普通文本。
+ */
+const cleanAutolink = {
+  name: 'cleanAutolink',
+  level: 'inline' as const,
+  start(src: string) {
+    return src.match(/https?:\/\//)?.index;
+  },
+  tokenizer(src: string) {
+    const match = /^https?:\/\/[^\s"'`<>]+/.exec(src);
+    if (!match) return undefined;
+    const href = match[0].replace(/[.,;:!?]+$/, '');
+    if (!href) return undefined;
+    return {
+      type: 'link',
+      raw: href,
+      href,
+      text: href,
+      autolink: true,
+      tokens: [{ type: 'text', raw: href, text: href }]
+    };
+  }
+};
+
 marked.use({ renderer: { code: codeRenderer } });
-marked.use({ extensions: [blockMath, inlineMath] });
+marked.use({ extensions: [blockMath, inlineMath, cleanAutolink] });
 
 /**
  * 将模型输出渲染为安全 HTML。

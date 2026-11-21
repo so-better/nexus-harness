@@ -14,6 +14,15 @@ describe('renderMarkdown media', () => {
     expect(html).toContain('alt="封面"');
   });
 
+  it('stops autolinks before JSON quotes', () => {
+    const html = renderMarkdown(
+      'See: https://cloud.tencent.com/document/product/1823/130079","message_zh":"模型不存在"'
+    );
+    expect(html).toContain('href="https://cloud.tencent.com/document/product/1823/130079"');
+    expect(html).not.toContain('%22');
+    expect(html).toContain('message_zh');
+  });
+
   it('keeps video elements and controls', () => {
     const html = renderMarkdown(
       '<video controls preload="metadata" src="https://videos.pexels.com/demo.mp4"></video>'

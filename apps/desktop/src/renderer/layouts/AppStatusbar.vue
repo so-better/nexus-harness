@@ -34,7 +34,14 @@
       >
         {{ item.text }}
       </NButton>
-      <NDropdown trigger="click" placement="top-end" :options="themeOptions" @select="selectTheme">
+      <NDropdown
+        trigger="click"
+        placement="top-end"
+        :options="themeOptions"
+        :menu-props="dropdownMenuProps"
+        scrollable
+        @select="selectTheme"
+      >
         <NButton text size="tiny" :aria-label="t('app.theme')" :title="t('app.theme')">
           <template #icon>
             <AppIcon :name="currentThemeIcon" :size="14" />
@@ -79,6 +86,7 @@ import { NButton, NDropdown, type DropdownOption } from 'naive-ui';
 import type { ThemeSource } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
+import { dropdownMenuProps } from '@/app/menu-props';
 import { usePluginRuntimeStore } from '@/plugin-runtime/runtime.store';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 

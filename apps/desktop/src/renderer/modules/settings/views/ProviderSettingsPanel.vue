@@ -31,6 +31,7 @@
                 path="protocol"
               >
                 <NSelect
+                  :menu-props="selectMenuProps"
                   :value="providerForm.protocol"
                   :options="protocolOptions"
                   :placeholder="t('settings.pleaseSelect')"
@@ -101,6 +102,7 @@
  * 模型服务商设置：列表、连接、多模型、API Key 与模型预算。
  */
 
+import { selectMenuProps } from '@/app/menu-props';
 import { NForm, NFormItem, NInput, NSelect, type FormInst, type InputInst } from 'naive-ui';
 import { computed, ref } from 'vue';
 import type { ProviderProtocol } from '@shared/ipc/contracts';

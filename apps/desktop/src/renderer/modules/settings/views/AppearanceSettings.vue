@@ -30,6 +30,7 @@
     <div v-if="skinOptions.length" class="nh-appearance__group nh-appearance__skin-group">
       <p class="nh-appearance__group-title">{{ t('settings.skin') }}</p>
       <NSelect
+        :menu-props="selectMenuProps"
         :value="selectedSkinValue"
         :options="skinOptions"
         :placeholder="t('settings.pleaseSelect')"
@@ -45,6 +46,7 @@
  * 外观设置：主题来源选择，修改后由主进程广播实际主题。
  */
 
+import { selectMenuProps } from '@/app/menu-props';
 import { computed, onMounted, ref } from 'vue';
 import { NSelect, useMessage, type SelectOption } from 'naive-ui';
 import type { ThemeSource } from '@shared/ipc/contracts';
