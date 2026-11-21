@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@0.0.86"],
+      "enabled": true
+    },
+    "browser-use": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["--from", "browser-use==1.0.6", "browser-use", "--cli-mcp"],
+      "enabled": true
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp@4.7.3"],
+      "enabled": true
+    }
+  }
+}

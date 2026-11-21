@@ -12,7 +12,9 @@ export const mcpServerConfigSchema = z.object({
   args: z.array(z.string()).default([]),
   env: z.record(z.string(), z.string()).default({}),
   url: z.string().url().optional(),
-  headers: z.record(z.string(), z.string()).default({})
+  headers: z.record(z.string(), z.string()).default({}),
+  /** false 时不加载该 Server；缺失时按旧配置视为启用 */
+  enabled: z.boolean().optional()
 });
 
 export type McpServerConfig = z.infer<typeof mcpServerConfigSchema>;
@@ -30,9 +32,18 @@ export interface McpTestServerResult {
   tools?: number;
   resources?: number;
   prompts?: number;
+  skipped?: boolean;
   error?: string;
 }
 
 export interface McpTestResult {
   results: McpTestServerResult[];
+}
+
+export interface McpServerStatus {
+  id: string;
+  enabled: boolean;
+  connected: boolean;
+  tools: number;
+  error?: string;
 }

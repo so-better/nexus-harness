@@ -79,4 +79,14 @@ describe('McpService tool calls', () => {
       arguments: {}
     });
   });
+
+  it('closes a server after it is disabled', async () => {
+    await service.listTools();
+    await writeFile(
+      join(root, 'mcp.json'),
+      JSON.stringify({ mcpServers: { demo: { command: 'node', args: [], enabled: false } } })
+    );
+    await expect(service.listTools()).resolves.toEqual([]);
+    expect(mocks.close).toHaveBeenCalled();
+  });
 });

@@ -12,7 +12,9 @@ import { registerIpcHandlers } from './ipc';
 import {
   ensureAppDataDirectories,
   getAppDataPaths,
-  getBuiltinPluginsDirectory
+  getBuiltinMcpConfigPath,
+  getBuiltinPluginsDirectory,
+  getBuiltinSkillsDirectory
 } from './services/storage/paths';
 import { closeDatabase, initDatabase } from './services/storage/database';
 import { loadThemeSource } from './services/settings/theme-settings';
@@ -28,6 +30,8 @@ import { RunStore } from './services/session/run-store';
 import { expirePendingApprovals } from './services/session/approval-recovery';
 import { SessionService } from './services/session/session-service';
 import { syncBuiltinPlugins } from './services/plugins/builtin-plugin-service';
+import { syncBuiltinMcpConfig } from './services/mcp/builtin-mcp-service';
+import { syncBuiltinSkills } from './services/skills/builtin-skill-service';
 import { disposeMcpService } from './services/mcp/mcp-service-instance';
 import { initializeAutoLaunch } from './services/settings/startup-settings';
 import { applyPendingRestore } from './services/settings/backup-service';
@@ -103,6 +107,18 @@ if (!hasSingleInstanceLock) {
     .then(async () => {
       await ensureAppDataDirectories();
       await applyPendingRestore(getAppDataPaths());
+      await syncBuiltinMcpConfig(getBuiltinMcpConfigPath(), getAppDataPaths().mcp).catch(
+        (error: unknown) => {
+          // 内置模板同步失败不能阻断应用启动，用户已有 MCP 配置仍然可用
+          console.error('内置 MCP 模板同步失败', error);
+        }
+      );
+      await syncBuiltinSkills({
+        sourceDir: getBuiltinSkillsDirectory(),
+        destinationDir: getAppDataPaths().skills
+      }).catch((error: unknown) => {
+        console.error('内置 Skill 同步失败', error);
+      });
       const builtinIds = new Set(
         await syncBuiltinPlugins({
           sourceDir: getBuiltinPluginsDirectory(),

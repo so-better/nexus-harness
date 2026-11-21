@@ -44,6 +44,7 @@ export const IPC_CHANNELS = {
   mcpRead: 'mcp:read',
   mcpSave: 'mcp:save',
   mcpTest: 'mcp:test',
+  mcpStatus: 'mcp:status',
   settingsSetNotificationBadge: 'settings:setNotificationBadge',
   settingsGetSkin: 'settings:getSkin',
   settingsGetImage: 'settings:getImage',

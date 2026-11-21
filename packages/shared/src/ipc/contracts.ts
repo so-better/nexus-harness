@@ -12,7 +12,7 @@ import type {
   PluginWorkspaceEntry
 } from '../plugin';
 import type { Result } from './result';
-import type { McpTestResult } from '../mcp';
+import type { McpServerStatus, McpTestResult } from '../mcp';
 import type { ImageSettings } from '../image';
 import type { SearchSettings } from '../search';
 import type { SkillDetail, SkillSummary } from '../skills';
@@ -327,6 +327,7 @@ export interface NexusBridge {
     ) => Promise<Result<PluginWorkspaceEntry[]>>;
   };
   mcp: {
+    status: () => Promise<Result<McpServerStatus[]>>;
     load: () => Promise<Result<string>>;
     save: (text: string) => Promise<Result<{ ok: boolean }>>;
     test: (text: string) => Promise<Result<McpTestResult>>;

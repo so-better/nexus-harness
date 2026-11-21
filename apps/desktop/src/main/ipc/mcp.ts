@@ -5,11 +5,19 @@
 import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import { fail, ok, type Result } from '@shared/ipc/result';
-import type { McpTestResult } from '@shared/mcp';
+import type { McpServerStatus, McpTestResult } from '@shared/mcp';
 import { getMcpService } from '../services/mcp/mcp-service-instance';
 
 export const registerMcpIpc = (): void => {
   const service = getMcpService();
+
+  ipcMain.handle(IPC_CHANNELS.mcpStatus, async (): Promise<Result<McpServerStatus[]>> => {
+    try {
+      return ok(await service.getStatus());
+    } catch (error) {
+      return fail('MCP_STATUS_FAILED', error instanceof Error ? error.message : '读取 MCP 状态失败');
+    }
+  });
 
   ipcMain.handle(IPC_CHANNELS.mcpRead, async (): Promise<Result<string>> => {
     try {

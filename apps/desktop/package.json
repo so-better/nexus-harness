@@ -65,6 +65,14 @@
         "to": "plugins"
       },
       {
+        "from": "resources/mcp",
+        "to": "mcp"
+      },
+      {
+        "from": "resources/skills",
+        "to": "skills"
+      },
+      {
         "from": "out/assets/fonts",
         "to": "fonts"
       }

@@ -30,6 +30,22 @@ describe('SkillService', () => {
     expect(JSON.stringify(await new SkillService(root).search('测试'))).not.toContain('先运行');
   });
 
+  it('reads a skill by its frontmatter name', async () => {
+    const skill = await new SkillService(root).read('fix-failing-tests');
+    expect(skill?.id).toBe('fix-tests');
+    expect(skill?.content).toContain('先运行测试');
+  });
+
+  it('skips user skills with invalid frontmatter names', async () => {
+    await mkdir(join(root, 'invalid-skill'), { recursive: true });
+    await writeFile(
+      join(root, 'invalid-skill', 'SKILL.md'),
+      '---\nname: Code Review\ndescription: invalid\n---\nBody\n'
+    );
+    const skills = await new SkillService(root).scan();
+    expect(skills.map((skill) => skill.id)).not.toContain('invalid-skill');
+  });
+
   it('runs a script inside the Skill scripts directory', async () => {
     await mkdir(join(root, 'fix-tests', 'scripts'), { recursive: true });
     await writeFile(join(root, 'fix-tests', 'scripts', 'echo.js'), "console.log('skill-ok')");

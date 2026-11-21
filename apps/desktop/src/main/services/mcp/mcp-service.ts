@@ -7,7 +7,12 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { mcpServerConfigSchema, type McpConfig, type McpServerConfig } from '@shared/mcp';
+import {
+  mcpServerConfigSchema,
+  type McpConfig,
+  type McpServerConfig,
+  type McpServerStatus
+} from '@shared/mcp';
 import type { AgentToolDefinition } from '@nexus/core';
 import { assertPublicUrl } from '@nexus/runtime-utils';
 import { getAppDataPaths } from '../storage/paths';
@@ -153,6 +158,9 @@ export class McpService {
   /** 公共工具名到 MCP 原始工具名的映射；每次列举时重建。 */
   private readonly toolAliases = new Map<string, { serverId: string; toolName: string }>();
   private readonly connected = new Map<string, ConnectedServer>();
+  private readonly connectionKeys = new Map<string, string>();
+  private readonly lastErrors = new Map<string, string>();
+  private statusHydrated = false;
 
   constructor(private readonly baseDir?: string) {}
 
@@ -177,8 +185,61 @@ export class McpService {
     }
   }
 
+  /**
+   * 从本地 status.json 恢复上次启动失败信息，避免重启后丢失诊断。
+   */
+  private async hydrateStatus(): Promise<void> {
+    if (this.statusHydrated) return;
+    this.statusHydrated = true;
+    try {
+      const raw = JSON.parse(await readFile(join(this.directory, 'status.json'), 'utf8')) as unknown;
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+      for (const [id, value] of Object.entries(raw)) {
+        if (typeof value === 'string') this.lastErrors.set(id, value);
+      }
+    } catch {
+      // 状态文件缺失或损坏时忽略
+    }
+  }
+
+  private async persistStatus(): Promise<void> {
+    try {
+      await mkdir(this.directory, { recursive: true });
+      await writeFile(
+        join(this.directory, 'status.json'),
+        `${JSON.stringify(Object.fromEntries(this.lastErrors), null, 2)}\n`,
+        'utf8'
+      );
+    } catch {
+      // 状态持久化失败不影响 MCP 调用
+    }
+  }
+
+  private async clearPersistedStatus(): Promise<void> {
+    this.lastErrors.clear();
+    await this.persistStatus();
+  }
+
   async listConfigs(): Promise<McpConfig[]> {
     return this.readConfigs();
+  }
+
+  /**
+   * 返回 Server 的最近连接状态，供扩展页展示启动错误。
+   */
+  async getStatus(): Promise<McpServerStatus[]> {
+    await this.hydrateStatus();
+    const configs = await this.readConfigs();
+    return configs.map((config) => {
+      const error = this.lastErrors.get(config.id);
+      return {
+        id: config.id,
+        enabled: config.enabled !== false,
+        connected: this.connected.has(config.id),
+        tools: this.connected.get(config.id)?.tools.length ?? 0,
+        ...(error ? { error } : {})
+      };
+    });
   }
 
   async readRaw(): Promise<string | undefined> {
@@ -211,6 +272,7 @@ export class McpService {
     await mkdir(this.directory, { recursive: true });
     await writeFile(join(this.directory, 'mcp.json'), `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
     await this.dispose();
+    await this.clearPersistedStatus();
   }
 
   private async connect(
@@ -255,6 +317,8 @@ export class McpService {
         await withTimeout(client.connect(transport), `MCP ${config.id} 连接超时`);
       }
       const listed = await withTimeout(client.listTools(), `MCP ${config.id} 列举工具超时`);
+      this.lastErrors.delete(config.id);
+      await this.persistStatus();
       const tools = (listed.tools ?? []).slice(0, 100).map((tool) => ({
         name: tool.name,
         ...(tool.description ? { description: tool.description } : {}),
@@ -288,6 +352,8 @@ export class McpService {
       };
     } catch (error) {
       await client?.close().catch(() => undefined);
+      this.lastErrors.set(config.id, error instanceof Error ? error.message : String(error));
+      await this.persistStatus();
       if (throwOnError) throw error;
       console.error(`MCP Server ${config.id} 不可用`, error);
       return undefined;
@@ -301,6 +367,7 @@ export class McpService {
       tools?: number;
       resources?: number;
       prompts?: number;
+      skipped?: boolean;
       error?: string;
     }>;
   }> {
@@ -316,12 +383,17 @@ export class McpService {
       tools?: number;
       resources?: number;
       prompts?: number;
+      skipped?: boolean;
       error?: string;
     }> = [];
     for (const [id, value] of servers) {
       const parsed = mcpServerConfigSchema.safeParse(value);
       if (!parsed.success) {
         results.push({ id, ok: false, error: '配置格式不合法' });
+        continue;
+      }
+      if (parsed.data.enabled === false) {
+        results.push({ id, ok: true, skipped: true });
         continue;
       }
       try {
@@ -347,11 +419,35 @@ export class McpService {
   }
 
   async listTools(): Promise<AgentToolDefinition[]> {
-    const configs = await this.readConfigs();
+    const configs = (await this.readConfigs()).filter((config) => config.enabled !== false);
+    const enabledIds = new Set(configs.map((config) => config.id));
+    // 配置被禁用或删除后，关闭旧连接，避免已连接的 Server 继续暴露工具
+    const configKey = (config: McpConfig): string =>
+      JSON.stringify([config.transport, config.command, config.args, config.env, config.url, config.headers]);
+    let pruned = false;
+    for (const [id, server] of [...this.connected]) {
+      if (enabledIds.has(id)) continue;
+      await server.client.close().catch(() => undefined);
+      this.connected.delete(id);
+      this.connectionKeys.delete(id);
+      this.lastErrors.delete(id);
+      pruned = true;
+    }
+    if (pruned) await this.persistStatus();
     for (const config of configs) {
-      if (this.connected.has(config.id)) continue;
+      const key = configKey(config);
+      if (this.connected.has(config.id) && this.connectionKeys.get(config.id) === key) continue;
+      const previous = this.connected.get(config.id);
+      if (previous) {
+        await previous.client.close().catch(() => undefined);
+        this.connected.delete(config.id);
+        this.connectionKeys.delete(config.id);
+      }
       const connected = await this.connect(config);
-      if (connected) this.connected.set(config.id, connected);
+      if (connected) {
+        this.connected.set(config.id, connected);
+        this.connectionKeys.set(config.id, key);
+      }
     }
 
     this.toolAliases.clear();
@@ -556,5 +652,7 @@ export class McpService {
       await server.client.close().catch(() => undefined);
     }
     this.connected.clear();
+    this.connectionKeys.clear();
+    this.lastErrors.clear();
   }
 }

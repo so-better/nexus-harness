@@ -177,6 +177,7 @@ const bridge: NexusBridge = {
       ipcRenderer.invoke(IPC_CHANNELS.pluginWorkspaceList, { pluginId, sessionId, path })
   },
   mcp: {
+    status: () => ipcRenderer.invoke(IPC_CHANNELS.mcpStatus),
     load: () => ipcRenderer.invoke(IPC_CHANNELS.mcpRead),
     save: (text) => ipcRenderer.invoke(IPC_CHANNELS.mcpSave, text),
     test: (text) => ipcRenderer.invoke(IPC_CHANNELS.mcpTest, text)

@@ -14,6 +14,22 @@ export const getBuiltinPluginsDirectory = (): string =>
     ? join(process.resourcesPath, 'plugins')
     : join(__dirname, '../../resources/plugins');
 
+/**
+ * 内置 MCP 模板：开发态与打包后均从 resources/mcp 读取。
+ */
+export const getBuiltinMcpConfigPath = (): string =>
+  app.isPackaged
+    ? join(process.resourcesPath, 'mcp', 'mcp.json')
+    : join(__dirname, '../../resources/mcp/mcp.json');
+
+/**
+ * 内置 Skill 目录：开发态与打包后均从 resources/skills 读取。
+ */
+export const getBuiltinSkillsDirectory = (): string =>
+  app.isPackaged
+    ? join(process.resourcesPath, 'skills')
+    : join(__dirname, '../../resources/skills');
+
 export interface AppDataPaths {
   root: string;
   plugins: string;

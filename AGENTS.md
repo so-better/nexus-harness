@@ -298,6 +298,8 @@ nexus-harness/
 │  └─ desktop/
 │     ├─ build/                  # 应用图标与打包资源
 │     ├─ resources/plugins/      # 内置插件，启动时同步到 userData/plugins
+│     ├─ resources/mcp/          # 内置 MCP 模板，只补齐 userData/mcp 中缺失的 Server
+│     ├─ resources/skills/       # 内置 Skill，启动时同步到 userData/skills
 │     ├─ electron.vite.config.ts
 │     └─ src/
 │        ├─ main/                # Electron 主进程
@@ -387,7 +389,7 @@ MCP Server 不是独立能力层，而是工具来源：配置位于 `<userData>
 - **非核心功能优先插件化**：不改变核心安全、数据与调度契约的附加能力，应使用内置插件交付，而不是直接堆进 `core` 或主界面。
 - **先设计、再决定是否内置**：新功能先按插件贡献点、事件钩子与宿主 API 评估；能插件化的一律插件化，只有核心契约能力才进入宿主。
 - 内置插件是默认产品能力的一部分，但只改变分发方式，不获得额外权限；与用户安装的插件走同一套加载、权限与容错流程。
-- 技能、插件、MCP 全部从 `<userData>` 扫描，目录存在即注册；仓库只内置 `apps/desktop/resources/plugins/`，Skill 与 MCP 不提供仓库内样板。
+- 技能、插件、MCP 全部从 `<userData>` 扫描，目录存在即注册；仓库内置 `apps/desktop/resources/plugins/`、`apps/desktop/resources/mcp/mcp.json` 与 `apps/desktop/resources/skills/`；MCP 模板只补齐缺失 Server，不覆盖用户已有配置，内置 Skill 会覆盖同名内置副本但不清理用户技能。
 - 目录变化时重新扫描；无效条目记录错误并跳过，不影响启动。
 
 技能目录结构：
@@ -632,10 +634,13 @@ interface ProviderCapabilities {
 #### MCP 工具接入
 
 - 启动时扫描 `<userData>/mcp/mcp.json`，校验 `mcpServers` 配置后按需启动 Server；文件变化后的下次 Run 会重新读取。
+- 启动时从 `resources/mcp/mcp.json` 补齐 `userData/mcp` 中缺失的内置 Server；已存在的同名 Server 保持用户配置不变。内置模板默认 `enabled: true`，这是产品选择；Run 前可能启动 `npx`/`uvx` 等外部进程，首次使用可能下载依赖或失败，用户需在扩展页查看状态。已有配置的 `enabled` 不自动迁移。用户可通过 `enabled` 字段停用单个 Server，工具调用仍需审批。删除内置 Server 后下次启动会重新补齐，永久停用请设置 `enabled: false`。
 - Server 提供的工具以 `mcp_<serverId>_<toolName>` 命名注册，名称净化到 `[a-zA-Z0-9_-]{1,64}`，权限为 `execute`，始终审批。
 - 工具注册后参与正常工具选择，Agent 不需要了解 MCP 协议；调用时按普通工具走审批与事件流。
+- `mcp.json` 中 `enabled: false` 的 Server 不连接、不进入工具 schema；缺失 `enabled` 的旧配置按启用处理。
+- 内置模板默认启用；用户可在扩展页逐个关闭，关闭后不会启动对应进程。
 - 只有已启用、已信任且已连接的 Server 工具会进入工具 schema；未启用或断开时从 schema 移除。
-- 每个 Server 单独启用与信任，默认不自动启动、不自动信任；首次启用必须展示将执行的命令与环境变量。
+- 每个 Server 通过 `enabled` 单独启用或关闭；内置模板默认启用，关闭后不启动对应进程。首次使用应展示将执行的命令与环境变量。
 - `autoStart` 控制是否随应用启动；关闭时在首次工具调用时按需启动，仍要求已启用与信任。
 - 配置变更后刷新工具 schema，在下次模型调用时生效；已发出的工具调用不受影响。
 - 进程崩溃按退避重启，连续失败标记不可用；配置删除后注销其工具。
@@ -763,6 +768,7 @@ requires: [read, write, execute]
 检测与索引：
 
 - 启动时扫描 `<userData>/skills/<id>/SKILL.md`，目录增删改时重新扫描。
+- 启动时从 `resources/skills/` 同步内置 Skill，覆盖同名内置副本；用户自建 Skill 和其他目录保持不变。删除内置 Skill 后下次启动会重新补齐。
 - 只解析 frontmatter（name、description、tags、version、requires），正文不预加载。
 - 无效 Skill 记录错误并跳过，不影响启动与其他技能。
 - 输入 `/` 时列出可用技能；UI 展示已激活标签。

@@ -17,6 +17,7 @@ const MAX_RESOURCE_BYTES = 200_000;
 const MAX_IMPORT_FILES = 500;
 const MAX_IMPORT_BYTES = 10_000_000;
 const MAX_SEARCH_RESULTS = 8;
+const SKILL_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
 const asStringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string');
@@ -138,6 +139,11 @@ export class SkillService {
         const realFile = await realpath(file);
         if (!realFile.startsWith(`${root}${sep}`)) continue;
         const parsed = parseFrontmatter(await readFile(realFile, 'utf8'));
+        const declaredName = stringValue(parsed.fields['name']);
+        if (declaredName && !SKILL_NAME_PATTERN.test(declaredName)) {
+          console.error(`Skill name 必须是小写 slug，已跳过：${entry.name}`);
+          continue;
+        }
         skills.push(await toSummary(entry.name, parsed.fields, directory));
       } catch {
         // 单个无效 Skill 跳过
@@ -181,6 +187,10 @@ export class SkillService {
     const sourceInfoFile = await stat(sourceSkill);
     if (!sourceInfoFile.isFile()) throw new Error('所选目录缺少 SKILL.md');
     const parsed = parseFrontmatter(await readFile(sourceSkill, 'utf8'));
+    const declaredName = stringValue(parsed.fields['name']);
+    if (declaredName && !SKILL_NAME_PATTERN.test(declaredName)) {
+      throw new Error('Skill name 必须是小写 slug');
+    }
     const base = basename(sourceDir);
     const rawName = stringValue(parsed.fields['name']) || base;
     const id =
@@ -224,22 +234,29 @@ export class SkillService {
   async read(name: string): Promise<SkillDetail | undefined> {
     const normalized = name.trim();
     if (!normalized || normalized.includes('/') || normalized.includes('\\')) return undefined;
-    const directory = join(this.directory, normalized);
-    const file = join(directory, 'SKILL.md');
-    try {
-      const root = await realpath(directory);
-      const realFile = await realpath(file);
-      if (!realFile.startsWith(`${root}${sep}`)) return undefined;
-      const info = await stat(realFile);
-      if (!info.isFile() || info.size > MAX_SKILL_BYTES) return undefined;
-      const parsed = parseFrontmatter(await readFile(realFile, 'utf8'));
-      return {
-        ...(await toSummary(normalized, parsed.fields, directory)),
-        content: parsed.content.trim()
-      };
-    } catch {
-      return undefined;
+    const matched = (await this.scan()).find(
+      (skill) => skill.id === normalized || skill.name === normalized
+    );
+    const candidates = matched && matched.id !== normalized ? [normalized, matched.id] : [normalized];
+    for (const candidate of candidates) {
+      const directory = join(this.directory, candidate);
+      const file = join(directory, 'SKILL.md');
+      try {
+        const root = await realpath(directory);
+        const realFile = await realpath(file);
+        if (!realFile.startsWith(`${root}${sep}`)) continue;
+        const info = await stat(realFile);
+        if (!info.isFile() || info.size > MAX_SKILL_BYTES) continue;
+        const parsed = parseFrontmatter(await readFile(realFile, 'utf8'));
+        return {
+          ...(await toSummary(candidate, parsed.fields, directory)),
+          content: parsed.content.trim()
+        };
+      } catch {
+        // 尝试下一个候选目录
+      }
     }
+    return undefined;
   }
 
   /**
