@@ -68,6 +68,7 @@ import { executeCacheTool, cacheToolDefinitions } from './cache-tools';
 import { executeBackupTool, backupToolDefinitions } from './backup-tools';
 import { executePluginTool, pluginToolDefinitions } from './plugin-tools';
 import { executeSkillTool, skillToolDefinitions } from './skill-tools';
+import { executeMcpTool, mcpToolDefinitions } from './mcp-tools';
 import {
   generalSettingsToolDefinitions,
   executeGeneralSettingsTool
@@ -596,7 +597,17 @@ const PLAN_ALLOWED_TOOLS = new Set([
   'backup_status',
   'plugin_list',
   'skill_list',
-  'skill_refresh'
+  'skill_refresh',
+  'mcp_list'
+]);
+
+const MCP_MANAGEMENT_TOOLS = new Set([
+  'mcp_list',
+  'mcp_read',
+  'mcp_save',
+  'mcp_update',
+  'mcp_refresh',
+  'mcp_test'
 ]);
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -839,6 +850,9 @@ export class AgentService {
         }
         if (call.name.startsWith('plugin_')) {
           return executePluginTool(call.name, call.arguments);
+        }
+        if (MCP_MANAGEMENT_TOOLS.has(call.name)) {
+          return executeMcpTool(call.name, call.arguments, this.mcp ? { service: this.mcp } : {});
         }
         if (call.name.startsWith('skill_')) {
           return executeSkillTool(call.name, call.arguments, {
@@ -1727,6 +1741,7 @@ export class AgentService {
         ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? backupToolDefinitions : []),
         ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? pluginToolDefinitions : []),
         ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? skillToolDefinitions : []),
+        ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? mcpToolDefinitions : []),
         ...(this.skills
           ? [
               searchSkillsToolDefinition,

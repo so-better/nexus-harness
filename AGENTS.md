@@ -380,7 +380,7 @@ modules/chat/
 - **Skill（技能）**：声明式任务包，包含说明、资源与可选脚本，告诉 Agent“某类任务该怎么做”。技能不直接获得进程权限，只能通过工具行动。
 - **Plugin（插件）**：运行时扩展，通过贡献点添加 UI、命令、事件订阅与设置；注册工具的能力留到后续。插件负责“集成与产品化扩展”。
 
-MCP Server 不是独立能力层，而是工具来源：配置位于 `<userData>/mcp`，启动后把工具注册进 Tool 层。
+MCP Server 不是独立能力层，而是工具来源：配置位于 `<userData>/mcp`，启动后把工具注册进 Tool 层。AI 可通过 `mcp_list`、`mcp_read`、`mcp_save`、`mcp_update`、`mcp_refresh`、`mcp_test` 管理 MCP；MCP 配置属于应用级数据，不受工作区 RootGrant 限制；读取时隐藏 `env`/`headers` 值，保存和测试时恢复原有掩码字段，写操作需要审批。
 
 约束：
 
@@ -785,6 +785,7 @@ metadata:
 
 - Skill 不携带额外权限，脚本只能通过 `run_command` 执行并经过审批。
 - Skill 变更必须同步更新说明与版本号，并补对应测试。
+- Skill 导入是应用级管理，不受工作区 RootGrant 限制；来源路径只需用户审批，不要求位于工作区。
 
 ### 4.5 插件体系
 

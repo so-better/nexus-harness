@@ -175,7 +175,13 @@ describe('AgentService', () => {
       'skill_import',
       'skill_create',
       'skill_update',
-      'skill_delete'
+      'skill_delete',
+      'mcp_update',
+      'mcp_list',
+      'mcp_read',
+      'mcp_save',
+      'mcp_refresh',
+      'mcp_test'
     ]);
   });
 
