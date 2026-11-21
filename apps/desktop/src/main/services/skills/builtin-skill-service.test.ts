@@ -19,6 +19,27 @@ describe('syncBuiltinSkills', () => {
     await rm(root, { recursive: true, force: true });
   });
 
+  it('ships the nine selected built-in skills', async () => {
+    const target = join(root, 'installed');
+    const installed = await syncBuiltinSkills({
+      sourceDir: join(process.cwd(), 'apps/desktop/resources/skills'),
+      destinationDir: target
+    });
+    expect(installed.sort()).toEqual(
+      [
+        'bug-reproduce',
+        'code-review',
+        'codebase-onboarding',
+        'data-analysis',
+        'documentation-writer',
+        'fix-failing-tests',
+        'office-report',
+        'safe-refactor',
+        'token-efficient-workflow'
+      ].sort()
+    );
+  });
+
   it('copies valid built-in skills and preserves user skills', async () => {
     const source = join(root, 'source');
     const target = join(root, 'target');

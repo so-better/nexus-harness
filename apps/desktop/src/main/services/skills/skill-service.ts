@@ -66,22 +66,30 @@ const toSummary = async (
   fields: Record<string, unknown>,
   directory: string
 ): Promise<SkillSummary> => {
-  const metadata = fields['metadata'];
+  const metadata =
+    fields['metadata'] && typeof fields['metadata'] === 'object'
+      ? (fields['metadata'] as Record<string, unknown>)
+      : undefined;
+  const tags = asStringArray(fields['tags']);
+  const requires = asStringArray(fields['requires']);
   return {
     id,
     name: stringValue(fields['name']) || id,
     description: stringValue(fields['description']),
-    tags: asStringArray(fields['tags']),
-    version: stringValue(fields['version']) || '1.0.0',
-    requires: asStringArray(fields['requires']),
-    ...(stringValue(fields['license']) ? { license: stringValue(fields['license']) } : {}),
+    tags: tags.length ? tags : asStringArray(metadata?.['tags']),
+    version:
+      stringValue(fields['version']) || stringValue(metadata?.['version']) || '1.0.0',
+    requires: requires.length ? requires : asStringArray(metadata?.['requires']),
+    ...(stringValue(fields['license'])
+      ? { license: stringValue(fields['license']) }
+      : stringValue(metadata?.['license'])
+        ? { license: stringValue(metadata?.['license']) }
+        : {}),
     ...(stringValue(fields['compatibility'])
       ? { compatibility: stringValue(fields['compatibility']) }
       : {}),
     allowedTools: asStringArray(fields['allowed-tools'] ?? fields['allowedTools']),
-    ...(metadata && typeof metadata === 'object'
-      ? { metadata: metadata as Record<string, unknown> }
-      : {}),
+    ...(metadata ? { metadata } : {}),
     assets: await listFiles(join(directory, 'assets')),
     scripts: await listFiles(join(directory, 'scripts')),
     references: await listFiles(join(directory, 'references'))
@@ -130,6 +138,10 @@ export class SkillService {
     const skills: SkillSummary[] = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
+      if (!SKILL_NAME_PATTERN.test(entry.name)) {
+        console.error(`Skill 目录必须是小写 slug，已跳过：${entry.name}`);
+        continue;
+      }
       const directory = join(this.directory, entry.name);
       try {
         const file = join(directory, 'SKILL.md');
@@ -231,27 +243,29 @@ export class SkillService {
     return this.scan();
   }
 
-  async read(name: string): Promise<SkillDetail | undefined> {
+  /**
+   * 按目录 ID 或 frontmatter name 解析 Skill，并统一校验目录边界。
+   */
+  private async resolveSkill(
+    name: string
+  ): Promise<{ id: string; directory: string; root: string } | undefined> {
     const normalized = name.trim();
     if (!normalized || normalized.includes('/') || normalized.includes('\\')) return undefined;
     const matched = (await this.scan()).find(
       (skill) => skill.id === normalized || skill.name === normalized
     );
-    const candidates = matched && matched.id !== normalized ? [normalized, matched.id] : [normalized];
+    const candidates =
+      matched && matched.id !== normalized ? [normalized, matched.id] : [normalized];
     for (const candidate of candidates) {
+      if (!SKILL_NAME_PATTERN.test(candidate)) continue;
       const directory = join(this.directory, candidate);
-      const file = join(directory, 'SKILL.md');
       try {
         const root = await realpath(directory);
-        const realFile = await realpath(file);
+        const realFile = await realpath(join(directory, 'SKILL.md'));
         if (!realFile.startsWith(`${root}${sep}`)) continue;
         const info = await stat(realFile);
         if (!info.isFile() || info.size > MAX_SKILL_BYTES) continue;
-        const parsed = parseFrontmatter(await readFile(realFile, 'utf8'));
-        return {
-          ...(await toSummary(candidate, parsed.fields, directory)),
-          content: parsed.content.trim()
-        };
+        return { id: candidate, directory, root };
       } catch {
         // 尝试下一个候选目录
       }
@@ -259,9 +273,16 @@ export class SkillService {
     return undefined;
   }
 
-  /**
-   * 读取 Skill 的 assets/scripts/references 文件；只允许 Skill 目录内路径。
-   */
+  async read(name: string): Promise<SkillDetail | undefined> {
+    const resolved = await this.resolveSkill(name);
+    if (!resolved) return undefined;
+    const parsed = parseFrontmatter(await readFile(join(resolved.directory, 'SKILL.md'), 'utf8'));
+    return {
+      ...(await toSummary(resolved.id, parsed.fields, resolved.directory)),
+      content: parsed.content.trim()
+    };
+  }
+
   /**
    * 在 Skill scripts 目录内执行脚本；脚本必须通过 Agent 工具审批后才会调用。
    */
@@ -271,16 +292,16 @@ export class SkillService {
     args: string[] = [],
     timeoutMs = 60_000
   ): Promise<{ ok: boolean; output: string; error?: { code: string; message: string } }> {
-    const normalized = name.trim();
-    if (!normalized || normalized.includes('/') || normalized.includes('\\')) {
-      return {
-        ok: false,
-        output: '',
-        error: { code: 'SKILL_INVALID_INPUT', message: 'Skill id 不合法' }
-      };
-    }
     try {
-      const root = await realpath(join(this.directory, normalized));
+      const resolved = await this.resolveSkill(name);
+      if (!resolved) {
+        return {
+          ok: false,
+          output: '',
+          error: { code: 'SKILL_NOT_FOUND', message: `Skill 不存在：${name}` }
+        };
+      }
+      const root = resolved.root;
       const target = await realpath(join(root, 'scripts', relativePath));
       if (!target.startsWith(`${join(root, 'scripts')}${sep}`)) {
         return {
@@ -360,13 +381,15 @@ export class SkillService {
     }
   }
 
+  /**
+   * 读取 Skill 的 assets/scripts/references 文件；只允许 Skill 目录内路径。
+   */
   async readFile(name: string, relativePath: string): Promise<string | undefined> {
-    const normalized = name.trim();
-    if (!normalized || normalized.includes('/') || normalized.includes('\\')) return undefined;
-    const directory = join(this.directory, normalized);
     try {
-      const root = await realpath(directory);
-      const target = await realpath(join(directory, relativePath));
+      const resolved = await this.resolveSkill(name);
+      if (!resolved) return undefined;
+      const root = resolved.root;
+      const target = await realpath(join(resolved.directory, relativePath));
       if (target !== root && !target.startsWith(`${root}${sep}`)) return undefined;
       const allowed = ['assets', 'scripts', 'references'].some((folder) =>
         target.startsWith(`${join(root, folder)}${sep}`)

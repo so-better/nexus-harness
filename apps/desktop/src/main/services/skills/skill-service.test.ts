@@ -46,12 +46,30 @@ describe('SkillService', () => {
     expect(skills.map((skill) => skill.id)).not.toContain('invalid-skill');
   });
 
+  it('reads tags, version and requires from metadata', async () => {
+    await mkdir(join(root, 'metadata-skill'), { recursive: true });
+    await writeFile(
+      join(root, 'metadata-skill', 'SKILL.md'),
+      '---\nname: metadata-skill\ndescription: metadata demo\nmetadata:\n  tags: [demo, metadata]\n  version: 2.0.0\n  requires: [read, execute]\n---\nBody\n'
+    );
+    const skill = await new SkillService(root).read('metadata-skill');
+    expect(skill).toMatchObject({
+      tags: ['demo', 'metadata'],
+      version: '2.0.0',
+      requires: ['read', 'execute']
+    });
+  });
+
   it('runs a script inside the Skill scripts directory', async () => {
     await mkdir(join(root, 'fix-tests', 'scripts'), { recursive: true });
     await writeFile(join(root, 'fix-tests', 'scripts', 'echo.js'), "console.log('skill-ok')");
-    const result = await new SkillService(root).runScript('fix-tests', 'echo.js');
+    const service = new SkillService(root);
+    const result = await service.runScript('fix-failing-tests', 'echo.js');
     expect(result.ok).toBe(true);
     expect(result.output).toContain('skill-ok');
+    await expect(service.readFile('fix-failing-tests', 'scripts/echo.js')).resolves.toContain(
+      'skill-ok'
+    );
   }, 10_000);
 
   it('imports a directory with SKILL.md and resources', async () => {

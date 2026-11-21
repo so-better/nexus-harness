@@ -758,9 +758,10 @@ Session 可以不绑定 Workspace，也没有 Session RootGrant；这是合法�
 ---
 name: fix-failing-tests
 description: 当测试、类型检查或 lint 失败时使用，定位并修复直到全绿。
-tags: [测试, lint, 类型错误]
-version: 1.0.0
-requires: [read, write, execute]
+metadata:
+  tags: [测试, lint, 类型错误]
+  version: 1.0.0
+  requires: [read, write, execute]
 ---
 正文：触发条件、执行步骤、约束、验收标准。
 ```
@@ -769,7 +770,7 @@ requires: [read, write, execute]
 
 - 启动时扫描 `<userData>/skills/<id>/SKILL.md`，目录增删改时重新扫描。
 - 启动时从 `resources/skills/` 同步内置 Skill，覆盖同名内置副本；用户自建 Skill 和其他目录保持不变。删除内置 Skill 后下次启动会重新补齐。
-- 只解析 frontmatter（name、description、tags、version、requires），正文不预加载。
+- 只解析 frontmatter（name、description、license、compatibility）和 `metadata` 中的 tags/version/requires，正文不预加载。
 - 无效 Skill 记录错误并跳过，不影响启动与其他技能。
 - 输入 `/` 时列出可用技能；UI 展示已激活标签。
 
