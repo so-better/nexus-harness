@@ -40,8 +40,10 @@
             <span class="nh-extension-item__id">{{ skill.id }} · v{{ skill.version }}</span>
           </div>
           <NTag
+            class="nh-extension-item__source-tag"
+            :class="{ 'nh-extension-item__builtin-tag': skill.source === 'builtin' }"
             size="small"
-            :bordered="false"
+            :bordered="skill.source === 'builtin'"
             :type="skill.source === 'builtin' ? 'success' : 'primary'"
           >
             {{ skill.source === 'builtin' ? t('skills.builtin') : t('skills.user') }}
@@ -51,7 +53,15 @@
           {{ skill.description }}
         </p>
         <div v-if="skill.tags.length" class="nh-extension-item__tags">
-          <NTag v-for="tag in skill.tags" :key="tag" size="tiny" :bordered="false">{{ tag }}</NTag>
+          <NTag
+            v-for="tag in skill.tags"
+            :key="tag"
+            class="nh-extension-item__tag"
+            size="tiny"
+            :bordered="false"
+          >
+            {{ tag }}
+          </NTag>
         </div>
         <div v-if="skill.source !== 'builtin'" class="nh-extension-item__actions">
           <NPopconfirm @positive-click="removeSkill(skill.id)">
@@ -239,8 +249,37 @@ onMounted(load);
 .nh-extension-item__tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
   margin-top: 8px;
+}
+
+.nh-extension-item__top :deep(.n-tag) {
+  --n-height: auto;
+  --n-padding: 4px 8px;
+
+  border-radius: 1000px;
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+
+.nh-extension-item__top :deep(.nh-extension-item__builtin-tag) {
+  --n-color: color-mix(in srgb, var(--nh-color-success) 16%, transparent);
+  --n-text-color: var(--nh-color-success);
+  --n-border: 1px solid color-mix(in srgb, var(--nh-color-success) 42%, transparent);
+  --n-border-hover: 1px solid color-mix(in srgb, var(--nh-color-success) 62%, transparent);
+
+  font-weight: 600;
+}
+
+.nh-extension-item__tags :deep(.n-tag) {
+  --n-height: auto;
+  --n-padding: 2px 8px;
+
+  border-radius: 6px;
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
 }
 
 .nh-extension-item__actions {

@@ -10,8 +10,10 @@
           {{ t('plugins.mainCode') }}
         </NTag>
         <NTag
+          class="nh-plugin-card__source-tag"
+          :class="{ 'nh-plugin-card__builtin-tag': plugin.source === 'builtin' }"
           size="small"
-          :bordered="false"
+          :bordered="plugin.source === 'builtin'"
           :type="plugin.source === 'builtin' ? 'success' : 'primary'"
         >
           {{ plugin.source === 'builtin' ? t('plugins.builtin') : t('plugins.user') }}
@@ -110,6 +112,25 @@ const emit = defineEmits<{
   gap: 6px;
 }
 
+.nh-plugin-card__tags :deep(.n-tag) {
+  --n-height: auto;
+  --n-padding: 4px 8px;
+
+  border-radius: 1000px;
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+
+.nh-plugin-card__tags :deep(.nh-plugin-card__builtin-tag) {
+  --n-color: color-mix(in srgb, var(--nh-color-success) 16%, transparent);
+  --n-text-color: var(--nh-color-success);
+  --n-border: 1px solid color-mix(in srgb, var(--nh-color-success) 42%, transparent);
+  --n-border-hover: 1px solid color-mix(in srgb, var(--nh-color-success) 62%, transparent);
+
+  font-weight: 600;
+}
+
 .nh-plugin-card__description {
   margin: 8px 0 0;
   color: var(--nh-color-text-secondary);
@@ -119,14 +140,24 @@ const emit = defineEmits<{
 .nh-plugin-card__permissions {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
   margin-top: 8px;
+}
+
+.nh-plugin-card__permissions :deep(.n-tag) {
+  --n-height: auto;
+  --n-padding: 2px 8px;
+
+  border-radius: 6px;
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
 }
 
 .nh-plugin-card__error {
   margin: 8px 0 0;
   color: var(--nh-color-danger);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .nh-plugin-card__actions {
