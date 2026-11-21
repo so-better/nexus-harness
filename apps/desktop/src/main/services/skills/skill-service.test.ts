@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { SkillService } from './skill-service';
+import { SkillBuiltinDeleteError, SkillService } from './skill-service';
 
 describe('SkillService', () => {
   let root = '';
@@ -44,6 +44,43 @@ describe('SkillService', () => {
     );
     const skills = await new SkillService(root).scan();
     expect(skills.map((skill) => skill.id)).not.toContain('invalid-skill');
+  });
+
+  it('marks skills that exist under resources/skills as builtin and protects them from deletion', async () => {
+    await mkdir(join(root, 'bundled-skill'), { recursive: true });
+    await writeFile(
+      join(root, 'bundled-skill', 'SKILL.md'),
+      '---\nname: bundled-skill\ndescription: bundled\n---\nBody\n'
+    );
+    const builtinRoot = await mkdtemp(join(tmpdir(), 'nexus-builtin-source-'));
+    const source = await mkdtemp(join(tmpdir(), 'nexus-skill-source-'));
+    try {
+      await mkdir(join(builtinRoot, 'bundled-skill'), { recursive: true });
+      const service = new SkillService(root, builtinRoot);
+      expect(await service.scan()).toContainEqual(
+        expect.objectContaining({ id: 'bundled-skill', source: 'builtin' })
+      );
+      expect((await service.read('bundled-skill'))?.source).toBe('builtin');
+      await expect(service.delete('bundled-skill')).rejects.toBeInstanceOf(
+        SkillBuiltinDeleteError
+      );
+      await writeFile(
+        join(source, 'SKILL.md'),
+        '---\nname: imported-bundled\ndescription: imported\n---\nBody\n'
+      );
+      await service.importDirectory(source);
+      expect((await service.read('imported-bundled'))?.source).toBe('user');
+      await writeFile(
+        join(source, 'SKILL.md'),
+        '---\nname: bundled-skill\ndescription: overridden builtin\n---\nBody\n'
+      );
+      await expect(service.importDirectory(source)).rejects.toThrow(
+        '不能导入与内置 SKILL 同名'
+      );
+    } finally {
+      await rm(builtinRoot, { recursive: true, force: true });
+      await rm(source, { recursive: true, force: true });
+    }
   });
 
   it('reads tags, version and requires from metadata', async () => {

@@ -21,6 +21,13 @@
             <strong>{{ skill.name }}</strong>
             <span class="nh-extension-item__id">{{ skill.id }} · v{{ skill.version }}</span>
           </div>
+          <NTag
+            size="small"
+            :bordered="false"
+            :type="skill.source === 'builtin' ? 'warning' : 'primary'"
+          >
+            {{ skill.source === 'builtin' ? t('skills.builtin') : t('skills.user') }}
+          </NTag>
         </div>
         <p v-if="skill.description" class="nh-extension-item__description">
           {{ skill.description }}
@@ -28,7 +35,7 @@
         <div v-if="skill.tags.length" class="nh-extension-item__tags">
           <NTag v-for="tag in skill.tags" :key="tag" size="tiny" :bordered="false">{{ tag }}</NTag>
         </div>
-        <div class="nh-extension-item__actions">
+        <div v-if="skill.source !== 'builtin'" class="nh-extension-item__actions">
           <NPopconfirm @positive-click="removeSkill(skill.id)">
             <template #trigger>
               <NButton text size="tiny" type="error" :loading="deleting === skill.id">

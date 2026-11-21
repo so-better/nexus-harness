@@ -20,7 +20,7 @@ import {
 import { askUserResolveInputSchema, type AskUserResolveResult } from '@shared/ask-user';
 import { fail, ok, type Result } from '@shared/ipc/result';
 import { AgentService, createAgentProvider } from '../services/agent/agent-service';
-import { SkillService } from '../services/skills/skill-service';
+import { createSkillService } from '../services/skills/skill-service';
 import { getMcpService } from '../services/mcp/mcp-service-instance';
 import { approvalService } from '../services/agent/approval-service';
 import { askUserService } from '../services/agent/ask-user-service';
@@ -95,7 +95,7 @@ export const registerAgentIpc = (): void => {
   const attachments = new AttachmentService(db);
   const agentService = new AgentService({
     database: db,
-    skills: new SkillService(),
+    skills: createSkillService(),
     mcp: getMcpService(),
     imageSettings: loadImageSettings,
     searchSettings: loadSearchSettings,

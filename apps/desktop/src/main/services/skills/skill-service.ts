@@ -7,7 +7,7 @@ import { cp, mkdir, readdir, readFile, realpath, rm, stat } from 'node:fs/promis
 import { basename, join, sep } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import type { SkillDetail, SkillSummary } from '@shared/skills';
-import { getAppDataPaths } from '../storage/paths';
+import { getAppDataPaths, getBuiltinSkillsDirectory } from '../storage/paths';
 
 export type SkillMeta = SkillSummary;
 export type { SkillDetail };
@@ -18,6 +18,14 @@ const MAX_IMPORT_FILES = 500;
 const MAX_IMPORT_BYTES = 10_000_000;
 const MAX_SEARCH_RESULTS = 8;
 const SKILL_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+
+/** 内置 SKILL 不允许通过 IPC 删除，避免用户误以为已移除。 */
+export class SkillBuiltinDeleteError extends Error {
+  constructor(id: string) {
+    super(`内置 SKILL 不能删除：${id}`);
+    this.name = 'SkillBuiltinDeleteError';
+  }
+}
 
 const asStringArray = (value: unknown): string[] => {
   if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string');
@@ -64,7 +72,8 @@ const listFiles = async (directory: string): Promise<string[]> => {
 const toSummary = async (
   id: string,
   fields: Record<string, unknown>,
-  directory: string
+  directory: string,
+  source: SkillSummary['source']
 ): Promise<SkillSummary> => {
   const metadata =
     fields['metadata'] && typeof fields['metadata'] === 'object'
@@ -74,6 +83,7 @@ const toSummary = async (
   const requires = asStringArray(fields['requires']);
   return {
     id,
+    source,
     name: stringValue(fields['name']) || id,
     description: stringValue(fields['description']),
     tags: tags.length ? tags : asStringArray(metadata?.['tags']),
@@ -124,7 +134,10 @@ const validateImportDirectory = async (directory: string): Promise<void> => {
  * 扫描 userData/skills，并缓存扫描结果 1 秒。
  */
 export class SkillService {
-  constructor(private readonly baseDir?: string) {}
+  constructor(
+    private readonly baseDir?: string,
+    private readonly builtinDir?: string
+  ) {}
 
   private cache: { at: number; skills: SkillSummary[] } | undefined;
 
@@ -132,9 +145,23 @@ export class SkillService {
     return this.baseDir ?? getAppDataPaths().skills;
   }
 
+  /**
+   * 内置 Skill 直接以安装目录 resources/skills 下的目录名为准。
+   */
+  private async builtinIds(): Promise<Set<string>> {
+    if (!this.builtinDir) return new Set();
+    const entries = await readdir(this.builtinDir, { withFileTypes: true }).catch(() => []);
+    return new Set(
+      entries
+        .filter((entry) => entry.isDirectory() && SKILL_NAME_PATTERN.test(entry.name))
+        .map((entry) => entry.name)
+    );
+  }
+
   async scan(): Promise<SkillSummary[]> {
     if (this.cache && Date.now() - this.cache.at < 1_000) return this.cache.skills;
     const entries = await readdir(this.directory, { withFileTypes: true }).catch(() => []);
+    const builtinIds = await this.builtinIds();
     const skills: SkillSummary[] = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
@@ -156,7 +183,14 @@ export class SkillService {
           console.error(`Skill name 必须是小写 slug，已跳过：${entry.name}`);
           continue;
         }
-        skills.push(await toSummary(entry.name, parsed.fields, directory));
+        skills.push(
+          await toSummary(
+            entry.name,
+            parsed.fields,
+            directory,
+            builtinIds.has(entry.name) ? 'builtin' : 'user'
+          )
+        );
       } catch {
         // 单个无效 Skill 跳过
       }
@@ -211,6 +245,9 @@ export class SkillService {
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '')
         .slice(0, 80) || `skill-${Date.now()}`;
+    if ((await this.builtinIds()).has(id)) {
+      throw new Error('不能导入与内置 SKILL 同名的目录');
+    }
     const sourceReal = await realpath(sourceDir);
     const rootReal = await realpath(this.directory).catch(() => this.directory);
     if (sourceReal === rootReal || sourceReal.startsWith(`${rootReal}${sep}`)) {
@@ -238,6 +275,8 @@ export class SkillService {
       normalized.includes('\\')
     )
       return this.scan();
+    const builtinIds = await this.builtinIds();
+    if (builtinIds.has(normalized)) throw new SkillBuiltinDeleteError(normalized);
     await rm(join(this.directory, normalized), { recursive: true, force: true });
     this.cache = undefined;
     return this.scan();
@@ -277,8 +316,14 @@ export class SkillService {
     const resolved = await this.resolveSkill(name);
     if (!resolved) return undefined;
     const parsed = parseFrontmatter(await readFile(join(resolved.directory, 'SKILL.md'), 'utf8'));
+    const builtinIds = await this.builtinIds();
     return {
-      ...(await toSummary(resolved.id, parsed.fields, resolved.directory)),
+      ...(await toSummary(
+        resolved.id,
+        parsed.fields,
+        resolved.directory,
+        builtinIds.has(resolved.id) ? 'builtin' : 'user'
+      )),
       content: parsed.content.trim()
     };
   }
@@ -403,3 +448,7 @@ export class SkillService {
     }
   }
 }
+
+/** 生产环境使用的 SkillService：以安装目录的内置 Skill 作为来源判断。 */
+export const createSkillService = (): SkillService =>
+  new SkillService(undefined, getBuiltinSkillsDirectory());

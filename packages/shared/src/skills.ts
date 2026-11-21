@@ -4,6 +4,7 @@
 
 export interface SkillSummary {
   id: string;
+  source: 'builtin' | 'user';
   name: string;
   description: string;
   tags: string[];

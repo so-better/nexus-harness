@@ -6,10 +6,13 @@ import { BrowserWindow, dialog, ipcMain } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import { fail, ok, type Result } from '@shared/ipc/result';
 import type { SkillDetail, SkillSummary } from '@shared/skills';
-import { SkillService } from '../services/skills/skill-service';
+import {
+  createSkillService,
+  SkillBuiltinDeleteError
+} from '../services/skills/skill-service';
 
 export const registerSkillsIpc = (): void => {
-  const skills = new SkillService();
+  const skills = createSkillService();
   ipcMain.handle(IPC_CHANNELS.skillsList, async (): Promise<Result<SkillSummary[]>> => {
     try {
       return ok(await skills.scan());
@@ -59,6 +62,9 @@ export const registerSkillsIpc = (): void => {
       try {
         return ok(await skills.delete(id));
       } catch (error) {
+        if (error instanceof SkillBuiltinDeleteError) {
+          return fail('SKILL_BUILTIN_CANNOT_DELETE', error.message);
+        }
         return fail(
           'SKILL_DELETE_FAILED',
           error instanceof Error ? error.message : '删除 Skill 失败'
