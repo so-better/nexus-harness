@@ -24,7 +24,7 @@
           <NTag
             size="small"
             :bordered="false"
-            :type="skill.source === 'builtin' ? 'warning' : 'primary'"
+            :type="skill.source === 'builtin' ? 'success' : 'primary'"
           >
             {{ skill.source === 'builtin' ? t('skills.builtin') : t('skills.user') }}
           </NTag>

@@ -12,7 +12,7 @@
         <NTag
           size="small"
           :bordered="false"
-          :type="plugin.source === 'builtin' ? 'warning' : 'primary'"
+          :type="plugin.source === 'builtin' ? 'success' : 'primary'"
         >
           {{ plugin.source === 'builtin' ? t('plugins.builtin') : t('plugins.user') }}
         </NTag>
