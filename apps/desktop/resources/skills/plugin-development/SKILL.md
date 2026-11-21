@@ -2,8 +2,8 @@
 name: plugin-development
 description: 当用户要创建、修改、调试或发布 Nexus 插件时使用；覆盖本地插件项目、用户插件、内置插件复制、manifest、renderer/main 入口、权限、插槽、事件与验证流程。
 metadata:
-  tags: [插件开发, plugin, manifest, renderer, main, slots, permissions, 用户插件]
-  version: 1.0.0
+  tags: [插件开发, plugin, manifest, renderer, main, slots, views, permissions, usage, 用户插件]
+  version: 1.1.0
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -112,6 +112,7 @@ export function deactivate() {
 | `ui.command`      | 命令                       |
 | `ui.notification` | 应用内/系统通知            |
 | `ui.skin`         | 全局背景皮肤               |
+| `usage:read`      | 只读本地用量统计与历史     |
 | `workspace:read`  | 只读当前会话工作区         |
 | `events:<event>`  | 订阅指定事件               |
 | `events:*`        | 订阅全部公开事件           |
@@ -124,15 +125,17 @@ export function deactivate() {
 ctx.pluginId
 ctx.commands.register(id, handler): Disposable
 ctx.views.register(id, mount): Disposable
+ctx.views.open(id): Promise<void>
 ctx.slots.register(id, mount): Disposable
 ctx.skins.register(id, mount): Disposable
 ctx.statusBar.add(item): Disposable
-ctx.events.on(event, handler): Disposable
+ctx.events.on(event, (payload, meta) => void): Disposable
 ctx.storage.get/set/delete
 ctx.settings
 ctx.logger.debug/info/warn/error
 ctx.notifications.show
 ctx.workspace.readFile/list
+ctx.usage.getStats(query): Promise<UsageStats>
 ```
 
 使用 `ctx.settings` 读取 manifest 声明的设置；使用 `ctx.storage` 持久化插件数据，不能写入插件目录作为数据存储。
@@ -169,9 +172,15 @@ interface MainPluginContext {
 
 主进程入口不提供 DOM、插槽、视图或皮肤。启用第三方主进程插件等同于运行本地代码，必须告知用户来源与权限。
 
+## 视图与用量
+
+- 声明 `views` 贡献点并申请 `ui.panel`；`ctx.views.register` 挂载视图，`ctx.views.open(id)` 打开宿主大尺寸视图弹窗。
+- 需要分析数据时申请 `usage:read`，调用 `ctx.usage.getStats({ sessionId?, from?, to?, bucket? })`；返回总量、时间序列、会话、模型和 Provider 分布，不需要读取数据库。
+- 视图与命令可按需激活；视图打开失败应给出可诊断错误，不要静默失败。
+
 ## 事件
 
-- 回调只收到 payload，不包含事件信封；需要 sessionId/runId 时优先使用 SlotContext。
+- 回调收到 `(payload, meta)`；`meta` 包含 `type`、`sessionId`、`runId` 和 `ts`，可用于按会话或时间刷新视图。
 - 高频 `message.delta` 默认不开放；使用 `message.completed`、`usage.recorded` 等聚合事件。
 - 事件是只读观察，不能修改、拦截或替代审批。
 - 订阅前必须在 manifest 声明 `events:<event>` 或 `events:*`。
@@ -207,7 +216,7 @@ interface MainPluginContext {
 
 - [ ] `plugin.json` 可解析，id 与目录名一致。
 - [ ] main/renderer 入口存在且路径在插件目录内。
-- [ ] 权限与贡献点匹配，未申请不需要的能力。
+- [ ] 权限与贡献点匹配，未申请不需要的能力；统计视图只申请 `usage:read` 和必要的 `ui.panel`。
 - [ ] 所有 mount 和 activate 返回清理函数。
 - [ ] 没有依赖宿主内部包、Node 全局或 `window.nexus`（renderer）。
 - [ ] 无密钥、敏感路径和大段日志进入通知或 UI。

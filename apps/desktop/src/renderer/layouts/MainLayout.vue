@@ -68,6 +68,7 @@
     />
 
     <ExtensionsModal :show="extensionsOpen" @update:show="extensionsOpen = $event" />
+    <PluginViewModal />
     <ChangelogModal :show="changelogOpen" @update:show="changelogOpen = $event" />
     <CommandPalette
       v-model:show="commandPaletteOpen"
@@ -118,6 +119,7 @@ import ExtensionsModal from '@/plugin-runtime/components/ExtensionsModal.vue';
 import ChangelogModal from '@/components/ChangelogModal.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
 import PluginSkinLayer from '@/plugin-runtime/components/PluginSkinLayer.vue';
+import PluginViewModal from '@/plugin-runtime/components/PluginViewModal.vue';
 import { usePluginRuntimeStore } from '@/plugin-runtime/runtime.store';
 import AppStatusbar from './AppStatusbar.vue';
 import AppTitleBar from './AppTitleBar.vue';

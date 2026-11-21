@@ -59,6 +59,7 @@ export const IPC_CHANNELS = {
   settingsGeneralChanged: 'settings:generalChanged',
   settingsGetAgent: 'settings:getAgent',
   settingsSetAgent: 'settings:setAgent',
+  usageStats: 'usage:stats',
   cacheGetInfo: 'cache:getInfo',
   cacheClear: 'cache:clear',
   providerList: 'provider:list',

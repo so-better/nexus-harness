@@ -44,6 +44,54 @@ export type PluginSkinMount = (element: HTMLElement, ctx: PluginContext) => Disp
 export type PluginViewMount = (element: HTMLElement, ctx: PluginContext) => Disposable;
 export type PluginSlotMount = (element: HTMLElement, context: PluginSlotContext) => Disposable;
 
+export interface PluginEventMeta {
+  type: string;
+  sessionId: string;
+  runId?: string;
+  ts: number;
+}
+
+export type PluginUsageBucket = 'day' | 'hour' | 'run';
+
+export interface PluginUsageQuery {
+  from?: number | undefined;
+  to?: number | undefined;
+  sessionId?: string | undefined;
+  bucket?: PluginUsageBucket | undefined;
+}
+
+export interface PluginUsageTotals {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cost: number;
+  calls: number;
+}
+
+export interface PluginUsageSeriesPoint extends PluginUsageTotals {
+  key: string;
+  start: number;
+}
+
+export interface PluginUsageBreakdown extends PluginUsageTotals {
+  key: string;
+  label: string;
+}
+
+export interface PluginUsageSession extends PluginUsageTotals {
+  sessionId: string;
+  title: string;
+  lastUsedAt: number;
+}
+
+export interface PluginUsageStats {
+  totals: PluginUsageTotals;
+  series: PluginUsageSeriesPoint[];
+  sessions: PluginUsageSession[];
+  models: PluginUsageBreakdown[];
+  providers: PluginUsageBreakdown[];
+}
+
 export interface PluginContext {
   pluginId: string;
   commands: {
@@ -51,6 +99,7 @@ export interface PluginContext {
   };
   views: {
     register: (id: string, mount: PluginViewMount) => Disposable;
+    open: (id: string) => Promise<void>;
   };
   slots: {
     register: (id: string, mount: PluginSlotMount) => Disposable;
@@ -70,6 +119,9 @@ export interface PluginContext {
     delete: (key: string) => Promise<void>;
   };
   settings: Record<string, PluginSettingValue>;
+  usage: {
+    getStats: (input?: PluginUsageQuery) => Promise<PluginUsageStats>;
+  };
   logger: {
     debug: (message: string) => void;
     info: (message: string) => void;

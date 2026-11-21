@@ -99,6 +99,9 @@ const bridge: NexusBridge = {
       return () => ipcRenderer.removeListener(IPC_CHANNELS.settingsSkinChanged, listener);
     }
   },
+  usage: {
+    stats: (input) => ipcRenderer.invoke(IPC_CHANNELS.usageStats, input ?? {})
+  },
   cache: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.cacheGetInfo),
     clear: (target) => ipcRenderer.invoke(IPC_CHANNELS.cacheClear, target)

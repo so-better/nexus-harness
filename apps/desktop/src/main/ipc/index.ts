@@ -16,6 +16,7 @@ import { registerProviderIpc } from './provider';
 import { registerSessionIpc } from './session';
 import { registerSettingsIpc } from './settings';
 import { registerTerminalIpc } from './terminal';
+import { registerUsageIpc } from './usage';
 import { registerThemeIpc } from './theme';
 import { registerWorkspaceIpc } from './workspace';
 
@@ -37,6 +38,7 @@ export const registerIpcHandlers = (): void => {
   registerSessionIpc();
   registerSettingsIpc();
   registerTerminalIpc();
+  registerUsageIpc();
   registerThemeIpc();
   registerWorkspaceIpc();
 };

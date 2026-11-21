@@ -206,6 +206,11 @@ const migrate = (db: DatabaseSync): void => {
     `);
     db.exec('PRAGMA user_version = 9');
   }
+
+  if (version < 11) {
+    db.exec('CREATE INDEX IF NOT EXISTS idx_events_type_ts ON events(type, ts)');
+    db.exec('PRAGMA user_version = 11');
+  }
 };
 
 /**

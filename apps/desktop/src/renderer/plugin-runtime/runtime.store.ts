@@ -13,11 +13,13 @@ import type {
   PluginSlotLocation,
   PluginWorkspaceEntry
 } from '@shared/plugin';
+import type { UsageStats, UsageStatsInput } from '@shared/usage';
 import {
   deletePluginStorage,
   getPluginSettings,
   getPluginStorage,
   getSelectedSkin,
+  getUsageStats as getPluginUsageStats,
   listPlugins,
   logPlugin,
   notifyPlugin,
@@ -82,6 +84,7 @@ export interface PluginContext {
   };
   views: {
     register: (id: string, mount: PluginView['mount']) => () => void;
+    open: (id: string) => Promise<void>;
   };
   slots: {
     register: (
@@ -95,13 +98,24 @@ export interface PluginContext {
   statusBar: {
     add: (item: Omit<PluginStatusItem, 'align'> & { align?: 'left' | 'right' }) => () => void;
   };
-  events: { on: (event: string, handler: (payload: unknown) => void) => () => void };
+  events: {
+    on: (
+      event: string,
+      handler: (
+        payload: unknown,
+        meta: { type: string; sessionId: string; runId?: string; ts: number }
+      ) => void
+    ) => () => void;
+  };
   storage: {
     get: <T>(key: string) => Promise<T | undefined>;
     set: <T>(key: string, value: T) => Promise<void>;
     delete: (key: string) => Promise<void>;
   };
   settings: Record<string, PluginSettingValue>;
+  usage: {
+    getStats: (input?: UsageStatsInput) => Promise<UsageStats>;
+  };
   logger: {
     debug: (message: string) => void;
     info: (message: string) => void;
@@ -147,6 +161,7 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
   const statusItems = ref<PluginStatusItem[]>([]);
   const commands = ref(new Map<string, PluginCommand>());
   const views = ref(new Map<string, PluginView>());
+  const openedView = ref<PluginView | null>(null);
   const version = ref(0);
   const loading = ref(false);
   const error = ref<string>();
@@ -154,7 +169,15 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
   const skinMounts = ref(new Map<string, { mount: PluginSkinMount; context: PluginContext }>());
   const activeSessionId = ref<string>();
   const active = new Map<string, ActivePlugin>();
-  const eventHandlers = new Map<string, Set<(payload: unknown) => void>>();
+  const eventHandlers = new Map<
+    string,
+    Set<
+      (
+        payload: unknown,
+        meta: { type: string; sessionId: string; runId?: string; ts: number }
+      ) => void
+    >
+  >();
   const activating = new Set<string>();
   const activationWaiters = new Map<string, Array<() => void>>();
   let initialized = false;
@@ -262,6 +285,12 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
           }
         },
         views: {
+          open: async (id) => {
+            if (!hasPermission(plugin, 'ui.panel')) throw new Error('缺少 ui.panel 权限');
+            const view = views.value.get(id);
+            if (!view || view.pluginId !== plugin.id) throw new Error(`未声明的视图：${id}`);
+            openedView.value = view;
+          },
           register: (id, mount) => {
             if (!hasPermission(plugin, 'ui.panel')) throw new Error('缺少 ui.panel 权限');
             const contribution = manifest.contributes.views.find((item) => item.id === id);
@@ -277,6 +306,7 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
             bump();
             const dispose = (): void => {
               views.value.delete(id);
+              if (openedView.value?.id === id) openedView.value = null;
               bump();
             };
             currentDisposable.disposables.push(dispose);
@@ -369,6 +399,12 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
           }
         },
         settings,
+        usage: {
+          getStats: async (input = {}) => {
+            if (!hasPermission(plugin, 'usage:read')) throw new Error('缺少 usage:read 权限');
+            return getPluginUsageStats(input);
+          }
+        },
         logger: {
           debug: (message) => logPlugin(plugin.id, 'debug', message).catch(() => undefined),
           info: (message) => logPlugin(plugin.id, 'info', message).catch(() => undefined),
@@ -450,6 +486,7 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     statusItems.value = [];
     commands.value = new Map();
     views.value.clear();
+    openedView.value = null;
     slotRegistry.clear();
     skinMounts.value = new Map();
     bump();
@@ -505,7 +542,12 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     }
     for (const handler of eventHandlers.get(event.type) ?? []) {
       try {
-        handler(event.payload);
+        handler(event.payload, {
+          type: event.type,
+          sessionId: event.sessionId,
+          ts: event.ts,
+          ...(event.runId ? { runId: event.runId } : {})
+        });
       } catch (reason) {
         error.value = reason instanceof Error ? reason.message : String(reason);
       }
@@ -658,6 +700,19 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     statusItems,
     commands,
     views,
+    openedView,
+    openView: async (id: string) => {
+      let view = views.value.get(id);
+      if (!view) {
+        await activateForExtensions();
+        view = views.value.get(id);
+      }
+      if (!view) throw new Error(`未声明的视图：${id}`);
+      openedView.value = view;
+    },
+    closeView: () => {
+      openedView.value = null;
+    },
     version,
     loading,
     error,

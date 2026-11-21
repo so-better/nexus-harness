@@ -10,32 +10,62 @@ const skinChange = vi.hoisted(() => ({
   handler: undefined as ((payload: PluginSkinChangedPayload) => void) | undefined
 }));
 
+const deniedPlugin: PluginPublic = {
+  id: 'nexus.test-usage-denied',
+  name: 'Denied usage',
+  version: '1.0.0',
+  enabled: true,
+  source: 'user',
+  permissions: ['ui.command'],
+  activationEvents: [],
+  contributes: {
+    views: [],
+    messageSlots: [],
+    statusBar: [],
+    commands: [{ id: 'usage.denied', title: 'Denied usage' }],
+    settings: [],
+    skins: []
+  },
+  rendererUrl: `data:text/javascript,${encodeURIComponent(
+    "export function activate(ctx) { ctx.commands.register('usage.denied', () => ctx.usage.getStats()); }\n"
+  )}`,
+  hasMain: false,
+  mainLoaded: false
+};
+
 const plugin: PluginPublic = {
   id: 'nexus.test-skin',
   name: 'Test skin',
   version: '1.0.0',
   enabled: true,
   source: 'user',
-  permissions: ['ui.skin'],
+  permissions: ['ui.skin', 'ui.command', 'ui.panel', 'usage:read'],
   activationEvents: [],
   contributes: {
-    views: [],
+    views: [{ id: 'usage.dashboard', title: 'Usage', location: 'main' }],
     messageSlots: [],
     statusBar: [],
-    commands: [],
+    commands: [{ id: 'usage.check', title: 'Check usage' }],
     settings: [],
     skins: [{ id: 'paper', title: 'Paper' }]
   },
   rendererUrl: `data:text/javascript,${encodeURIComponent(
-    "export function activate(ctx) { ctx.skins.register('paper', () => () => {}); }\n"
+    "export function activate(ctx) { ctx.skins.register('paper', () => () => {}); ctx.views.register('usage.dashboard', () => () => {}); ctx.commands.register('usage.check', () => ctx.usage.getStats({ bucket: 'day' })); }\n"
   )}`,
   hasMain: false,
   mainLoaded: false
 };
 
 vi.mock('./api/plugin.api', () => ({
-  listPlugins: vi.fn(async () => [plugin]),
+  listPlugins: vi.fn(async () => [plugin, deniedPlugin]),
   getSelectedSkin: vi.fn(async () => null),
+  getUsageStats: vi.fn(async () => ({
+    totals: {},
+    series: [],
+    sessions: [],
+    models: [],
+    providers: []
+  })),
   setSelectedSkin: vi.fn(async (selection) => selection),
   getPluginSettings: vi.fn(async () => ({})),
   subscribePluginChanges: vi.fn(() => () => undefined),
@@ -60,7 +90,7 @@ vi.mock('./api/plugin.api', () => ({
 }));
 
 import { usePluginRuntimeStore } from './runtime.store';
-import { getSelectedSkin, setSelectedSkin } from './api/plugin.api';
+import { getSelectedSkin, getUsageStats, setSelectedSkin } from './api/plugin.api';
 
 describe('plugin runtime skin selection', () => {
   beforeEach(() => {
@@ -98,6 +128,36 @@ describe('plugin runtime skin selection', () => {
 
     expect(runtime.selectedSkin).toBeNull();
     expect(setSelectedSkin).toHaveBeenCalledWith(null);
+  });
+
+  it('opens a declared plugin view through the host bridge', async () => {
+    const runtime = usePluginRuntimeStore();
+    await runtime.init();
+    await runtime.openView('usage.dashboard');
+
+    expect(runtime.openedView?.id).toBe('usage.dashboard');
+    runtime.closeView();
+    expect(runtime.openedView).toBeNull();
+  });
+
+  it('denies usage stats without the usage:read permission', async () => {
+    const runtime = usePluginRuntimeStore();
+    await runtime.init();
+    await runtime.activateForExtensions();
+
+    await expect(runtime.commands.get('usage.denied')?.handler()).rejects.toThrow(
+      '缺少 usage:read 权限'
+    );
+  });
+
+  it('exposes usage stats through an authorized plugin command', async () => {
+    const runtime = usePluginRuntimeStore();
+    await runtime.init();
+    await runtime.activateForExtensions();
+
+    await runtime.commands.get('usage.check')?.handler();
+
+    expect(getUsageStats).toHaveBeenCalledWith({ bucket: 'day' });
   });
 
   it('keeps the first selection while skin activation is already running', async () => {

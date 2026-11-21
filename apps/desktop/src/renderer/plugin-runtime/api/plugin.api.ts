@@ -11,6 +11,7 @@ import type {
   PluginSkinSelection,
   PluginWorkspaceEntry
 } from '@shared/plugin';
+import type { UsageStats, UsageStatsInput } from '@shared/usage';
 import { unwrap } from '@/app/ipc';
 
 export const listPlugins = async (): Promise<PluginPublic[]> => unwrap(await nexus.plugin.list());
@@ -90,6 +91,9 @@ export const listPluginWorkspace = async (
   path?: string
 ): Promise<PluginWorkspaceEntry[]> =>
   unwrap(await nexus.plugin.workspaceList(pluginId, sessionId, path));
+
+export const getUsageStats = async (input?: UsageStatsInput): Promise<UsageStats> =>
+  unwrap(await nexus.usage.stats(input));
 
 export const getSelectedSkin = async (): Promise<PluginSkinSelection | null> =>
   unwrap(await nexus.settings.getSkin());

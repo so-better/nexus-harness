@@ -38,6 +38,7 @@ export const pluginPermissionSchema = z.enum([
   'ui.statusbar',
   'ui.command',
   'ui.notification',
+  'usage:read',
   'workspace:read'
 ]);
 export type PluginPermission = z.infer<typeof pluginPermissionSchema>;

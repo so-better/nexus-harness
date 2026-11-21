@@ -17,6 +17,7 @@ import type { McpServerStatus, McpTestResult } from '../mcp';
 import type { ImageSettings } from '../image';
 import type { SearchSettings } from '../search';
 import type { SkillDetail, SkillSummary } from '../skills';
+import type { UsageStats, UsageStatsInput } from '../usage';
 
 /**
  * 应用基础信息，用于确认渲染进程与主进程通道可用。
@@ -224,6 +225,9 @@ export interface NexusBridge {
     onGeneralChanged: (handler: (state: GeneralSettingsState) => void) => Unsubscribe;
     getAgent: () => Promise<Result<AgentSettings>>;
     setAgent: (input: AgentSettings) => Promise<Result<AgentSettings>>;
+  };
+  usage: {
+    stats: (input?: UsageStatsInput) => Promise<Result<UsageStats>>;
   };
   cache: {
     getInfo: () => Promise<Result<CacheInfo>>;

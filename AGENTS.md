@@ -907,7 +907,7 @@ metadata:
 
 #### 事件钩子
 
-- `ctx.events.on(event, handler)` 是插件订阅宿主事件的统一方式；payload 由 `packages/shared` 定义。
+- `ctx.events.on(event, handler)` 是插件订阅宿主事件的统一方式；payload 由 `packages/shared` 定义，第二个参数提供 `type`、`sessionId`、`runId` 与 `ts`。
 - 可用于 session、message、tool、approval、usage、file、context、mcp 等领域事件。
 - 事件钩子是只读观察，不得修改、拦截或替代审批；需要拦截的能力必须单独评审并提升权限。
 - 高频事件 `message.delta` 默认不暴露；使用 `message.completed`、`usage.recorded` 等聚合事件。
@@ -920,10 +920,14 @@ metadata:
 ```ts
 ctx.commands.register(id: string, handler: () => void | Promise<void>): Disposable;
 ctx.views.register(id: string, mount: (el: HTMLElement, ctx: PluginContext) => () => void): Disposable;
+ctx.views.open(id: string): Promise<void>;
 ctx.slots.register(id: string, mount: (el: HTMLElement, context: SlotContext) => () => void): Disposable;
 ctx.skins.register(id: string, mount: (el: HTMLElement, ctx: PluginContext) => () => void): Disposable;
 ctx.statusBar.add(item: StatusBarItem): Disposable;
-ctx.events.on(event: NexusEventName, handler: (payload: unknown) => void): Disposable;
+ctx.events.on(
+  event: NexusEventName,
+  handler: (payload: unknown, meta: { type: string; sessionId: string; runId?: string; ts: number }) => void
+): Disposable;
 ctx.storage.get<T>(key: string): Promise<T | undefined>;
 ctx.storage.set<T>(key: string, value: T): Promise<void>;
 ctx.storage.delete(key: string): Promise<void>;
@@ -932,6 +936,7 @@ ctx.logger.info(message: string, meta?: unknown): void;
 ctx.notifications.show(message: string, level?: 'info' | 'warning' | 'error'): void;
 ctx.workspace.readFile(path: string): Promise<string>;
 ctx.workspace.list(dir: string): Promise<WorkspaceEntry[]>;
+ctx.usage.getStats(query?: UsageStatsQuery): Promise<UsageStats>;
 ```
 
 ```ts
@@ -1056,7 +1061,6 @@ export function activate(ctx) {
 | `workspace_files` | 工作区文件索引（路径、mtime、size、hash） |
 | `events` | append-only 事件流 |
 | `checkpoints` | 逐文件快照索引 |
-| `usage` | token、缓存、reasoning 与费用明细 |
 | `settings` | 应用、工作区与会话设置 |
 | `plugins` | 插件启用状态、权限确认与错误信息 |
 | `mcp_servers` | MCP Server 启用、信任与最近状态 |
@@ -1604,7 +1608,7 @@ type Result<T> =
 ### 6.8 可观测性
 
 - 日志使用结构化格式，字段至少包含 `module`、`sessionId`、`runId`、`toolCallId`（如适用）。
-- 用量与费用必须落 `usage.recorded` 事件，支持按会话、模型、提供商聚合；包含缓存读写、reasoning token、步数、状态与耗时。
+- 用量与费用必须落 `usage.recorded` 事件，支持按会话、模型、提供商聚合；统计服务当前直接读取事件流，数据量增大后再引入独立 `usage` 表。
 - 工具结果记录类型、落盘文件与来源引用，不记录二进制内容与敏感数据。
 - MCP 记录连接状态、工具数量、重连与失败次数，便于定位不可用 Server。
 - 关键路径（启动、工具执行、模型调用、上下文压缩、回滚）记录耗时，用于性能回归。
@@ -1941,7 +1945,7 @@ CHANGELOG.md         # 版本变更记录
 | `checkpoint.created` | `checkpointId`、`runId`、`label` | 创建检查点 |
 | `checkpoint.restored` | `checkpointId`、`runId` | 回滚到检查点 |
 | `file.created` | `fileId`、`runId`、`name`、`mime`、`bytes`、`source` | 生成或下载的文件保存到 `files` |
-| `usage.recorded` | `provider`、`model`、`modality`、`inputTokens`、`outputTokens`、`cacheReadTokens`、`cacheWriteTokens`、`reasoningTokens`、`images`、`cost` | 模型调用结束 |
+| `usage.recorded` | `provider`、`model`、`messageId?`、`inputTokens`、`outputTokens`、`cost?` | 模型调用结束 |
 | `plugin.activated` | `pluginId`、`version` | 插件激活 |
 | `plugin.deactivated` | `pluginId` | 插件停用 |
 | `plugin.discovered` | `pluginId`、`version`、`path` | 扫描到插件 |
@@ -1965,6 +1969,7 @@ CHANGELOG.md         # 版本变更记录
 | `ui.statusbar` | 注册状态栏条目 | 开放 |
 | `ui.command` | 注册命令与快捷键 | 开放 |
 | `ui.notification` | 发送应用内通知 | 开放 |
+| `usage:read` | 只读查询本地用量统计 | 开放 |
 | `workspace:read` | 只读访问工作区文件 | 开放 |
 | `workspace:write` | 写入工作区文件 | 不开放 |
 | `tools:register` | 向 Agent 注册工具 | 不开放 |
