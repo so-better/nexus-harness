@@ -45,6 +45,7 @@ const title = computed(() => {
   if (name === 'search_images' || name === 'search_videos') return t('chat.approvalSearchTitle');
   if (name?.startsWith('mcp_')) return t('chat.approvalMcpTitle');
   if (name === 'run_skill_script') return t('chat.approvalSkillScriptTitle');
+  if (name === 'terminal_request_access') return t('chat.approvalTerminalAccessTitle');
   return t('chat.approvalTitle');
 });
 </script>

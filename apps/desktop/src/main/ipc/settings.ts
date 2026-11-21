@@ -34,7 +34,8 @@ import {
   loadNotificationBadge,
   saveNotificationBadge
 } from '../services/settings/notification-settings';
-import { loadSkinSelection, saveSkinSelection } from '../services/settings/skin-settings';
+import { loadSkinSelection } from '../services/settings/skin-settings';
+import { applySkinSelection } from '../services/settings/skin-service';
 import { loadImageSettings, saveImageSettings } from '../services/settings/image-settings';
 import { loadSearchSettings, saveSearchSettings } from '../services/settings/search-settings';
 import { clearCache, getCacheInfo } from '../services/cache/cache-service';
@@ -242,7 +243,7 @@ export const registerSettingsIpc = (): void => {
         return fail('SETTINGS_INVALID_INPUT', '皮肤参数不合法');
       }
       try {
-        return ok(await saveSkinSelection(rawSelection as PluginSkinSelection | null));
+        return ok(await applySkinSelection(rawSelection as PluginSkinSelection | null));
       } catch (error) {
         return fail(
           'SETTINGS_WRITE_FAILED',

@@ -30,6 +30,7 @@ import {
   setPluginSettings,
   setPluginStorage,
   setSelectedSkin,
+  subscribeSkinChanges,
   subscribePluginChanges,
   subscribePluginEvents,
   uninstallPlugin
@@ -158,12 +159,13 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
   const activationWaiters = new Map<string, Array<() => void>>();
   let initialized = false;
   let unsubscribeChanges: (() => void) | undefined;
+  let unsubscribeSkinChanges: (() => void) | undefined;
   let unsubscribeEvents: (() => void) | undefined;
   let activationNonce = 0;
 
   const skins = computed<PluginSkin[]>(() =>
     plugins.value.flatMap((plugin) =>
-      plugin.enabled
+      plugin.enabled && hasPermission(plugin, 'ui.skin')
         ? plugin.contributes.skins.map((skin) => ({
             pluginId: plugin.id,
             pluginName: plugin.name,
@@ -510,6 +512,33 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     }
   };
 
+  /**
+   * 应用来自设置页或 AI 工具的外部皮肤选择，触发背景层重新挂载。
+   */
+  const applyExternalSkin = async (selection: PluginSkinSelection | null): Promise<void> => {
+    if (
+      selection?.pluginId === selectedSkin.value?.pluginId &&
+      selection?.skinId === selectedSkin.value?.skinId
+    ) {
+      return;
+    }
+    const previous = selectedSkin.value;
+    selectedSkin.value = selection;
+    try {
+      if (selection) {
+        await activateForSkins();
+        if (!activeSkinMount.value) throw new Error('皮肤插件未提供可渲染的实现');
+      }
+      bump();
+    } catch (reason) {
+      selectedSkin.value = previous;
+      bump();
+      notifyError('plugin-runtime', reason);
+      // 外部选择已落盘，挂载失败时把持久化选择恢复，避免下次启动继续失败
+      if (selection) await setSelectedSkin(previous).catch(() => undefined);
+    }
+  };
+
   const init = async (): Promise<void> => {
     if (initialized) return;
     initialized = true;
@@ -520,6 +549,11 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
       bump();
       unsubscribeChanges = subscribePluginChanges((next) => {
         applyPlugins(next).catch((reason: unknown) => notifyError('plugin-runtime', reason));
+      });
+      unsubscribeSkinChanges = subscribeSkinChanges((payload) => {
+        applyExternalSkin(payload.selection).catch((reason: unknown) =>
+          notifyError('plugin-runtime', reason)
+        );
       });
       unsubscribeEvents = subscribePluginEvents((event) => {
         if (event.type === 'message.delta') return;
@@ -543,7 +577,9 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
       }
     } catch (reason) {
       selectedSkin.value = previous;
+      bump();
       notifyError('plugin-runtime', reason);
+      await setSelectedSkin(previous).catch(() => undefined);
     }
   };
 
@@ -637,6 +673,8 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
       await deactivateAll();
       unsubscribeChanges?.();
       unsubscribeChanges = undefined;
+      unsubscribeSkinChanges?.();
+      unsubscribeSkinChanges = undefined;
       unsubscribeEvents?.();
       unsubscribeEvents = undefined;
       initialized = false;

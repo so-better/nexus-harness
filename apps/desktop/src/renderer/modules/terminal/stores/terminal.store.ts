@@ -17,6 +17,7 @@ import {
   reorderTerminals,
   resizeTerminal,
   selectTerminalDirectory,
+  setTerminalAiAccess,
   subscribeTerminalEvents,
   subscribeTerminalSettings,
   updateTerminalTitle,
@@ -78,9 +79,13 @@ export const useTerminalStore = defineStore('terminal', () => {
       const isNew = !tabs.value.some((tab) => tab.id === event.terminal.id);
       upsert(event.terminal);
       if (isNew) {
-        open.value = true;
-        mounted.value = true;
-        activeId.value = event.terminal.id;
+        if (event.terminal.openView !== false) {
+          open.value = true;
+          mounted.value = true;
+          activeId.value = event.terminal.id;
+        } else if (!activeId.value) {
+          activeId.value = event.terminal.id;
+        }
       }
       return;
     }
@@ -149,6 +154,21 @@ export const useTerminalStore = defineStore('terminal', () => {
 
   const setWidth = (next: number): void => {
     width.value = clampTerminalWidth(next, window.innerWidth);
+  };
+
+  /** 允许/禁止 AI 读取和写入用户终端。 */
+  const setAiAccess = async (id: string, allowed: boolean): Promise<boolean> => {
+    try {
+      const saved = await setTerminalAiAccess(id, allowed);
+      if (saved) {
+        const tab = tabs.value.find((item) => item.id === id);
+        if (tab) tab.aiAccess = allowed;
+      }
+      return saved;
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+      return false;
+    }
   };
 
   const create = async (sessionId: string, cwd?: string): Promise<boolean> => {
@@ -290,6 +310,7 @@ export const useTerminalStore = defineStore('terminal', () => {
     togglePanel,
     setWidth,
     create,
+    setAiAccess,
     selectDirectory,
     currentDirectory,
     scheduleTitleSync,

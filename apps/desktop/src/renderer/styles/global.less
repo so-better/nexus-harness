@@ -117,7 +117,7 @@ body:has(.n-modal-mask) .nh-titlebar {
     inset 0 0 0 1px color-mix(in srgb, var(--nh-border-subtle) 68%, transparent);
 }
 
-.n-popover,
+.n-popover:not(.n-tooltip, .n-popconfirm),
 .n-dropdown-menu {
   box-shadow: var(--nh-shadow-popover);
   outline: 1px solid color-mix(in srgb, var(--nh-border-subtle) 55%, transparent);

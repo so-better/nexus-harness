@@ -29,6 +29,9 @@ interface TerminalRecord {
   customTitle: boolean;
   ownerId?: number | undefined;
   command?: string | undefined;
+  openView: boolean;
+  detached: boolean;
+  aiAccess: boolean;
   createdAt: number;
   cols: number;
   rows: number;
@@ -60,6 +63,12 @@ interface CreateTerminalOptions {
   shell?: string | null;
   ownerId?: number;
   timeoutMs?: number;
+  /** 是否在创建时自动打开面板；AI 命令默认保留标签但不抢用户视图。 */
+  openView?: boolean;
+  /** 用户手动终端默认不允许 AI 读取/写入，需显式授予。来源 AI 的终端自动允许。 */
+  aiAccess?: boolean;
+  /** 常驻命令：不设置超时，退出后不切换交互式 shell。 */
+  detached?: boolean;
 }
 
 /**
@@ -216,6 +225,35 @@ export class TerminalService {
     return record.cwd;
   }
 
+  /**
+   * 读取 AI 终端的尾部输出，供 terminal_read / terminal_wait 使用。
+   */
+  readOutput(
+    id: string,
+    maxBytes = 200_000
+  ): { terminal: TerminalSessionPublic; output: string; truncated: boolean } | undefined {
+    const record = this.records.get(id);
+    if (!record) return undefined;
+    let output = record.output;
+    let truncated = record.truncated;
+    if (Buffer.byteLength(output, 'utf8') > maxBytes) {
+      output = output.slice(-maxBytes);
+      truncated = true;
+    }
+    return { terminal: this.toPublic(record), output, truncated };
+  }
+
+  /**
+   * 设置终端是否允许 AI 读取和写入；仅由用户通过 IPC 调用。
+   */
+  setAiAccess(id: string, allowed: boolean): boolean {
+    const record = this.records.get(id);
+    if (!record) return false;
+    record.aiAccess = allowed;
+    this.emit({ type: 'created', terminal: this.toPublic(record) });
+    return true;
+  }
+
   updateTitle(id: string, title: string, custom: boolean): boolean {
     const record = this.records.get(id);
     if (!record) return false;
@@ -281,14 +319,22 @@ export class TerminalService {
     terminal: TerminalSessionPublic;
     done: Promise<CommandResult>;
   } {
-    const record = this.createRecord({ ...options, source: 'ai', command: options.command });
+    const detached = options.detached === true;
+    const record = this.createRecord({
+      ...options,
+      source: 'ai',
+      command: options.command,
+      ...(detached ? { detached: true } : {})
+    });
     const done = new Promise<CommandResult>((resolve) => {
       record.resolve = resolve;
-      record.timer = setTimeout(() => {
-        record.timedOut = true;
-        this.killTree(record);
-        this.finish(record, null);
-      }, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+      if (!detached) {
+        record.timer = setTimeout(() => {
+          record.timedOut = true;
+          this.killTree(record);
+          this.finish(record, null);
+        }, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+      }
     });
     return { terminal: this.toPublic(record), done };
   }
@@ -367,6 +413,9 @@ export class TerminalService {
       customTitle: Boolean(options.title),
       ...(options.ownerId === undefined ? {} : { ownerId: options.ownerId }),
       ...(options.command ? { command: options.command } : {}),
+      openView: options.openView !== false,
+      detached: options.detached === true,
+      aiAccess: options.aiAccess ?? options.source === 'ai',
       createdAt: Date.now(),
       cols: options.cols ?? 80,
       rows: options.rows ?? 24,
@@ -376,7 +425,7 @@ export class TerminalService {
       pty: child
     };
     this.records.set(id, record);
-    this.bind(record, child, Boolean(options.command));
+    this.bind(record, child, true);
     this.emit({ type: 'created', terminal: this.toPublic(record) });
     return record;
   }
@@ -390,10 +439,13 @@ export class TerminalService {
       if (captureOutput) {
         record.output += data;
         if (Buffer.byteLength(record.output, 'utf8') > MAX_OUTPUT_BYTES) {
-          record.output = record.output.slice(0, MAX_OUTPUT_BYTES);
+          record.output = record.output.slice(-MAX_OUTPUT_BYTES);
           record.truncated = true;
-          this.killTree(record);
-          this.finish(record, null);
+          // 常驻命令和交互式 AI 终端只保留尾部输出，不因日志过多终止进程
+          if (record.command && !record.detached) {
+            this.killTree(record);
+            this.finish(record, null);
+          }
         }
       }
       this.emit({ type: 'data', id: record.id, data });
@@ -416,6 +468,14 @@ export class TerminalService {
       closed: false
     });
     record.resolve = undefined;
+
+    // 常驻命令退出后保留标签展示退出状态，不自动切换交互式 shell。
+    if (record.detached) {
+      record.status = 'exited';
+      record.exitCode = exitCode;
+      this.emit({ type: 'exit', id: record.id, exitCode, status: 'exited' });
+      return;
+    }
 
     // AI 命令结束后保留终端：换成同一标签内的交互式 shell，用户可继续操作。
     if (record.source === 'ai') {
@@ -488,6 +548,8 @@ export class TerminalService {
       status: record.status,
       ...(record.exitCode === null ? {} : { exitCode: record.exitCode }),
       source: record.source,
+      openView: record.openView,
+      aiAccess: record.aiAccess,
       customTitle: record.customTitle,
       createdAt: record.createdAt
     };

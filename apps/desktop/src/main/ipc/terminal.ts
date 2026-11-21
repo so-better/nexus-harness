@@ -21,7 +21,8 @@ import { getDatabase } from '../services/storage/database';
 import { EventStore } from '../services/session/event-store';
 import { SessionService } from '../services/session/session-service';
 import { terminalService } from '../services/terminal/terminal-service';
-import { loadTerminalSettings, saveTerminalSettings } from '../services/settings/terminal-settings';
+import { loadTerminalSettings } from '../services/settings/terminal-settings';
+import { applyTerminalSettings } from '../services/settings/terminal-settings-service';
 import { resolveTerminalCwd } from '../services/terminal/terminal-cwd';
 
 /**
@@ -34,7 +35,7 @@ export const registerTerminalIpc = (): void => {
 
   terminalService.onEvent((event: TerminalEvent) => {
     try {
-      if (event.type === 'created' && event.terminal.source === 'user') {
+      if (event.type === 'created') {
         events.append(
           createNexusEvent({
             sessionId: event.terminal.sessionId,
@@ -195,6 +196,24 @@ export const registerTerminalIpc = (): void => {
   );
 
   ipcMain.handle(
+    IPC_CHANNELS.terminalSetAiAccess,
+    (event, rawInput: unknown): Result<{ ok: boolean }> => {
+      if (!rawInput || typeof rawInput !== 'object') {
+        return fail('TERMINAL_INVALID_INPUT', '终端访问参数不合法');
+      }
+      const { id, allowed } = rawInput as { id?: unknown; allowed?: unknown };
+      if (
+        typeof id !== 'string' ||
+        typeof allowed !== 'boolean' ||
+        !terminalService.isOwnedBy(id, event.sender.id)
+      ) {
+        return fail('TERMINAL_ACCESS_DENIED', '无权修改该终端');
+      }
+      return ok({ ok: terminalService.setAiAccess(id, allowed) });
+    }
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.terminalGetSettings,
     async (): Promise<Result<Awaited<ReturnType<typeof loadTerminalSettings>>>> =>
       ok(await loadTerminalSettings())
@@ -213,7 +232,7 @@ export const registerTerminalIpc = (): void => {
     async (
       _event,
       rawSettings: unknown
-    ): Promise<Result<Awaited<ReturnType<typeof saveTerminalSettings>>>> => {
+    ): Promise<Result<Awaited<ReturnType<typeof applyTerminalSettings>>>> => {
       const parsed = terminalSettingsSchema.safeParse(rawSettings);
       if (!parsed.success) return fail('TERMINAL_SETTINGS_INVALID', '终端设置不合法');
       if (parsed.data.shell) {
@@ -226,13 +245,7 @@ export const registerTerminalIpc = (): void => {
         }
       }
       try {
-        const saved = await saveTerminalSettings(parsed.data);
-        for (const window of BrowserWindow.getAllWindows()) {
-          if (!window.isDestroyed()) {
-            window.webContents.send(IPC_CHANNELS.terminalSettingsChanged, saved);
-          }
-        }
-        return ok(saved);
+        return ok(await applyTerminalSettings(parsed.data));
       } catch (error) {
         return fail(
           'TERMINAL_SETTINGS_FAILED',

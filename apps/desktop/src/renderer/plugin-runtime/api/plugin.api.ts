@@ -7,6 +7,7 @@ import type { NexusEvent } from '@shared/events';
 import type {
   PluginPublic,
   PluginSettingValue,
+  PluginSkinChangedPayload,
   PluginSkinSelection,
   PluginWorkspaceEntry
 } from '@shared/plugin';
@@ -96,3 +97,7 @@ export const getSelectedSkin = async (): Promise<PluginSkinSelection | null> =>
 export const setSelectedSkin = async (
   selection: PluginSkinSelection | null
 ): Promise<PluginSkinSelection | null> => unwrap(await nexus.settings.setSkin(selection));
+
+export const subscribeSkinChanges = (
+  handler: (payload: PluginSkinChangedPayload) => void
+): (() => void) => nexus.settings.onSkinChanged(handler);

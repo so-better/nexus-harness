@@ -40,6 +40,30 @@ export const terminalCssVariables = {
 } as const;
 
 /**
+ * Tooltip 会 teleport 到 body；显式传入主题覆盖，避免实际运行时回退到根主题。
+ */
+export const terminalTooltipThemeOverrides: NonNullable<GlobalThemeOverrides['Tooltip']> = {
+  color: TERMINAL_COLORS.hover,
+  textColor: TERMINAL_COLORS.text,
+  borderRadius: '8px',
+  boxShadow: `0 0 0 1px ${TERMINAL_COLORS.border}, 0 10px 28px rgb(0 0 0 / 48%)`
+};
+
+/**
+ * Popconfirm 同样 teleport；显式覆盖 Popover 与按钮颜色。
+ */
+export const terminalPopconfirmThemeOverrides: NonNullable<GlobalThemeOverrides['Popconfirm']> = {
+  peers: {
+    Popover: {
+      color: TERMINAL_COLORS.surface,
+      textColor: TERMINAL_COLORS.text,
+      dividerColor: TERMINAL_COLORS.border,
+      boxShadow: '0 8px 24px rgb(0 0 0 / 32%)'
+    }
+  }
+};
+
+/**
  * Naive UI 在终端视图内的深色覆盖；避免按钮、输入框、tooltip 和 popconfirm 回到浅色。
  */
 export const terminalThemeOverrides: GlobalThemeOverrides = {

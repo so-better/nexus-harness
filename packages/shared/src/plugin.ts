@@ -132,6 +132,12 @@ export const pluginSkinSelectionSchema = z.object({
 });
 export type PluginSkinSelection = z.infer<typeof pluginSkinSelectionSchema>;
 
+/** 皮肤变更广播：区分设置页与 AI 工具，便于 UI 展示来源或诊断。 */
+export interface PluginSkinChangedPayload {
+  selection: PluginSkinSelection | null;
+  source: 'settings' | 'agent';
+}
+
 export interface PluginWorkspaceEntry {
   name: string;
   path: string;

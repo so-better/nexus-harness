@@ -30,6 +30,11 @@ export const resizeTerminal = async (id: string, cols: number, rows: number): Pr
 export const busyTerminals = async (ids: string[]): Promise<string[]> =>
   unwrap(await nexus.terminal.busy({ ids })).busy;
 
+export const setTerminalAiAccess = async (
+  id: string,
+  allowed: boolean
+): Promise<boolean> => unwrap(await nexus.terminal.setAiAccess({ id, allowed })).ok;
+
 export const closeTerminal = async (id: string): Promise<boolean> => {
   const result = await nexus.terminal.close({ id });
   return result.ok ? result.data.closed : false;

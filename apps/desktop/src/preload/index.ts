@@ -4,7 +4,7 @@
 
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
-import type { PluginPublic } from '@shared/plugin';
+import type { PluginPublic, PluginSkinChangedPayload } from '@shared/plugin';
 import type { GeneralSettingsState } from '@shared/ipc/contracts';
 import type {
   NexusBridge,
@@ -91,7 +91,13 @@ const bridge: NexusBridge = {
     setImage: (value) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetImage, value),
     getSearch: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetSearch),
     setSearch: (value) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetSearch, value),
-    setSkin: (selection) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetSkin, selection)
+    setSkin: (selection) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetSkin, selection),
+    onSkinChanged: (handler) => {
+      const listener = (_event: unknown, payload: unknown) =>
+        handler(payload as PluginSkinChangedPayload);
+      ipcRenderer.on(IPC_CHANNELS.settingsSkinChanged, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.settingsSkinChanged, listener);
+    }
   },
   cache: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.cacheGetInfo),
@@ -194,6 +200,7 @@ const bridge: NexusBridge = {
     resize: (input) => ipcRenderer.invoke(IPC_CHANNELS.terminalResize, input),
     close: (input) => ipcRenderer.invoke(IPC_CHANNELS.terminalClose, input),
     list: () => ipcRenderer.invoke(IPC_CHANNELS.terminalList),
+    setAiAccess: (input) => ipcRenderer.invoke(IPC_CHANNELS.terminalSetAiAccess, input),
     busy: (input) => ipcRenderer.invoke(IPC_CHANNELS.terminalBusy, input),
     selectDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.terminalSelectDirectory),
     selectShell: () => ipcRenderer.invoke(IPC_CHANNELS.terminalSelectShell),

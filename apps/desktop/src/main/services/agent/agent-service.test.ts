@@ -140,7 +140,18 @@ describe('AgentService', () => {
       'save_ppt',
       'save_pdf',
       'theme_get',
-      'theme_update'
+      'theme_update',
+      'skin_list',
+      'skin_apply',
+      'terminal_get_settings',
+      'terminal_update_settings',
+      'terminal_list',
+      'terminal_create',
+      'terminal_request_access',
+      'terminal_read',
+      'terminal_wait',
+      'terminal_write',
+      'terminal_close'
     ]);
   });
 
@@ -387,7 +398,7 @@ describe('AgentService', () => {
       protocol: 'openai' as const,
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
-      models: [{ id: 'mock-model', contextWindow: 4_096, maxOutputTokens: 1_024 }],
+      models: [{ id: 'mock-model', contextWindow: 5_120, maxOutputTokens: 1_024 }],
       defaultModelId: 'mock-model',
       apiKey: 'secret',
       enabled: true

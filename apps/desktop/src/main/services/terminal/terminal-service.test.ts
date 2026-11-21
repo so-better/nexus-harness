@@ -75,6 +75,54 @@ describe('TerminalService', () => {
     expect(service.list()[0]?.status).toBe('running');
   });
 
+  it('keeps AI command terminals available without auto-opening the panel', async () => {
+    const commandPty = makePty();
+    const shellPty = makePty();
+    shellPty.pid = 999_998;
+    spawnMock.mockReturnValueOnce(commandPty).mockReturnValueOnce(shellPty);
+    const service = new TerminalService();
+    const events: TerminalEvent[] = [];
+    service.onEvent((event) => events.push(event));
+
+    const task = service.startCommand({
+      sessionId: 'session-1',
+      cwd: '/tmp',
+      command: 'echo quiet',
+      openView: false
+    });
+    expect(task.terminal.openView).toBe(false);
+    commandPty.emitData('quiet\n');
+    commandPty.emitExit(0);
+
+    await expect(task.done).resolves.toMatchObject({ output: 'quiet\n', exitCode: 0 });
+    expect(events.map((event) => event.type)).toEqual(['created', 'data', 'created']);
+    expect(service.list()[0]).toMatchObject({ openView: false, status: 'running' });
+  });
+
+  it('runs detached commands without timeout and keeps an exited tab', async () => {
+    const fake = makePty();
+    spawnMock.mockReturnValue(fake);
+    const service = new TerminalService();
+    const events: TerminalEvent[] = [];
+    service.onEvent((event) => events.push(event));
+
+    const task = service.startCommand({
+      sessionId: 'session-1',
+      cwd: '/tmp',
+      command: 'npm run dev',
+      openView: false,
+      detached: true
+    });
+    expect(task.terminal.openView).toBe(false);
+    fake.emitData('ready\n');
+    fake.emitExit(0);
+
+    await expect(task.done).resolves.toMatchObject({ exitCode: 0 });
+    expect(events.map((event) => event.type)).toEqual(['created', 'data', 'exit']);
+    expect(service.list()[0]).toMatchObject({ status: 'exited', openView: false });
+    expect(service.readOutput(task.terminal.id)?.output).toContain('ready');
+  });
+
   it('closes a running terminal and resolves the pending command as cancelled', async () => {
     const fake = makePty();
     spawnMock.mockReturnValue(fake);
@@ -101,6 +149,17 @@ describe('TerminalService', () => {
     expect(fake.kill).not.toHaveBeenCalled();
     expect(service.list()[0]?.status).toBe('running');
     expect(terminal.source).toBe('user');
+  });
+
+  it('keeps user terminals private to AI until explicitly granted', () => {
+    const fake = makePty();
+    spawnMock.mockReturnValue(fake);
+    const service = new TerminalService();
+    const terminal = service.create({ sessionId: 'session-1', cwd: '/tmp' });
+
+    expect(terminal.aiAccess).toBe(false);
+    expect(service.setAiAccess(terminal.id, true)).toBe(true);
+    expect(service.list()[0]?.aiAccess).toBe(true);
   });
 
   it('scopes terminals by owner and closes them with their session', () => {

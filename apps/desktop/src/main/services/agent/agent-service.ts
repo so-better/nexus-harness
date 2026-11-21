@@ -62,6 +62,8 @@ import type {
 } from '@shared/ipc/contracts';
 import { askUserInputSchema, type AskQuestion, type AskUserAnswer } from '@shared/ask-user';
 import { executeThemeTool, themeToolDefinitions } from './theme-tools';
+import { executeSkinTool, skinToolDefinitions } from './skin-tools';
+import { executeTerminalTool, terminalToolDefinitions } from './terminal-tools';
 import {
   generalSettingsToolDefinitions,
   executeGeneralSettingsTool
@@ -580,7 +582,12 @@ const PLAN_ALLOWED_TOOLS = new Set([
   'image_config_list',
   'image_config_get',
   'general_settings_get',
-  'theme_get'
+  'theme_get',
+  'skin_list',
+  'terminal_get_settings',
+  'terminal_list',
+  'terminal_read',
+  'terminal_wait'
 ]);
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -618,7 +625,8 @@ const loadImages = async (
 const ATTACHMENT_TOTAL_TEXT_BYTES = 30_000;
 const ATTACHMENT_EXTRACT_LIMIT_BYTES = 25 * 1024 * 1024;
 const IMAGE_ATTACHMENT_MIME = /^image\//i;
-const EXTRACTABLE_ATTACHMENT = /\.(pdf|docx|xlsx|pptx|zip|txt|md|json|csv|log|xml|ya?ml|html?|css|js|ts|tsx|jsx|py|java|go|rs|sql|sh)$/i;
+const EXTRACTABLE_ATTACHMENT =
+  /\.(pdf|docx|xlsx|pptx|zip|txt|md|json|csv|log|xml|ya?ml|html?|css|js|ts|tsx|jsx|py|java|go|rs|sql|sh)$/i;
 
 const escapeAttachmentAttr = (value: string): string =>
   value
@@ -630,7 +638,9 @@ const escapeAttachmentAttr = (value: string): string =>
 /**
  * 把用户附件转换为视觉内容或受限文本；无法读取的二进制只保留元数据。
  */
-const toAttachmentPrompt = (items: Array<{ name: string; mime: string; bytes: number; text?: string }>): string => {
+const toAttachmentPrompt = (
+  items: Array<{ name: string; mime: string; bytes: number; text?: string }>
+): string => {
   if (!items.length) return '';
   const blocks = items.map((item) => {
     const header = `<attachment name="${escapeAttachmentAttr(item.name)}" mime="${escapeAttachmentAttr(item.mime)}" bytes="${item.bytes}">`;
@@ -743,7 +753,8 @@ export class AgentService {
   private readonly mcp: McpService | undefined;
   private readonly imageSettings: (() => Promise<ImageSettings | null>) | undefined;
   private readonly searchSettings: (() => Promise<SearchSettings | null>) | undefined;
-  private readonly generalSettings: { onChange?: (state: GeneralSettingsState) => void } | undefined;
+  private readonly generalSettings:
+    { onChange?: (state: GeneralSettingsState) => void } | undefined;
 
   constructor(options: AgentServiceOptions = {}) {
     this.createProvider = options.createProvider ?? createAgentProvider;
@@ -807,6 +818,17 @@ export class AgentService {
       const executeTool = async (call: { id?: string; name: string; arguments: unknown }) => {
         if (call.name === 'theme_get' || call.name === 'theme_update') {
           return executeThemeTool(call.name, call.arguments);
+        }
+        if (call.name === 'skin_list' || call.name === 'skin_apply') {
+          return executeSkinTool(call.name, call.arguments);
+        }
+        if (call.name.startsWith('terminal_')) {
+          return executeTerminalTool(call.name, call.arguments, {
+            sessionId: input.sessionId,
+            ...(hooks.signal ? { signal: hooks.signal } : {}),
+            ...(hooks.terminalOwnerId === undefined ? {} : { ownerId: hooks.terminalOwnerId }),
+            rootPaths: input.rootPaths
+          });
         }
         if (call.name.startsWith('general_settings_')) {
           return executeGeneralSettingsTool(call.name, call.arguments, this.generalSettings);
@@ -1392,11 +1414,14 @@ export class AgentService {
           try {
             const cwd = await toolset.resolvePath(parsed.data.cwd ?? '.');
             const { terminalService } = await import('../terminal/terminal-service');
+            const detached = parsed.data.detach === true;
             const task = terminalService.startCommand({
               sessionId: input.sessionId,
               cwd,
               command: parsed.data.command,
               title: parsed.data.command.slice(0, 40),
+              openView: false,
+              ...(detached ? { detached: true } : {}),
               ...(hooks.terminalOwnerId === undefined ? {} : { ownerId: hooks.terminalOwnerId }),
               ...(parsed.data.timeoutMs === undefined ? {} : { timeoutMs: parsed.data.timeoutMs })
             });
@@ -1414,6 +1439,31 @@ export class AgentService {
                 }
               })
             );
+            if (detached) {
+              // 常驻命令也需要捕获启动即失败的情况，避免误报为已成功
+              await new Promise((resolve) => setTimeout(resolve, 300));
+              const snapshot = terminalService.readOutput(task.terminal.id, 4_000);
+              if (snapshot && snapshot.terminal.status !== 'running') {
+                return {
+                  ok: false,
+                  output: snapshot.output,
+                  error: {
+                    code: 'COMMAND_EXITED',
+                    message: `命令已退出（${snapshot.terminal.exitCode ?? 'unknown'}）`
+                  }
+                };
+              }
+              return {
+                ok: true,
+                output: JSON.stringify({
+                  terminalId: task.terminal.id,
+                  pid: task.terminal.pid,
+                  cwd,
+                  command: parsed.data.command,
+                  detached: true
+                })
+              };
+            }
             const abort = (): void => {
               terminalService.close(task.terminal.id);
             };
@@ -1618,8 +1668,7 @@ export class AgentService {
         );
       }
 
-      const mcpTools =
-        this.mcp && mode !== 'plan' ? await this.mcp.listTools(hooks.signal) : [];
+      const mcpTools = this.mcp && mode !== 'plan' ? await this.mcp.listTools(hooks.signal) : [];
       const imageNames = imageConfigs.map((config) => `${config.name}（${config.model}）`);
       const imageToolDefinition: AgentToolDefinition = {
         ...generateImageToolDefinition,
@@ -1643,6 +1692,8 @@ export class AgentService {
           ? generalSettingsToolDefinitions
           : []),
         ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? themeToolDefinitions : []),
+        ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? skinToolDefinitions : []),
+        ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? terminalToolDefinitions : []),
         ...(this.skills
           ? [
               searchSkillsToolDefinition,
@@ -1687,9 +1738,7 @@ export class AgentService {
         historyMessages.push({
           ...message,
           content: `${message.content}${toAttachmentPrompt(loaded.items)}`,
-          ...(loaded.images.length
-            ? { images: [...(message.images ?? []), ...loaded.images] }
-            : {})
+          ...(loaded.images.length ? { images: [...(message.images ?? []), ...loaded.images] } : {})
         });
       }
       const conversationMessages = [

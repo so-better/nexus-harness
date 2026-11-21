@@ -8,6 +8,7 @@ import type { AskUserResolveInput, AskUserResolveResult } from '../ask-user';
 import type {
   PluginPublic,
   PluginSettingValue,
+  PluginSkinChangedPayload,
   PluginSkinSelection,
   PluginWorkspaceEntry
 } from '../plugin';
@@ -213,6 +214,7 @@ export interface NexusBridge {
     getSearch: () => Promise<Result<SearchSettings | null>>;
     setSearch: (value: SearchSettings) => Promise<Result<SearchSettings>>;
     setSkin: (selection: PluginSkinSelection | null) => Promise<Result<PluginSkinSelection | null>>;
+    onSkinChanged: (handler: (payload: PluginSkinChangedPayload) => void) => Unsubscribe;
     setAutoLaunch: (enabled: boolean) => Promise<Result<boolean>>;
     getLanguage: () => Promise<Result<AppLanguage>>;
     setLanguage: (language: AppLanguage) => Promise<Result<AppLanguage>>;
@@ -351,6 +353,7 @@ export interface NexusBridge {
     updateTitle: (id: string, title: string, custom: boolean) => Promise<Result<{ ok: boolean }>>;
     reorder: (ids: string[]) => Promise<Result<{ ok: boolean }>>;
     getSettings: () => Promise<Result<TerminalSettings>>;
+    setAiAccess: (input: { id: string; allowed: boolean }) => Promise<Result<{ ok: boolean }>>;
     getShellInfo: () => Promise<Result<TerminalShellInfo>>;
     setSettings: (settings: TerminalSettings) => Promise<Result<TerminalSettings>>;
     onSettingsChanged: (handler: (settings: TerminalSettings) => void) => Unsubscribe;
@@ -382,6 +385,8 @@ export const terminalSessionPublicSchema = z.object({
   status: z.enum(['running', 'exited', 'closed']),
   exitCode: z.number().int().nullable().optional(),
   source: z.enum(['user', 'ai']),
+  openView: z.boolean().optional(),
+  aiAccess: z.boolean().optional(),
   createdAt: z.number().nonnegative()
 });
 

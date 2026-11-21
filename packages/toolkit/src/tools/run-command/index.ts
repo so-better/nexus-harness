@@ -16,12 +16,14 @@ import { FileToolError, resolveWithinRoots, validateInput } from '../../internal
 export const runCommandInputSchema = z.object({
   command: z.string().min(1).max(10_000),
   cwd: z.string().optional(),
-  timeoutMs: z.number().int().positive().max(120_000).optional()
+  timeoutMs: z.number().int().positive().max(120_000).optional(),
+  detach: z.boolean().optional()
 });
 
 export const runCommandToolDefinition: FileToolDefinition = {
   name: 'run_command',
-  description: '在授权目录内执行命令；需要用户审批，超时会终止进程树。',
+  description:
+    '在授权目录内执行命令；需要用户审批，超时会终止进程树。常驻服务可传 detach: true，启动后立即返回终端 ID。',
   permission: 'execute',
   requiresApproval: true,
   inputSchema: {
@@ -29,7 +31,8 @@ export const runCommandToolDefinition: FileToolDefinition = {
     properties: {
       command: { type: 'string' },
       cwd: { type: 'string' },
-      timeoutMs: { type: 'number' }
+      timeoutMs: { type: 'number' },
+      detach: { type: 'boolean' }
     },
     required: ['command']
   }

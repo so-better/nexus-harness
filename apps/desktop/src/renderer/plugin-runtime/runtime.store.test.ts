@@ -4,7 +4,11 @@
  */
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PluginPublic } from '@shared/plugin';
+import type { PluginPublic, PluginSkinChangedPayload } from '@shared/plugin';
+
+const skinChange = vi.hoisted(() => ({
+  handler: undefined as ((payload: PluginSkinChangedPayload) => void) | undefined
+}));
 
 const plugin: PluginPublic = {
   id: 'nexus.test-skin',
@@ -35,6 +39,10 @@ vi.mock('./api/plugin.api', () => ({
   setSelectedSkin: vi.fn(async (selection) => selection),
   getPluginSettings: vi.fn(async () => ({})),
   subscribePluginChanges: vi.fn(() => () => undefined),
+  subscribeSkinChanges: vi.fn((handler: (payload: PluginSkinChangedPayload) => void) => {
+    skinChange.handler = handler;
+    return () => undefined;
+  }),
   subscribePluginEvents: vi.fn(() => () => undefined),
   setPluginEnabled: vi.fn(async () => [plugin]),
   reloadPlugins: vi.fn(async () => [plugin]),
@@ -56,6 +64,24 @@ import { usePluginRuntimeStore } from './runtime.store';
 describe('plugin runtime skin selection', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+  });
+
+  it('applies an external skin selection broadcast', async () => {
+    const runtime = usePluginRuntimeStore();
+    await runtime.init();
+
+    skinChange.handler?.({ selection: { pluginId: plugin.id, skinId: 'paper' }, source: 'agent' });
+    await vi.waitFor(() => expect(runtime.activeSkinMount).not.toBeNull());
+    expect(runtime.selectedSkin).toEqual({ pluginId: plugin.id, skinId: 'paper' });
+  });
+
+  it('rolls back a failed external skin selection', async () => {
+    const runtime = usePluginRuntimeStore();
+    await runtime.init();
+
+    skinChange.handler?.({ selection: { pluginId: plugin.id, skinId: 'missing' }, source: 'agent' });
+    await vi.waitFor(() => expect(runtime.selectedSkin).toBeNull());
+    expect(runtime.activeSkin).toBeNull();
   });
 
   it('keeps the first selection while skin activation is already running', async () => {
