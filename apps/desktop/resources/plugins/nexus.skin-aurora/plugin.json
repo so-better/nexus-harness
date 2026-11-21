@@ -1,0 +1,22 @@
+{
+  "id": "nexus.skin-aurora",
+  "name": "极光",
+  "version": "1.0.0",
+  "description": "低饱和极光帘幕背景，适合长时间阅读与写作。",
+  "engines": {
+    "nexus": "^0.1.0"
+  },
+  "renderer": "dist/renderer.mjs",
+  "activationEvents": [],
+  "permissions": [
+    "ui.skin"
+  ],
+  "contributes": {
+    "skins": [
+      {
+        "id": "aurora",
+        "title": "极光"
+      }
+    ]
+  }
+}

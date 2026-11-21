@@ -24,7 +24,7 @@ describe('skin settings', () => {
   });
 
   it('persists and clears a skin selection', async () => {
-    const selection = { pluginId: 'nexus.theme-background', skinId: 'paper' };
+    const selection = { pluginId: 'nexus.skin-aurora', skinId: 'aurora' };
     await saveSkinSelection(selection, directory);
     await expect(loadSkinSelection(directory)).resolves.toEqual(selection);
     await saveSkinSelection(null, directory);

@@ -545,7 +545,14 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     loading.value = true;
     try {
       plugins.value = await listPlugins();
-      selectedSkin.value = await getSelectedSkin();
+      const savedSkin = await getSelectedSkin();
+      const exists =
+        savedSkin &&
+        skins.value.some(
+          (skin) => skin.pluginId === savedSkin.pluginId && skin.id === savedSkin.skinId
+        );
+      selectedSkin.value = exists ? savedSkin : null;
+      if (savedSkin && !exists) await setSelectedSkin(null).catch(() => undefined);
       bump();
       unsubscribeChanges = subscribePluginChanges((next) => {
         applyPlugins(next).catch((reason: unknown) => notifyError('plugin-runtime', reason));

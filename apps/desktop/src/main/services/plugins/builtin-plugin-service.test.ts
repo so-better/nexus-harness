@@ -59,6 +59,32 @@ describe('syncBuiltinPlugins', () => {
     expect(installed).toEqual([]);
   });
 
+  it('removes retired built-in plugin copies during sync', async () => {
+    const retired = join(destinationDir, 'nexus.theme-background');
+    await mkdir(retired, { recursive: true });
+    await writeFile(
+      join(retired, 'plugin.json'),
+      JSON.stringify({ id: 'nexus.theme-background', name: '晨雾背景' })
+    );
+
+    await syncBuiltinPlugins({ sourceDir, destinationDir });
+
+    await expect(readFile(join(retired, 'plugin.json'), 'utf8')).rejects.toThrow();
+  });
+
+  it('does not remove a same-id user plugin with a different manifest', async () => {
+    const custom = join(destinationDir, 'nexus.theme-background');
+    await mkdir(custom, { recursive: true });
+    await writeFile(
+      join(custom, 'plugin.json'),
+      JSON.stringify({ id: 'nexus.theme-background', name: 'Custom' })
+    );
+
+    await syncBuiltinPlugins({ sourceDir, destinationDir });
+
+    await expect(readFile(join(custom, 'plugin.json'), 'utf8')).resolves.toContain('Custom');
+  });
+
   it('returns empty when the built-in directory is missing', async () => {
     await expect(
       syncBuiltinPlugins({ sourceDir: join(directory, 'missing'), destinationDir })

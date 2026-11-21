@@ -33,10 +33,10 @@ import { executeSkinTool, skinToolDefinitions } from './skin-tools';
 
 const available = [
   {
-    pluginId: 'nexus.theme-background',
-    pluginName: '晨雾背景',
-    skinId: 'paper',
-    title: '晨雾'
+    pluginId: 'nexus.skin-aurora',
+    pluginName: '极光',
+    skinId: 'aurora',
+    title: '极光'
   }
 ];
 
@@ -65,23 +65,23 @@ describe('skin tools', () => {
     expect(initial.ok).toBe(true);
     expect(JSON.parse(initial.output)).toMatchObject({
       active: null,
-      skins: [expect.objectContaining({ skinId: 'paper', active: false })]
+      skins: [expect.objectContaining({ skinId: 'aurora', active: false })]
     });
 
     const applied = await executeSkinTool(
       'skin_apply',
-      { pluginId: 'nexus.theme-background', skinId: 'paper' },
+      { pluginId: 'nexus.skin-aurora', skinId: 'aurora' },
       { settingsDir, available }
     );
     expect(applied.ok).toBe(true);
     expect(JSON.parse(applied.output)).toMatchObject({
-      active: { pluginId: 'nexus.theme-background', skinId: 'paper' },
-      skins: [expect.objectContaining({ skinId: 'paper', active: true })]
+      active: { pluginId: 'nexus.skin-aurora', skinId: 'aurora' },
+      skins: [expect.objectContaining({ skinId: 'aurora', active: true })]
     });
     expect(state.windows[0]?.webContents.send).toHaveBeenCalledWith(
       'settings:skinChanged',
       expect.objectContaining({
-        selection: { pluginId: 'nexus.theme-background', skinId: 'paper' },
+        selection: { pluginId: 'nexus.skin-aurora', skinId: 'aurora' },
         source: 'agent'
       })
     );
@@ -105,7 +105,7 @@ describe('skin tools', () => {
         statusBar: [],
         commands: [],
         settings: [],
-        skins: [{ id: 'paper', title: 'Paper' }]
+        skins: [{ id: 'aurora', title: 'Aurora' }]
       }
     };
     pluginHost.plugins = [
@@ -116,14 +116,14 @@ describe('skin tools', () => {
     const result = await executeSkinTool('skin_list', {}, { settingsDir });
     expect(result.ok).toBe(true);
     expect(JSON.parse(result.output).skins).toEqual([
-      expect.objectContaining({ pluginId: 'valid', skinId: 'paper' })
+      expect.objectContaining({ pluginId: 'valid', skinId: 'aurora' })
     ]);
   });
 
   it('rejects invalid and unknown skins', async () => {
     const unknown = await executeSkinTool(
       'skin_apply',
-      { pluginId: 'missing', skinId: 'paper' },
+      { pluginId: 'missing', skinId: 'aurora' },
       { settingsDir, available }
     );
     expect(unknown).toMatchObject({ ok: false, error: { code: 'SKIN_NOT_FOUND' } });

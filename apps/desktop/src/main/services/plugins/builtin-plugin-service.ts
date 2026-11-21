@@ -14,6 +14,12 @@ export interface SyncBuiltinPluginsOptions {
 }
 
 /**
+ * 已下线的内置插件：升级时从 userData 清理旧副本，避免继续出现在扩展页。
+ * 只删除 manifest 特征仍与旧内置插件一致的目录，避免误删同名用户插件。
+ */
+const RETIRED_BUILTIN_PLUGINS = [{ id: 'nexus.theme-background', name: '晨雾背景' }];
+
+/**
  * 读取并校验最小 manifest，确保目录名与插件 id 一致。
  */
 const readPluginId = async (directory: string): Promise<string | undefined> => {
@@ -36,6 +42,19 @@ const readPluginId = async (directory: string): Promise<string | undefined> => {
  * 内置插件由应用管理，启动时覆盖同名 userData 副本。
  */
 export const syncBuiltinPlugins = async (options: SyncBuiltinPluginsOptions): Promise<string[]> => {
+  for (const retired of RETIRED_BUILTIN_PLUGINS) {
+    try {
+      const manifest = JSON.parse(
+        await readFile(join(options.destinationDir, retired.id, 'plugin.json'), 'utf8')
+      ) as { id?: unknown; name?: unknown };
+      if (manifest.id === retired.id && manifest.name === retired.name) {
+        await rm(join(options.destinationDir, retired.id), { recursive: true, force: true });
+      }
+    } catch {
+      // 旧副本不存在或 manifest 无效时跳过
+    }
+  }
+
   let entries;
   try {
     entries = await readdir(options.sourceDir, { withFileTypes: true });

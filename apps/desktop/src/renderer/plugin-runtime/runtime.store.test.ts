@@ -60,6 +60,7 @@ vi.mock('./api/plugin.api', () => ({
 }));
 
 import { usePluginRuntimeStore } from './runtime.store';
+import { getSelectedSkin, setSelectedSkin } from './api/plugin.api';
 
 describe('plugin runtime skin selection', () => {
   beforeEach(() => {
@@ -79,9 +80,24 @@ describe('plugin runtime skin selection', () => {
     const runtime = usePluginRuntimeStore();
     await runtime.init();
 
-    skinChange.handler?.({ selection: { pluginId: plugin.id, skinId: 'missing' }, source: 'agent' });
+    skinChange.handler?.({
+      selection: { pluginId: plugin.id, skinId: 'missing' },
+      source: 'agent'
+    });
     await vi.waitFor(() => expect(runtime.selectedSkin).toBeNull());
     expect(runtime.activeSkin).toBeNull();
+  });
+
+  it('clears a persisted selection when its plugin no longer exists', async () => {
+    vi.mocked(getSelectedSkin).mockResolvedValueOnce({
+      pluginId: 'nexus.theme-background',
+      skinId: 'paper'
+    });
+    const runtime = usePluginRuntimeStore();
+    await runtime.init();
+
+    expect(runtime.selectedSkin).toBeNull();
+    expect(setSelectedSkin).toHaveBeenCalledWith(null);
   });
 
   it('keeps the first selection while skin activation is already running', async () => {

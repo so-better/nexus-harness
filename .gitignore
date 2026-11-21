@@ -10,3 +10,7 @@ coverage/
 .env
 .env.*
 !.env.example
+
+# Built-in plugin distributables are part of the app resources.
+!apps/desktop/resources/plugins/**/dist/
+!apps/desktop/resources/plugins/**/dist/**

@@ -195,7 +195,7 @@ interface MainPluginContext {
 ```json
 {
   "id": "your.scope.custom-theme",
-  "fromPluginId": "nexus.theme-background"
+  "fromPluginId": "nexus.skin-aurora"
 }
 ```
 

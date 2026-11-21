@@ -990,23 +990,29 @@ interface SlotContext {
 - 不修改宿主布局，只在插槽内补充文本。
 - 正确处理启用、禁用、热重载。
 
-`apps/desktop/resources/plugins/nexus.theme-background` 是全局皮肤参考实现，演示插件代码用语义色绘制渐变背景；皮肤只声明贡献点，具体视觉完全由插件 renderer 决定。
+内置皮肤插件（`apps/desktop/resources/plugins/nexus.skin-*`）是全局皮肤参考实现，演示插件代码用语义色绘制背景；皮肤只声明贡献点，具体视觉完全由插件 renderer 决定：
+
+- `nexus.skin-aurora`：极光帘幕，缓慢漂移的语义色光晕。
+- `nexus.skin-blueprint`：工程网格与跟随指针的十字准星。
+- `nexus.skin-canopy`：等高线、柔和色雾与轻微呼吸感。
+- `nexus.skin-riso`：双色错位网点与斜向印刷纹理。
 
 ```json
 {
   "permissions": ["ui.skin"],
   "contributes": {
-    "skins": [{ "id": "paper", "title": "纸张" }]
+    "skins": [{ "id": "aurora", "title": "极光" }]
   }
 }
 ```
 
 ```js
 export function activate(ctx) {
-  return ctx.skins.register('paper', (element) => {
-    const canvas = document.createElement('canvas');
-    element.appendChild(canvas);
-    return () => canvas.remove();
+  return ctx.skins.register('aurora', (element) => {
+    const glow = document.createElement('div');
+    glow.style.cssText = 'position:absolute;inset:0;background:var(--nh-color-bg-base)';
+    element.appendChild(glow);
+    return () => glow.remove();
   });
 }
 ```
@@ -1642,7 +1648,7 @@ pnpm rebuild:native # 为 Electron 重建 node-pty
 - 依赖新增必须在 PR 说明用途与替代方案评估。
 - 涉及提示词、工具 schema、上下文注入或会话历史的功能，必须在 PR 说明 token 影响，并对比修改前后的输入 token。
 - 不得无依据增加默认上下文；新增自动注入内容必须提供按需加载或关闭路径。
-- 构建产物、插件产物、日志文件不得入库。
+- 构建产物、日志文件不得入库；`apps/desktop/resources/plugins/<id>/dist` 是随应用发布的内置插件入口源码，需入库。
 - 提交前必须确认 `.gitignore` 覆盖 `node_modules`、`dist`、`out`、日志与本地数据库。
 - `tsconfig.base.json` 只提供共享编译选项；其 `include` 仅用于避免 IDE 把空 base 配置判为非法项目，子配置必须用各自的 `include` / `exclude` 覆盖。
 
