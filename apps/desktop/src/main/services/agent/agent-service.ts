@@ -61,6 +61,7 @@ import type {
   GeneralSettingsState
 } from '@shared/ipc/contracts';
 import { askUserInputSchema, type AskQuestion, type AskUserAnswer } from '@shared/ask-user';
+import { executeThemeTool, themeToolDefinitions } from './theme-tools';
 import {
   generalSettingsToolDefinitions,
   executeGeneralSettingsTool
@@ -578,7 +579,8 @@ const PLAN_ALLOWED_TOOLS = new Set([
   'read_skill_file',
   'image_config_list',
   'image_config_get',
-  'general_settings_get'
+  'general_settings_get',
+  'theme_get'
 ]);
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -803,6 +805,9 @@ export class AgentService {
       let workspaceDenied = false;
 
       const executeTool = async (call: { id?: string; name: string; arguments: unknown }) => {
+        if (call.name === 'theme_get' || call.name === 'theme_update') {
+          return executeThemeTool(call.name, call.arguments);
+        }
         if (call.name.startsWith('general_settings_')) {
           return executeGeneralSettingsTool(call.name, call.arguments, this.generalSettings);
         }
@@ -1613,7 +1618,8 @@ export class AgentService {
         );
       }
 
-      const mcpTools = this.mcp && mode !== 'plan' ? await this.mcp.listTools() : [];
+      const mcpTools =
+        this.mcp && mode !== 'plan' ? await this.mcp.listTools(hooks.signal) : [];
       const imageNames = imageConfigs.map((config) => `${config.name}（${config.model}）`);
       const imageToolDefinition: AgentToolDefinition = {
         ...generateImageToolDefinition,
@@ -1636,6 +1642,7 @@ export class AgentService {
         ...(this.generalSettings && modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT
           ? generalSettingsToolDefinitions
           : []),
+        ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? themeToolDefinitions : []),
         ...(this.skills
           ? [
               searchSkillsToolDefinition,

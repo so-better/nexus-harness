@@ -138,7 +138,9 @@ describe('AgentService', () => {
       'save_word',
       'save_excel',
       'save_ppt',
-      'save_pdf'
+      'save_pdf',
+      'theme_get',
+      'theme_update'
     ]);
   });
 

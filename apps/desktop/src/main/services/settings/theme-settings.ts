@@ -12,11 +12,11 @@ const themeFileName = 'theme.json';
 /**
  * 读取已保存的主题来源；文件缺失或内容无效时回退到 system。
  */
-export const loadThemeSource = async (): Promise<ThemeSource> => {
-  const paths = getAppDataPaths();
+export const loadThemeSource = async (settingsDir?: string): Promise<ThemeSource> => {
+  const directory = settingsDir ?? getAppDataPaths().settings;
 
   try {
-    const raw = await readFile(join(paths.settings, themeFileName), 'utf8');
+    const raw = await readFile(join(directory, themeFileName), 'utf8');
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null || !('source' in parsed)) return 'system';
 
@@ -30,12 +30,12 @@ export const loadThemeSource = async (): Promise<ThemeSource> => {
 /**
  * 保存主题来源；写入失败时抛错，由调用方转换为结构化错误。
  */
-export const saveThemeSource = async (source: ThemeSource): Promise<void> => {
-  const paths = getAppDataPaths();
+export const saveThemeSource = async (source: ThemeSource, settingsDir?: string): Promise<void> => {
+  const directory = settingsDir ?? getAppDataPaths().settings;
 
-  await mkdir(paths.settings, { recursive: true });
+  await mkdir(directory, { recursive: true });
   await writeFile(
-    join(paths.settings, themeFileName),
+    join(directory, themeFileName),
     `${JSON.stringify({ source }, null, 2)}\n`,
     'utf8'
   );
