@@ -135,7 +135,7 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 - 会话支持重命名、置顶、导出与跨会话搜索；搜索入口在侧栏与命令面板。
 - 输入区展示当前 Agent 模式，Plan / Build 切换只能由用户操作。
 - 设置与扩展以弹窗展示，不引入路由；视图切换由导航状态驱动。
-- 插件通过标准插槽注入会话流与输入区，全局背景以 skin 贡献，不改变宿主布局。AI 可通过 `plugin_list`、`plugin_read`、`plugin_create`、`plugin_update`、`plugin_import`、`plugin_reload`、`plugin_set_enabled` 管理插件；`plugin_create` 可用 `fromPluginId` 把内置或用户插件复制成新的用户插件；`plugin_update` 只能修改用户插件，内置插件只读；创建/更新/导入/刷新/启停均需审批，插件主进程代码按受信本地代码处理。
+- 插件通过标准插槽注入会话流与输入区，全局背景以 skin 贡献，不改变宿主布局。AI 可通过 `plugin_list`、`plugin_read`、`plugin_create`、`plugin_update`、`plugin_delete`、`plugin_import`、`plugin_reload`、`plugin_set_enabled` 管理插件；`plugin_create` 可用 `fromPluginId` 把内置或用户插件复制成新的用户插件；`plugin_update` 只能修改用户插件，内置插件只读；创建/更新/导入/刷新/启停均需审批，插件主进程代码按受信本地代码处理。
 - Agent 提问以行内卡片展示，支持键盘选择、数字键、Enter 提交与 Esc 取消。
 - 用户消息可编辑重发；最后一条 AI 回复可重新生成；流式回复可随时停止。
 - 高频操作全部可键盘完成，`Cmd/Ctrl+K` 为统一入口。

@@ -158,6 +158,11 @@ export class SkillService {
     );
   }
 
+  async refresh(): Promise<SkillSummary[]> {
+    this.cache = undefined;
+    return this.scan();
+  }
+
   async scan(): Promise<SkillSummary[]> {
     if (this.cache && Date.now() - this.cache.at < 1_000) return this.cache.skills;
     const entries = await readdir(this.directory, { withFileTypes: true }).catch(() => []);

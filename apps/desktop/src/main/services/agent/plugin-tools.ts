@@ -27,6 +27,7 @@ export interface PluginToolOptions {
 
 const listSchema = z.object({}).strict();
 const toggleSchema = z.object({ id: z.string().min(1), enabled: z.boolean() }).strict();
+const deleteSchema = z.object({ id: z.string().min(1) }).strict();
 const importSchema = z.object({ sourceDir: z.string().min(1) }).strict();
 const readSchema = z
   .object({
@@ -99,6 +100,13 @@ export const pluginToolDefinitions: AgentToolDefinition[] = [
     '启用或停用指定插件；内置插件只能停用，不能卸载。',
     { id: { type: 'string' }, enabled: { type: 'boolean' } },
     ['id', 'enabled'],
+    true
+  ),
+  tool(
+    'plugin_delete',
+    '删除用户插件并清理插件存储；内置插件不能删除。',
+    { id: { type: 'string' } },
+    ['id'],
     true
   ),
   tool(
@@ -331,6 +339,24 @@ export const executePluginTool = async (
       return failure(
         'PLUGIN_TOGGLE_FAILED',
         error instanceof Error ? error.message : '更新插件状态失败'
+      );
+    }
+  }
+
+  if (name === 'plugin_delete') {
+    const parsed = deleteSchema.safeParse(input);
+    if (!parsed.success) return failure('PLUGIN_INVALID_INPUT', '插件参数不合法');
+    const existing = host.list().find((plugin) => plugin.id === parsed.data.id);
+    if (!existing) return failure('PLUGIN_NOT_FOUND', '插件不存在');
+    if (existing.source === 'builtin') {
+      return failure('PLUGIN_BUILTIN_READONLY', '内置插件不能删除，只能停用');
+    }
+    try {
+      return success({ plugins: await host.uninstall(parsed.data.id) });
+    } catch (error) {
+      return failure(
+        'PLUGIN_DELETE_FAILED',
+        error instanceof Error ? error.message : '删除插件失败'
       );
     }
   }

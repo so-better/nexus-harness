@@ -41,7 +41,8 @@ describe('plugin tools', () => {
   const list = vi.fn(() => [plugin]);
   const reload = vi.fn(async () => [plugin]);
   const setEnabled = vi.fn(async () => [plugin]);
-  const host = { list, reload, setEnabled } as unknown as PluginHost;
+  const uninstall = vi.fn(async () => []);
+  const host = { list, reload, setEnabled, uninstall } as unknown as PluginHost;
 
   beforeEach(async () => {
     pluginsDir = await mkdtemp(join(tmpdir(), 'nexus-plugin-tools-'));
@@ -49,6 +50,7 @@ describe('plugin tools', () => {
     list.mockClear();
     reload.mockClear();
     setEnabled.mockClear();
+    uninstall.mockClear();
   });
 
   afterEach(async () => {
@@ -146,6 +148,24 @@ describe('plugin tools', () => {
     expect(await readFile(join(pluginsDir, 'com.example.copy', 'renderer.mjs'), 'utf8')).toContain(
       'activate'
     );
+  });
+
+  it('deletes a user plugin and rejects built-in plugins', async () => {
+    const deleted = await executePluginTool(
+      'plugin_delete',
+      { id: manifest.id },
+      { host, pluginsDir }
+    );
+    expect(deleted.ok).toBe(true);
+    expect(uninstall).toHaveBeenCalledWith(manifest.id);
+
+    list.mockReturnValueOnce([{ ...plugin, source: 'builtin' }]);
+    const builtin = await executePluginTool(
+      'plugin_delete',
+      { id: manifest.id },
+      { host, pluginsDir }
+    );
+    expect(builtin).toMatchObject({ ok: false, error: { code: 'PLUGIN_BUILTIN_READONLY' } });
   });
 
   it('imports a plugin and forwards reload', async () => {

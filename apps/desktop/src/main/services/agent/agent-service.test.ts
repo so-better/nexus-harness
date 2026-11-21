@@ -166,9 +166,16 @@ describe('AgentService', () => {
       'plugin_read',
       'plugin_reload',
       'plugin_set_enabled',
+      'plugin_delete',
       'plugin_import',
       'plugin_create',
-      'plugin_update'
+      'plugin_update',
+      'skill_list',
+      'skill_refresh',
+      'skill_import',
+      'skill_create',
+      'skill_update',
+      'skill_delete'
     ]);
   });
 

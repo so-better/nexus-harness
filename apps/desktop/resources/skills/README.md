@@ -14,6 +14,7 @@
 - `documentation-writer`：编写与真实代码一致的文档。
 - `token-efficient-workflow`：减少无关上下文，同时保留验证证据。
 - `plugin-development`：开发、调试、导入和定制 Nexus 插件。
+- `skill-development`：开发、修改、复制和验证 Nexus Skill。
 
 ## 规则
 

@@ -34,6 +34,7 @@ metadata:
 7. **导入/更新**：
    - 从本地目录导入：`plugin_import`，传绝对 `sourceDir`。
    - 直接在用户插件目录开发：`plugin_create` 或 `plugin_update`。
+   - 删除用户插件：`plugin_delete`；内置插件只能停用。
    - 内置插件定制：`plugin_create` 使用 `fromPluginId` 复制为新的用户插件 id，再 `plugin_update`。
 8. **刷新和启用**：`plugin_reload`，确认无错误后 `plugin_set_enabled`。
 9. **验证**：检查插件是否激活、UI 是否出现、权限是否最小、清理函数是否执行、错误是否显示在扩展页。
