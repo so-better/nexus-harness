@@ -151,7 +151,12 @@ describe('AgentService', () => {
       'terminal_read',
       'terminal_wait',
       'terminal_write',
-      'terminal_close'
+      'terminal_close',
+      'cache_get_info',
+      'cache_clear',
+      'backup_status',
+      'backup_export',
+      'backup_import'
     ]);
   });
 

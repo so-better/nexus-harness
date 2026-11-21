@@ -91,12 +91,13 @@ export const getBackupStatus = async (paths: AppDataPaths): Promise<BackupStatus
 export const createBackup = async (
   db: DatabaseSync,
   destinationFile: string,
-  paths: AppDataPaths
+  paths: AppDataPaths,
+  databaseFile = join(paths.root, DATABASE_FILE)
 ): Promise<BackupResult> => {
   try {
     db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
     const archive = new AdmZip();
-    archive.addLocalFile(join(paths.root, DATABASE_FILE));
+    archive.addLocalFile(databaseFile, '', DATABASE_FILE);
     for (const directory of BACKUP_DIRECTORIES) {
       const directoryPath = join(paths.root, directory);
       if (await exists(directoryPath)) archive.addLocalFolder(directoryPath, directory);
@@ -191,7 +192,11 @@ const rebasePath = (value: string, sourceRoot: string | undefined, targetRoot: s
 /**
  * 迁移文件与产物元数据中的绝对路径，支持换一台机器恢复。
  */
-const rebaseDatabasePaths = (databasePath: string, sourceRoot: string | undefined, targetRoot: string): void => {
+const rebaseDatabasePaths = (
+  databasePath: string,
+  sourceRoot: string | undefined,
+  targetRoot: string
+): void => {
   if (!sourceRoot || sourceRoot === targetRoot) return;
   const db = new DatabaseSync(databasePath);
   try {
@@ -209,7 +214,10 @@ const rebaseDatabasePaths = (databasePath: string, sourceRoot: string | undefine
     }>;
     const updateAttachment = db.prepare('UPDATE attachments SET stored_path = ? WHERE id = ?');
     for (const attachment of attachments) {
-      updateAttachment.run(rebasePath(attachment.stored_path, sourceRoot, targetRoot), attachment.id);
+      updateAttachment.run(
+        rebasePath(attachment.stored_path, sourceRoot, targetRoot),
+        attachment.id
+      );
     }
     const artifacts = db.prepare('SELECT id, path FROM artifacts').all() as Array<{
       id: string;

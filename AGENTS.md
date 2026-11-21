@@ -1065,7 +1065,7 @@ export function activate(ctx) {
 - 单实例锁，禁止两个进程同时写同一个 `userData`。
 - 迁移前自动备份数据库；迁移失败保留备份并拒绝启动写入。
 - 数据保留：events 随会话保留；AI 输出文件默认永久保留、不自动清理；artifacts/checkpoints/logs/usage 可设保留期与磁盘配额；清理不得删除仍被引用的文件。
-- 设置中的“清理缓存”只清 `files`、`artifacts`、`logs` 与浏览器 HTTP 缓存；会话、事件、检查点和工作区文件必须保留。
+- 设置中的“清理缓存”只清 `files`、`artifacts`、`logs` 与浏览器 HTTP 缓存；会话、事件、检查点和工作区文件必须保留。AI 缓存清理同样同步删除 `files` / `artifacts` 数据库记录。
 - 每条 Usage 记录 provider、model、输入与输出 token、缓存读写、reasoning token、步数、状态与耗时。
 - 日志轮转，避免无限增长。
 - API Key 随本地 Provider 配置保存，不写入事件流。
@@ -1125,7 +1125,7 @@ export function activate(ctx) {
 - 外观：`light / dark / system` 三态，默认 `system`；同时支持字号、密度与减少动效跟随系统。
 - 通用：开机自启默认开启，可在设置中关闭；开发态不注册系统登录项，打包后通过系统登录项生效。启动时以系统登录项实际状态为准回写偏好，避免覆盖用户在系统中做的修改。
 - 缓存：统计并清理 AI 输出文件、工具产物、运行日志与 Electron HTTP 缓存；不得删除会话、事件、检查点或用户工作区文件。
-- 有 Run 运行时禁止清理缓存；部分目录清理失败必须返回失败类别并提示用户，不得误报全部成功。
+- 设置页有 Run 运行时禁止清理缓存；AI 工具只允许当前 Run 清理，并拒绝其他活跃 Run；部分目录清理失败必须返回失败类别并提示用户，不得误报全部成功。
 - 高级：数据目录、日志、遥测开关（默认关闭）。
 - Extensions 弹窗独立管理插件、Skill、MCP，不混入设置；插件自身配置放在插件详情中。
 - 设置项必须由 zod schema 定义，未知键忽略；变更写入 `settings.updated` 事件。

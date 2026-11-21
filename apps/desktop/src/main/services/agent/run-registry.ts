@@ -28,6 +28,10 @@ export const hasRunForSession = (sessionId: string): boolean =>
  */
 export const hasActiveRuns = (): boolean => activeRuns.size > 0;
 
+/** 是否存在除当前 Run 之外的其他活跃 Run。 */
+export const hasOtherActiveRuns = (runId?: string): boolean =>
+  [...activeRuns.values()].some((run) => run.runId !== runId);
+
 /**
  * 按 runId 查询活跃 Run。
  */

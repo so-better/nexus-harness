@@ -64,6 +64,8 @@ import { askUserInputSchema, type AskQuestion, type AskUserAnswer } from '@share
 import { executeThemeTool, themeToolDefinitions } from './theme-tools';
 import { executeSkinTool, skinToolDefinitions } from './skin-tools';
 import { executeTerminalTool, terminalToolDefinitions } from './terminal-tools';
+import { executeCacheTool, cacheToolDefinitions } from './cache-tools';
+import { executeBackupTool, backupToolDefinitions } from './backup-tools';
 import {
   generalSettingsToolDefinitions,
   executeGeneralSettingsTool
@@ -587,7 +589,9 @@ const PLAN_ALLOWED_TOOLS = new Set([
   'terminal_get_settings',
   'terminal_list',
   'terminal_read',
-  'terminal_wait'
+  'terminal_wait',
+  'cache_get_info',
+  'backup_status'
 ]);
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -821,6 +825,18 @@ export class AgentService {
         }
         if (call.name === 'skin_list' || call.name === 'skin_apply') {
           return executeSkinTool(call.name, call.arguments);
+        }
+        if (call.name.startsWith('cache_')) {
+          return executeCacheTool(call.name, call.arguments, {
+            ...(this.database ? { database: this.database } : {}),
+            runId
+          });
+        }
+        if (call.name.startsWith('backup_')) {
+          return executeBackupTool(call.name, call.arguments, {
+            ...(this.database ? { database: this.database } : {}),
+            runId
+          });
         }
         if (call.name.startsWith('terminal_')) {
           return executeTerminalTool(call.name, call.arguments, {
@@ -1694,6 +1710,8 @@ export class AgentService {
         ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? themeToolDefinitions : []),
         ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? skinToolDefinitions : []),
         ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? terminalToolDefinitions : []),
+        ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? cacheToolDefinitions : []),
+        ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? backupToolDefinitions : []),
         ...(this.skills
           ? [
               searchSkillsToolDefinition,
