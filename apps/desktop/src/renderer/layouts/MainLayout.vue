@@ -320,10 +320,10 @@ onBeforeUnmount(() => {
 
 <style scoped lang="less">
 .nh-layout.nh-layout--skin {
-  --nh-surface-base: color-mix(in srgb, var(--nh-color-bg-base) 78%, transparent);
-  --nh-surface-elevated: color-mix(in srgb, var(--nh-color-bg-elevated) 74%, transparent);
-  --nh-border-subtle: color-mix(in srgb, var(--nh-color-border) 70%, transparent);
-  --nh-input-bg: color-mix(in srgb, var(--nh-color-bg-base) 68%, transparent);
+  --nh-surface-base: color-mix(in srgb, var(--nh-color-bg-base) 52%, transparent);
+  --nh-surface-elevated: color-mix(in srgb, var(--nh-color-bg-elevated) 60%, transparent);
+  --nh-border-subtle: color-mix(in srgb, var(--nh-color-border) 66%, transparent);
+  --nh-input-bg: color-mix(in srgb, var(--nh-color-bg-base) 76%, transparent);
 
   background: transparent;
 }

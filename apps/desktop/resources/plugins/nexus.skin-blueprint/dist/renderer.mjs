@@ -1,5 +1,5 @@
 /**
- * 蓝图皮肤：工程网格与跟随指针的十字准星，强调坐标感与秩序。
+ * 蓝图皮肤：高对比工程网格、扫描线与跟随指针的十字准星。
  */
 export function activate(ctx) {
   return ctx.skins.register('blueprint', (element) => {
@@ -16,22 +16,35 @@ export function activate(ctx) {
     grid.style.cssText = [
       'position:absolute',
       'inset:-2px',
-      'background-image:linear-gradient(color-mix(in srgb, var(--nh-color-border) 62%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--nh-color-border) 62%, transparent) 1px, transparent 1px), linear-gradient(color-mix(in srgb, var(--nh-color-accent) 10%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--nh-color-accent) 10%, transparent) 1px, transparent 1px)',
-      'background-size:28px 28px, 28px 28px, 140px 140px, 140px 140px',
-      'mask-image:radial-gradient(ellipse at 50% 42%, black 12%, color-mix(in srgb, black 42%, transparent) 52%, transparent 88%)',
-      '-webkit-mask-image:radial-gradient(ellipse at 50% 42%, black 12%, color-mix(in srgb, black 42%, transparent) 52%, transparent 88%)',
-      'opacity:0.72'
+      'background-image:linear-gradient(color-mix(in srgb, var(--nh-color-border) 82%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--nh-color-border) 82%, transparent) 1px, transparent 1px), linear-gradient(color-mix(in srgb, var(--nh-color-accent) 24%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--nh-color-accent) 24%, transparent) 1px, transparent 1px), linear-gradient(45deg, color-mix(in srgb, var(--nh-color-accent) 10%, transparent) 1px, transparent 1px)',
+      'background-size:28px 28px, 28px 28px, 140px 140px, 140px 140px, 140px 140px',
+      'mask-image:radial-gradient(ellipse at 50% 46%, black 22%, color-mix(in srgb, black 48%, transparent) 60%, transparent 94%)',
+      '-webkit-mask-image:radial-gradient(ellipse at 50% 46%, black 22%, color-mix(in srgb, black 48%, transparent) 60%, transparent 94%)',
+      'opacity:0.9'
     ].join(';');
 
     const tint = document.createElement('div');
     tint.style.cssText = [
       'position:absolute',
       'inset:0',
-      'background:radial-gradient(ellipse at 72% 18%, color-mix(in srgb, var(--nh-color-accent) 9%, transparent), transparent 56%)'
+      'background:radial-gradient(ellipse at 76% 14%, color-mix(in srgb, var(--nh-color-accent) 20%, transparent), transparent 56%)'
+    ].join(';');
+
+    const scan = document.createElement('div');
+    scan.style.cssText = [
+      'position:absolute',
+      'left:0',
+      'right:0',
+      'top:-24%',
+      'height:24%',
+      'background:linear-gradient(to bottom, transparent, color-mix(in srgb, var(--nh-color-accent) 20%, transparent), transparent)',
+      'opacity:0.62',
+      'will-change:transform',
+      'transform:translate3d(0,-20%,0)'
     ].join(';');
 
     const cross = document.createElement('div');
-    cross.style.cssText = 'position:absolute;inset:0;opacity:0.55;transition:opacity 180ms ease';
+    cross.style.cssText = 'position:absolute;inset:0;opacity:0.78';
 
     const vertical = document.createElement('div');
     vertical.style.cssText = [
@@ -40,7 +53,7 @@ export function activate(ctx) {
       'left:0',
       'width:1px',
       'height:100%',
-      'background:linear-gradient(to bottom, transparent, color-mix(in srgb, var(--nh-color-accent) 55%, transparent) 24%, color-mix(in srgb, var(--nh-color-accent) 55%, transparent) 76%, transparent)',
+      'background:linear-gradient(to bottom, transparent, color-mix(in srgb, var(--nh-color-accent) 86%, transparent) 18%, color-mix(in srgb, var(--nh-color-accent) 86%, transparent) 82%, transparent)',
       'transform:translate3d(-100px,0,0)'
     ].join(';');
 
@@ -51,15 +64,17 @@ export function activate(ctx) {
       'left:0',
       'width:100%',
       'height:1px',
-      'background:linear-gradient(to right, transparent, color-mix(in srgb, var(--nh-color-accent) 55%, transparent) 24%, color-mix(in srgb, var(--nh-color-accent) 55%, transparent) 76%, transparent)',
+      'background:linear-gradient(to right, transparent, color-mix(in srgb, var(--nh-color-accent) 86%, transparent) 18%, color-mix(in srgb, var(--nh-color-accent) 86%, transparent) 82%, transparent)',
       'transform:translate3d(0,-100px,0)'
     ].join(';');
 
     cross.append(vertical, horizontal);
-    root.append(tint, grid, cross);
+    root.append(tint, grid, scan, cross);
     element.appendChild(root);
 
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
     let frameId;
+    let scanAnimation;
     let pointerX = -100;
     let pointerY = -100;
 
@@ -75,10 +90,44 @@ export function activate(ctx) {
       if (frameId === undefined) frameId = requestAnimationFrame(applyPointer);
     };
 
+    const startScan = () => {
+      if (scanAnimation) return;
+      scanAnimation = scan.animate(
+        [
+          { transform: 'translate3d(0,-120%,0)' },
+          { transform: 'translate3d(0,520%,0)' }
+        ],
+        { duration: 15000, iterations: Infinity, easing: 'linear' }
+      );
+    };
+
+    const stopScan = () => {
+      scanAnimation?.cancel();
+      scanAnimation = undefined;
+    };
+
+    const onMotionChange = () => {
+      if (media.matches) stopScan();
+      else startScan();
+    };
+
     window.addEventListener('pointermove', move, { passive: true });
+    const entrance = media.matches
+      ? undefined
+      : root.animate([{ opacity: 0 }, { opacity: 1 }], {
+          duration: 500,
+          easing: 'ease-out'
+        });
+
+    if (!media.matches) startScan();
+    media.addEventListener('change', onMotionChange);
+
     return () => {
-      if (frameId !== undefined) cancelAnimationFrame(frameId);
+      media.removeEventListener('change', onMotionChange);
       window.removeEventListener('pointermove', move);
+      if (frameId !== undefined) cancelAnimationFrame(frameId);
+      entrance?.cancel();
+      stopScan();
       root.remove();
     };
   });
