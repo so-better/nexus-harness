@@ -6,6 +6,7 @@ import { app, BrowserWindow, screen, shell } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import { join } from 'node:path';
 import { getWindowBackgroundColor } from './theme';
+import { installWindowContextMenu } from './menu';
 
 const preloadPath = join(__dirname, '../preload/index.js');
 const rendererHtml = join(__dirname, '../renderer/index.html');
@@ -46,6 +47,22 @@ export const createMainWindow = (): BrowserWindow => {
   window.once('ready-to-show', () => {
     window.show();
   });
+
+  // 打包版移除网页式刷新/DevTools 快捷键；开发态保留调试能力
+  window.webContents.on('before-input-event', (event, input) => {
+    if (!app.isPackaged) return;
+    const modifier = process.platform === 'darwin' ? input.meta : input.control;
+    const key = input.key.toLowerCase();
+    if (
+      input.key === 'F5' ||
+      (modifier && key === 'r') ||
+      (modifier && input.shift && key === 'i') ||
+      (modifier && ['+', '-', '=', '0'].includes(key))
+    ) {
+      event.preventDefault();
+    }
+  });
+  installWindowContextMenu(window);
 
   const sendMaximized = (): void => {
     if (!window.isDestroyed()) {

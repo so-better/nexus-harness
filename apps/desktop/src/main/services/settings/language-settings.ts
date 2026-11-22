@@ -8,6 +8,16 @@ import { languageSchema, type AppLanguage } from '@shared/ipc/contracts';
 import { getAppDataPaths } from '../storage/paths';
 
 const languageFileName = 'language.json';
+type LanguageChangeListener = (language: AppLanguage) => void;
+const changeListeners = new Set<LanguageChangeListener>();
+
+/**
+ * 注册语言变更回调；菜单与托盘需要跟随应用语言更新。
+ */
+export const onLanguageChanged = (listener: LanguageChangeListener): (() => void) => {
+  changeListeners.add(listener);
+  return () => changeListeners.delete(listener);
+};
 
 /**
  * 读取界面语言；文件缺失或无效时回退 zh-CN。
@@ -36,4 +46,5 @@ export const saveLanguage = async (language: AppLanguage, settingsDir?: string):
     `${JSON.stringify({ language }, null, 2)}\n`,
     'utf8'
   );
+  changeListeners.forEach((listener) => listener(language));
 };

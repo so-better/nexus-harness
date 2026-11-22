@@ -8,6 +8,7 @@ import { t } from '@/app/i18n';
 import { CommandRegistry, type CommandDefinition } from '@/app/command-registry';
 import type { PaletteCommand } from '@/app/commands';
 import { matchesShortcut } from '@/app/shortcuts';
+import { nexus } from '@/app/nexus-bridge';
 import type { usePluginRuntimeStore } from '@/plugin-runtime/runtime.store';
 
 interface AppCommandOptions {
@@ -35,6 +36,7 @@ const resolveTitle = (command: CommandDefinition): string =>
 export const useAppCommands = (options: AppCommandOptions) => {
   const commandPaletteOpen = ref(false);
   const registry = new CommandRegistry();
+  const recentCommands = new Map<string, number>();
 
   const openCommandPalette = async (): Promise<void> => {
     try {
@@ -56,7 +58,15 @@ export const useAppCommands = (options: AppCommandOptions) => {
   };
 
   const executeCommand = async (id: string): Promise<void> => {
+    // 原生菜单 accelerator 与 renderer 快捷键可能同时到达，抑制同一命令的重复触发
+    const now = Date.now();
+    if ((recentCommands.get(id) ?? 0) + 150 > now) return;
+    recentCommands.set(id, now);
     try {
+      if (id === 'command.palette') {
+        toggleCommandPalette();
+        return;
+      }
       if (id.startsWith('session.open:')) {
         options.openSession(id.slice('session.open:'.length));
         return;
@@ -198,9 +208,19 @@ export const useAppCommands = (options: AppCommandOptions) => {
     });
   };
 
-  onMounted(() => window.addEventListener('keydown', onGlobalKeydown));
+  let unsubscribeMenu: (() => void) | undefined;
+  onMounted(() => {
+    window.addEventListener('keydown', onGlobalKeydown);
+    unsubscribeMenu = nexus.app.onMenuCommand((id) => {
+      executeCommand(id).catch((error: unknown) => {
+        console.error('执行菜单命令失败', error);
+      });
+    });
+  });
   onBeforeUnmount(() => {
     window.removeEventListener('keydown', onGlobalKeydown);
+    unsubscribeMenu?.();
+    unsubscribeMenu = undefined;
     registry.clear();
   });
 

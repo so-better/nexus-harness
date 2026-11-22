@@ -2,13 +2,23 @@
  * Electron 主进程入口：单实例、窗口生命周期与 IPC 注册。
  */
 
-import { app, BrowserWindow, nativeTheme, protocol } from 'electron';
+import { app, BrowserWindow, dialog, nativeTheme, protocol } from 'electron';
 import { watch, type FSWatcher } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { createNexusEvent } from '@nexus/core';
+import type { AppLanguage } from '@shared/ipc/contracts';
 import { existsSync } from 'node:fs';
 import { createMainWindow } from './app/create-window';
+import { installApplicationMenu } from './app/menu';
+import {
+  attachTray,
+  disposeTray,
+  isTrayQuitting,
+  markTrayQuitting,
+  setTrayLanguage
+} from './app/tray';
+import { hasActiveRuns } from './services/agent/run-registry';
 import { registerIpcHandlers } from './ipc';
 import {
   ensureAppDataDirectories,
@@ -19,7 +29,7 @@ import {
 } from './services/storage/paths';
 import { closeDatabase, initDatabase } from './services/storage/database';
 import { loadThemeSource } from './services/settings/theme-settings';
-import { loadLanguage } from './services/settings/language-settings';
+import { loadLanguage, onLanguageChanged } from './services/settings/language-settings';
 import {
   clearNotificationBadge,
   setNotificationBadgeStyle,
@@ -81,8 +91,14 @@ const pluginMime = (path: string): string => {
 /**
  * 统一初始化主窗口的焦点与终端生命周期监听。
  */
-const setupMainWindow = (window: BrowserWindow): BrowserWindow => {
+const setupMainWindow = (window: BrowserWindow, language: AppLanguage): BrowserWindow => {
   window.on('focus', clearNotificationBadge);
+  window.on('close', (event) => {
+    if (isTrayQuitting()) return;
+    event.preventDefault();
+    window.hide();
+  });
+  attachTray(window, language);
   const terminalOwnerId = window.webContents.id;
   window.webContents.once('destroyed', () => {
     terminalService.closeByOwner(terminalOwnerId);
@@ -133,6 +149,7 @@ if (!hasSingleInstanceLock) {
     if (!window) return;
 
     if (window.isMinimized()) window.restore();
+    window.show();
     window.focus();
   });
 
@@ -165,7 +182,8 @@ if (!hasSingleInstanceLock) {
         })
       );
       nativeTheme.themeSource = await loadThemeSource();
-      setNotificationLanguage(await loadLanguage());
+      const language = await loadLanguage();
+      setNotificationLanguage(language);
       setNotificationBadgeStyle(await loadNotificationBadge());
       await initializeAutoLaunch();
 
@@ -214,13 +232,22 @@ if (!hasSingleInstanceLock) {
         if (existsSync(devIcon)) app.dock?.setIcon(devIcon);
       }
 
+      installApplicationMenu(language);
+      onLanguageChanged((nextLanguage) => {
+        installApplicationMenu(nextLanguage);
+        setTrayLanguage(nextLanguage);
+      });
       registerIpcHandlers();
-      setupMainWindow(createMainWindow());
+      setupMainWindow(createMainWindow(), language);
 
       app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-          setupMainWindow(createMainWindow());
+        const window = BrowserWindow.getAllWindows()[0];
+        if (window) {
+          window.show();
+          window.focus();
+          return;
         }
+        setupMainWindow(createMainWindow(), language);
       });
     })
     .catch((error: unknown) => {
@@ -228,7 +255,32 @@ if (!hasSingleInstanceLock) {
       app.quit();
     });
 
+  let allowQuit = false;
+  app.on('before-quit', (event) => {
+    if (allowQuit) return;
+    if (!hasActiveRuns()) {
+      markTrayQuitting();
+      return;
+    }
+    event.preventDefault();
+    const english = app.getLocale().toLowerCase().startsWith('en');
+    const choice = dialog.showMessageBoxSync({
+      type: 'warning',
+      buttons: english ? ['Cancel', 'Quit'] : ['取消', '退出'],
+      defaultId: 0,
+      cancelId: 0,
+      title: english ? 'Quit Nexus?' : '退出 Nexus？',
+      message: english ? 'There are running tasks. Quit anyway?' : '还有任务正在运行，确定退出吗？'
+    });
+    if (choice === 1) {
+      allowQuit = true;
+      markTrayQuitting();
+      app.quit();
+    }
+  });
+
   app.on('will-quit', () => {
+    disposeTray();
     mcpConfigWatcher?.close();
     if (mcpReloadTimer) clearTimeout(mcpReloadTimer);
     getPluginHost()

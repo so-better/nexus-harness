@@ -34,7 +34,12 @@ const bridge: NexusBridge = {
     openPath: (path) => ipcRenderer.invoke(IPC_CHANNELS.appOpenPath, path),
     showItemInFolder: (path) => ipcRenderer.invoke(IPC_CHANNELS.appShowItemInFolder, path),
     relaunch: () => ipcRenderer.invoke(IPC_CHANNELS.appRelaunch),
-    consumePendingSession: () => ipcRenderer.invoke(IPC_CHANNELS.appConsumePendingSession)
+    consumePendingSession: () => ipcRenderer.invoke(IPC_CHANNELS.appConsumePendingSession),
+    onMenuCommand: (handler) => {
+      const listener = (_event: IpcRendererEvent, commandId: string) => handler(commandId);
+      ipcRenderer.on(IPC_CHANNELS.appMenuCommand, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.appMenuCommand, listener);
+    }
   },
   session: {
     list: () => ipcRenderer.invoke(IPC_CHANNELS.sessionList),

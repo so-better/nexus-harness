@@ -5,8 +5,8 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { loadLanguage, saveLanguage } from './language-settings';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadLanguage, onLanguageChanged, saveLanguage } from './language-settings';
 
 describe('language settings', () => {
   let directory = '';
@@ -31,5 +31,20 @@ describe('language settings', () => {
   it('falls back for invalid values', async () => {
     await writeFile(join(directory, 'language.json'), JSON.stringify({ language: 'fr-FR' }));
     await expect(loadLanguage(directory)).resolves.toBe('zh-CN');
+  });
+
+  it('notifies all language listeners and supports unsubscribe', async () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const stopFirst = onLanguageChanged(first);
+    const stopSecond = onLanguageChanged(second);
+
+    await saveLanguage('en-US', directory);
+    stopFirst();
+    await saveLanguage('zh-CN', directory);
+    stopSecond();
+
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(2);
   });
 });

@@ -76,6 +76,7 @@ export const IPC_CHANNELS = {
   sessionExport: 'session:export',
   sessionActivate: 'session:activate',
   appConsumePendingSession: 'app:consumePendingSession',
+  appMenuCommand: 'app:menuCommand',
   sessionSetPinned: 'session:setPinned',
   sessionSetModel: 'session:setModel',
   sessionSetMode: 'session:setMode',

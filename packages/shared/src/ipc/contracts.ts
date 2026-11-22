@@ -190,6 +190,7 @@ export interface NexusBridge {
     showItemInFolder: (path: string) => Promise<Result<{ shown: boolean }>>;
     relaunch: () => Promise<Result<{ relaunched: boolean }>>;
     consumePendingSession: () => Promise<Result<string | null>>;
+    onMenuCommand: (handler: (commandId: string) => void) => Unsubscribe;
   };
   window: {
     minimize: () => Promise<Result<{ ok: boolean }>>;
