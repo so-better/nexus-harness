@@ -723,7 +723,7 @@ interface ProviderCapabilities {
 
 审批策略：
 
-- 审批策略按 Workspace 或 Session scope 设置：`ask`（默认）、`allowlist`、`auto`（仅显式开启，高风险）。
+- 审批策略按 Session scope 设置：`ask`（默认逐次审批）、`workspace`（工作区信任，工作区内文件和受限安全命令自动通过；普通命令仍以当前用户权限运行，不是系统沙箱）、`always`（始终信任，仅跳过审批，危险命令、敏感路径、权限与预算仍生效）。切换策略写入 `session.approvalPolicy.changed` 事件。
 - 写文件与执行命令默认逐次审批；重复且已加入白名单的命令可自动通过。
 - 网络访问与 MCP 调用始终审批，不做静默放行。
 - 审批粒度：工具、命令、路径、域名；支持允许一次 / 允许本会话 / 允许工作区 / 拒绝，敏感目录只提供拒绝。
@@ -1693,7 +1693,8 @@ pnpm dist:win      # 构建 Windows NSIS 安装包
 - 真实优先：import 真实组件、真实 `projectEvents`、`theme-palette` 与 `global.less`；不要复制旧样式做复刻。
 - 对话类优先构造 `NexusEvent[]` 再走 `projectEvents`，而不是手工拼 DOM。
 - 进程、端口、临时文件全部隔离；退出时关闭 Vite、结束 Electron 并删除临时目录。
-- 需要验证渲染结果时，给 Electron 加 `--remote-debugging-port=<port>`，用 CDP 查询 DOM、计算样式与滚动。
+- **用户确认 UI 时必须启动可见 Electron mock 窗口并保持运行，由用户自行查看和交互；不得只生成截图，截图不能作为确认依据。**
+- 需要自动化自检时，可给 Electron 加 `--remote-debugging-port=<port>`，用 CDP 查询 DOM、计算样式与滚动；自检完成后仍需保留可见窗口供用户确认。
 
 启动脚本（单个 `.mjs`，放在仓库外或 `apps/desktop/scripts/preview/`）：
 
@@ -1921,6 +1922,7 @@ CHANGELOG.md         # 版本变更记录
 | `session.created` | `sessionId`、`workspaceId` | 新建会话 |
 | `session.workspace.bound` | `sessionId`、`workspaceId` | 临时会话绑定工作区 |
 | `session.mode.changed` | `sessionId`、`mode` | Plan / Build 模式切换 |
+| `session.approvalPolicy.changed` | `sessionId`、`approvalPolicy` | 会话审批策略切换 |
 | `session.model.changed` | `sessionId`、`providerId`、`modelId` | 会话切换服务商或模型 |
 | `session.renamed` | `sessionId`、`title`、`source` | 自动标题或用户重命名 |
 | `session.pinned` | `sessionId` | 置顶会话 |
@@ -1950,6 +1952,7 @@ CHANGELOG.md         # 版本变更记录
 | `tool.failed` | `toolCallId`、`error` | 工具执行失败 |
 | `approval.requested` | `approvalId`、`toolCallId`、`scope` | 请求审批 |
 | `approval.resolved` | `approvalId`、`decision` | 审批完成 |
+| `approval.auto_approved` | `approvalId`、`toolCallId`、`scope` | 策略自动放行审批 |
 | `ask_user.requested` | `requestId`、`questions` | Agent 请求澄清 |
 | `ask_user.resolved` | `requestId`、`answers`、`cancelled` | 用户回答或取消 |
 | `checkpoint.created` | `checkpointId`、`runId`、`label` | 创建检查点 |
