@@ -67,7 +67,6 @@ export interface PluginStartup {
   pluginName: string;
   id: string;
   title: string;
-  durationMs?: number;
 }
 
 export interface ActivePluginStartup extends PluginStartup {
@@ -248,8 +247,7 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
             pluginId: plugin.id,
             pluginName: plugin.name,
             id: startup.id,
-            title: startup.title,
-            ...(startup.durationMs === undefined ? {} : { durationMs: startup.durationMs })
+            title: startup.title
           }))
         : []
     )

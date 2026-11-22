@@ -13,8 +13,7 @@
     "startup": [
       {
         "id": "fade",
-        "title": "淡入",
-        "durationMs": 1500
+        "title": "淡入"
       }
     ]
   }

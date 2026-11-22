@@ -57,7 +57,7 @@ const plugin: PluginPublic = {
     commands: [{ id: 'usage.check', title: 'Check usage' }],
     settings: [],
     skins: [{ id: 'paper', title: 'Paper' }],
-    startup: [{ id: 'intro', title: 'Intro', durationMs: 1_200 }]
+    startup: [{ id: 'intro', title: 'Intro' }]
   },
   rendererUrl: `data:text/javascript,${encodeURIComponent(
     "export function activate(ctx) { ctx.skins.register('paper', () => () => {}); ctx.startup.register('intro', (_el, _ctx, finish) => { finish(); return () => {}; }); ctx.views.register('usage.dashboard', () => () => {}); ctx.commands.register('usage.check', () => ctx.usage.getStats({ bucket: 'day' })); }\n"
@@ -157,7 +157,7 @@ describe('plugin runtime skin selection', () => {
     await runtime.selectStartup({ pluginId: plugin.id, startupId: 'intro' });
 
     expect(runtime.selectedStartup).toEqual({ pluginId: plugin.id, startupId: 'intro' });
-    expect(runtime.activeStartupMount?.durationMs).toBe(1_200);
+    expect(runtime.activeStartupMount).not.toBeNull();
   });
 
   it('applies a selected startup animation broadcast', async () => {

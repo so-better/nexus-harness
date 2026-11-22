@@ -12,7 +12,6 @@ const runtimeState = vi.hoisted(() => ({
     id: string;
     title: string;
     pluginName: string;
-    durationMs?: number;
     context: Record<string, never>;
     mount: (element: HTMLElement, ctx: unknown, finish: () => void) => () => void;
   },
@@ -82,6 +81,30 @@ describe('StartupAnimationLayer', () => {
     await flush();
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(document.querySelector<HTMLElement>('.nh-startup')?.style.display).toBe('none');
+    app.unmount();
+  });
+
+  it('closes on Escape', async () => {
+    const dispose = vi.fn();
+    runtimeState.activeStartupMount = {
+      pluginId: 'nexus.test-startup',
+      id: 'intro',
+      title: 'Intro',
+      pluginName: 'Startup',
+      context: {},
+      mount: () => dispose
+    };
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(StartupAnimationLayer);
+    app.mount(host);
+    await flush();
+
+    document
+      .querySelector<HTMLElement>('.nh-startup')
+      ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await flush();
+    expect(dispose).toHaveBeenCalledTimes(1);
     app.unmount();
   });
 
