@@ -9,6 +9,14 @@ import type { PluginPublic, PluginSkinChangedPayload } from '@shared/plugin';
 const skinChange = vi.hoisted(() => ({
   handler: undefined as ((payload: PluginSkinChangedPayload) => void) | undefined
 }));
+const startupChange = vi.hoisted(() => ({
+  handler: undefined as
+    | ((payload: {
+        selection: { pluginId: string; startupId: string } | null;
+        source: string;
+      }) => void)
+    | undefined
+}));
 
 const deniedPlugin: PluginPublic = {
   id: 'nexus.test-usage-denied',
@@ -24,7 +32,8 @@ const deniedPlugin: PluginPublic = {
     statusBar: [],
     commands: [{ id: 'usage.denied', title: 'Denied usage' }],
     settings: [],
-    skins: []
+    skins: [],
+    startup: []
   },
   rendererUrl: `data:text/javascript,${encodeURIComponent(
     "export function activate(ctx) { ctx.commands.register('usage.denied', () => ctx.usage.getStats()); }\n"
@@ -39,7 +48,7 @@ const plugin: PluginPublic = {
   version: '1.0.0',
   enabled: true,
   source: 'user',
-  permissions: ['ui.skin', 'ui.command', 'ui.panel', 'usage:read'],
+  permissions: ['ui.skin', 'ui.startup', 'ui.command', 'ui.panel', 'usage:read'],
   activationEvents: [],
   contributes: {
     views: [{ id: 'usage.dashboard', title: 'Usage' }],
@@ -47,10 +56,11 @@ const plugin: PluginPublic = {
     statusBar: [],
     commands: [{ id: 'usage.check', title: 'Check usage' }],
     settings: [],
-    skins: [{ id: 'paper', title: 'Paper' }]
+    skins: [{ id: 'paper', title: 'Paper' }],
+    startup: [{ id: 'intro', title: 'Intro', durationMs: 1_200 }]
   },
   rendererUrl: `data:text/javascript,${encodeURIComponent(
-    "export function activate(ctx) { ctx.skins.register('paper', () => () => {}); ctx.views.register('usage.dashboard', () => () => {}); ctx.commands.register('usage.check', () => ctx.usage.getStats({ bucket: 'day' })); }\n"
+    "export function activate(ctx) { ctx.skins.register('paper', () => () => {}); ctx.startup.register('intro', (_el, _ctx, finish) => { finish(); return () => {}; }); ctx.views.register('usage.dashboard', () => () => {}); ctx.commands.register('usage.check', () => ctx.usage.getStats({ bucket: 'day' })); }\n"
   )}`,
   hasMain: false,
   mainLoaded: false
@@ -59,6 +69,7 @@ const plugin: PluginPublic = {
 vi.mock('./api/plugin.api', () => ({
   listPlugins: vi.fn(async () => [plugin, deniedPlugin]),
   getSelectedSkin: vi.fn(async () => null),
+  getSelectedStartup: vi.fn(async () => null),
   getUsageStats: vi.fn(async () => ({
     totals: {},
     series: [],
@@ -67,10 +78,15 @@ vi.mock('./api/plugin.api', () => ({
     providers: []
   })),
   setSelectedSkin: vi.fn(async (selection) => selection),
+  setSelectedStartup: vi.fn(async (selection) => selection),
   getPluginSettings: vi.fn(async () => ({})),
   subscribePluginChanges: vi.fn(() => () => undefined),
   subscribeSkinChanges: vi.fn((handler: (payload: PluginSkinChangedPayload) => void) => {
     skinChange.handler = handler;
+    return () => undefined;
+  }),
+  subscribeStartupChanges: vi.fn((handler) => {
+    startupChange.handler = handler;
     return () => undefined;
   }),
   subscribePluginEvents: vi.fn(() => () => undefined),
@@ -90,7 +106,12 @@ vi.mock('./api/plugin.api', () => ({
 }));
 
 import { usePluginRuntimeStore } from './runtime.store';
-import { getSelectedSkin, getUsageStats, setSelectedSkin } from './api/plugin.api';
+import {
+  getSelectedSkin,
+  getUsageStats,
+  setSelectedSkin,
+  setSelectedStartup
+} from './api/plugin.api';
 
 describe('plugin runtime skin selection', () => {
   beforeEach(() => {
@@ -128,6 +149,45 @@ describe('plugin runtime skin selection', () => {
 
     expect(runtime.selectedSkin).toBeNull();
     expect(setSelectedSkin).toHaveBeenCalledWith(null);
+  });
+
+  it('exposes a declared startup animation through the host bridge', async () => {
+    const runtime = usePluginRuntimeStore();
+    await runtime.init();
+    await runtime.selectStartup({ pluginId: plugin.id, startupId: 'intro' });
+
+    expect(runtime.selectedStartup).toEqual({ pluginId: plugin.id, startupId: 'intro' });
+    expect(runtime.activeStartupMount?.durationMs).toBe(1_200);
+  });
+
+  it('applies a selected startup animation broadcast', async () => {
+    const runtime = usePluginRuntimeStore();
+    await runtime.init();
+
+    startupChange.handler?.({
+      selection: { pluginId: plugin.id, startupId: 'intro' },
+      source: 'settings'
+    });
+
+    await vi.waitFor(() => {
+      expect(runtime.selectedStartup).toEqual({ pluginId: plugin.id, startupId: 'intro' });
+      expect(runtime.activeStartupMount).not.toBeNull();
+    });
+  });
+
+  it('rolls back an unavailable startup animation broadcast', async () => {
+    const runtime = usePluginRuntimeStore();
+    await runtime.init();
+
+    startupChange.handler?.({
+      selection: { pluginId: plugin.id, startupId: 'missing' },
+      source: 'settings'
+    });
+
+    await vi.waitFor(() => {
+      expect(runtime.selectedStartup).toBeNull();
+      expect(setSelectedStartup).toHaveBeenLastCalledWith(null);
+    });
   });
 
   it('opens a declared plugin view through the host bridge', async () => {

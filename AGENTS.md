@@ -885,6 +885,7 @@ metadata:
 | `menus` | 上下文菜单、工具栏 |
 | `settings` | 插件设置项 |
 | `skins` | 全局皮肤：插件代码绘制的背景、遮罩与强调色 |
+| `startup` | 启动动画：插件代码绘制的全屏启动过渡 |
 | `tools` | 向 Agent 注册工具（不开放） |
 | `themes` | 后续开放，需单独评审 |
 
@@ -926,6 +927,10 @@ ctx.views.register(id: string, mount: (el: HTMLElement, ctx: PluginContext) => (
 ctx.views.open(id: string): Promise<void>;
 ctx.slots.register(id: string, mount: (el: HTMLElement, context: SlotContext) => () => void): Disposable;
 ctx.skins.register(id: string, mount: (el: HTMLElement, ctx: PluginContext) => () => void): Disposable;
+ctx.startup.register(
+  id: string,
+  mount: (el: HTMLElement, ctx: PluginContext, finish: () => void) => () => void
+): Disposable;
 ctx.statusBar.add(item: StatusBarItem): Disposable;
 ctx.events.on(
   event: NexusEventName,
@@ -968,6 +973,7 @@ interface SlotContext {
 - 插件插槽只能补充信息，不得替代或隐藏宿主的命令、路径、审批与错误等安全信息。
 - `SlotContext.usage` 为该条消息对应的用量汇总（跨该消息的模型步骤聚合）；缺失时插件可订阅 `usage.recorded` 自行累计。
 - `skins` 由 manifest 声明，插件代码自行决定使用图片、canvas、WebGL 或 DOM；宿主在固定隔离层内挂载，皮肤切换、插件停用或热重载时调用清理函数。插件不得直接注入全局 CSS，也不得访问隔离层外的宿主 DOM。
+- `startup` 由 manifest 声明，宿主只提供全屏隔离容器与超时控制；插件在 mount 中绘制启动动画，完成后调用 `finish`，或由宿主在贡献点 `durationMs`（默认 2.5 秒，范围 0.5–10 秒）后自动结束。没有选中启动动画时不显示遮罩；用户点击遮罩可跳过。用户在「外观」设置中从已启用插件提供的动画里选择，选择持久化，默认不启用；插件被禁用或删除后选择自动清除。
 - 渲染进程插件在 Shadow DOM 容器内挂载，UI 框架由插件自带，不得访问宿主 DOM 或全局状态。
 - 事件 payload 类型由 SDK 导出，禁止插件假设未声明字段存在。
 - 主进程侧事件由宿主按权限转发给渲染进程插件，插件不得自行跨进程通信。
@@ -981,7 +987,7 @@ interface SlotContext {
 ```
 
 - 无效 manifest 或入口缺失时，在扩展页展示错误并跳过，不影响宿主启动。
-- 激活事件支持 `onView:<id>`、`onSlot:<slotId>`、`onCommand:<id>` 与 `onEvent:<event>`；消息插槽首次渲染时激活对应插件。
+- 激活事件支持 `onView:<id>`、`onSlot:<slotId>`、`onCommand:<id>` 与 `onEvent:<event>`；启动动画贡献在应用启动时激活，消息插槽首次渲染时激活对应插件。
 - 激活失败必须捕获并记录，自动禁用该插件，不得影响宿主启动。
 - 插件回调抛出的异常由宿主包裹捕获，转为通知与日志。
 - 目录文件变更做防抖处理，先 `deactivate()` 旧实例，再加载新实例。
@@ -999,6 +1005,8 @@ interface SlotContext {
 - 通过 `events:usage.recorded` 与事件元数据在看板打开时刷新。
 - 视图入口由插件自己提供，宿主不在扩展弹窗自动列出。
 - 正确处理启用、禁用、热重载。
+
+内置启动动画插件 `apps/desktop/resources/plugins/nexus.startup-intro` 是启动动画参考实现，演示 `ctx.startup.register`、语义色绘制、减少动效偏好与 `finish`；它默认启用但不默认选中，用户主动选择后下次启动播放。
 
 内置皮肤插件（`apps/desktop/resources/plugins/nexus.skin-*`）是全局皮肤参考实现，演示插件代码用语义色绘制背景；皮肤只声明贡献点，具体视觉完全由插件 renderer 决定：
 
@@ -1152,7 +1160,7 @@ export function activate(ctx) {
 - 支持连接测试与模型列表刷新；API Key 随本地 Provider 配置保存；不写死默认模型。
 - 图像模型可选；未配置时不注册 `generate_image`，设置页提供引导。
 - 权限与审批：默认审批策略、命令白名单、敏感路径策略、工作区信任管理。
-- 外观：`light / dark / system` 三态，默认 `system`；同时支持字号、密度与减少动效跟随系统。
+- 外观：`light / dark / system` 三态，默认 `system`；同时支持字号、密度与减少动效跟随系统；插件皮肤与启动动画分别选择，启动动画默认不启用。
 - 通用：开机自启默认开启，可在设置中关闭；开发态不注册系统登录项，打包后通过系统登录项生效。启动时以系统登录项实际状态为准回写偏好，避免覆盖用户在系统中做的修改。
 - 缓存：统计并清理 AI 输出文件、工具产物、运行日志与 Electron HTTP 缓存；不得删除会话、事件、检查点或用户工作区文件。
 - 设置页有 Run 运行时禁止清理缓存；AI 工具只允许当前 Run 清理，并拒绝其他活跃 Run；部分目录清理失败必须返回失败类别并提示用户，不得误报全部成功。
@@ -1980,6 +1988,7 @@ CHANGELOG.md         # 版本变更记录
 | `ui.panel` | 注册侧栏/主区面板 | 开放 |
 | `ui.slot` | 注册消息尾部/输入区等插槽 | 开放 |
 | `ui.skin` | 贡献全局背景皮肤，并通过代码绘制 | 开放 |
+| `ui.startup` | 贡献启动动画，并通过代码绘制 | 开放 |
 | `ui.statusbar` | 注册状态栏条目 | 开放 |
 | `ui.command` | 注册命令与快捷键 | 开放 |
 | `ui.notification` | 发送应用内通知 | 开放 |

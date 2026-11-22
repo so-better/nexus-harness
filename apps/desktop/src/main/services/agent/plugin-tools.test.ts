@@ -21,7 +21,8 @@ const manifest = {
     statusBar: [],
     commands: [],
     settings: [],
-    skins: []
+    skins: [],
+    startup: []
   }
 };
 

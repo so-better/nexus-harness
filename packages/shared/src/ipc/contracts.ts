@@ -10,6 +10,8 @@ import type {
   PluginSettingValue,
   PluginSkinChangedPayload,
   PluginSkinSelection,
+  PluginStartupChangedPayload,
+  PluginStartupSelection,
   PluginWorkspaceEntry
 } from '../plugin';
 import type { Result } from './result';
@@ -211,12 +213,17 @@ export interface NexusBridge {
       style: NotificationBadgeStyle
     ) => Promise<Result<NotificationBadgeStyle>>;
     getSkin: () => Promise<Result<PluginSkinSelection | null>>;
+    getStartup: () => Promise<Result<PluginStartupSelection | null>>;
     getImage: () => Promise<Result<ImageSettings | null>>;
     setImage: (value: ImageSettings) => Promise<Result<ImageSettings>>;
     getSearch: () => Promise<Result<SearchSettings | null>>;
     setSearch: (value: SearchSettings) => Promise<Result<SearchSettings>>;
     setSkin: (selection: PluginSkinSelection | null) => Promise<Result<PluginSkinSelection | null>>;
     onSkinChanged: (handler: (payload: PluginSkinChangedPayload) => void) => Unsubscribe;
+    setStartup: (
+      selection: PluginStartupSelection | null
+    ) => Promise<Result<PluginStartupSelection | null>>;
+    onStartupChanged: (handler: (payload: PluginStartupChangedPayload) => void) => Unsubscribe;
     setAutoLaunch: (enabled: boolean) => Promise<Result<boolean>>;
     getLanguage: () => Promise<Result<AppLanguage>>;
     setLanguage: (language: AppLanguage) => Promise<Result<AppLanguage>>;

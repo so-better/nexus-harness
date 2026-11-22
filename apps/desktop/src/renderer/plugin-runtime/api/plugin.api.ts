@@ -9,6 +9,8 @@ import type {
   PluginSettingValue,
   PluginSkinChangedPayload,
   PluginSkinSelection,
+  PluginStartupChangedPayload,
+  PluginStartupSelection,
   PluginWorkspaceEntry
 } from '@shared/plugin';
 import type { UsageStats, UsageStatsInput } from '@shared/usage';
@@ -105,3 +107,14 @@ export const setSelectedSkin = async (
 export const subscribeSkinChanges = (
   handler: (payload: PluginSkinChangedPayload) => void
 ): (() => void) => nexus.settings.onSkinChanged(handler);
+
+export const getSelectedStartup = async (): Promise<PluginStartupSelection | null> =>
+  unwrap(await nexus.settings.getStartup());
+
+export const setSelectedStartup = async (
+  selection: PluginStartupSelection | null
+): Promise<PluginStartupSelection | null> => unwrap(await nexus.settings.setStartup(selection));
+
+export const subscribeStartupChanges = (
+  handler: (payload: PluginStartupChangedPayload) => void
+): (() => void) => nexus.settings.onStartupChanged(handler);

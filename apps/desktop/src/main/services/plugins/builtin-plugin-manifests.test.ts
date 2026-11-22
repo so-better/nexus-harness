@@ -22,7 +22,12 @@ describe('built-in plugin manifests', () => {
         id?: unknown;
         renderer?: unknown;
         permissions?: unknown;
-        contributes?: { skins?: unknown[]; views?: unknown[]; messageSlots?: unknown[] };
+        contributes?: {
+          skins?: unknown[];
+          views?: unknown[];
+          messageSlots?: unknown[];
+          startup?: unknown[];
+        };
       };
 
       expect(manifest.id).toBe(directory.name);
@@ -36,6 +41,11 @@ describe('built-in plugin manifests', () => {
       }
       if (manifest.contributes?.views?.length) {
         expect(manifest.permissions).toContain('ui.panel');
+      }
+      if (directory.name.startsWith('nexus.startup-')) {
+        expect(manifest.permissions).toContain('ui.startup');
+        expect(Array.isArray(manifest.contributes?.startup)).toBe(true);
+        expect(manifest.contributes?.startup?.length).toBeGreaterThan(0);
       }
       if (manifest.contributes?.messageSlots?.length) {
         expect(manifest.permissions).toContain('ui.slot');

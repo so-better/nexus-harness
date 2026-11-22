@@ -8,6 +8,7 @@
     <NMessageProvider>
       <NDialogProvider>
         <MainLayout />
+        <StartupAnimationLayer />
       </NDialogProvider>
     </NMessageProvider>
   </NConfigProvider>
@@ -33,6 +34,7 @@ import { effectiveTheme } from './theme';
 import { locale } from './i18n';
 import { getNaiveOverrides, getPalette } from './theme-palette';
 import MainLayout from '@/layouts/MainLayout.vue';
+import StartupAnimationLayer from '@/plugin-runtime/components/StartupAnimationLayer.vue';
 
 const theme = computed(() => (effectiveTheme.value === 'dark' ? darkTheme : null));
 const naiveLocale = computed(() => (locale.value === 'zh-CN' ? zhCN : enUS));

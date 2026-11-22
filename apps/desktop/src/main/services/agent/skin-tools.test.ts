@@ -86,7 +86,11 @@ describe('skin tools', () => {
       })
     );
 
-    const cleared = await executeSkinTool('skin_apply', { clear: true }, { settingsDir, available });
+    const cleared = await executeSkinTool(
+      'skin_apply',
+      { clear: true },
+      { settingsDir, available }
+    );
     expect(cleared.ok).toBe(true);
     expect(JSON.parse(cleared.output)).toMatchObject({ active: null });
   });
@@ -105,7 +109,8 @@ describe('skin tools', () => {
         statusBar: [],
         commands: [],
         settings: [],
-        skins: [{ id: 'aurora', title: 'Aurora' }]
+        skins: [{ id: 'aurora', title: 'Aurora' }],
+        startup: []
       }
     };
     pluginHost.plugins = [

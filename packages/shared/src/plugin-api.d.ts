@@ -41,6 +41,11 @@ export interface PluginStatusBarItem {
 }
 
 export type PluginSkinMount = (element: HTMLElement, ctx: PluginContext) => Disposable;
+export type PluginStartupMount = (
+  element: HTMLElement,
+  ctx: PluginContext,
+  finish: () => void
+) => Disposable;
 export type PluginViewMount = (element: HTMLElement, ctx: PluginContext) => Disposable;
 export type PluginSlotMount = (element: HTMLElement, context: PluginSlotContext) => Disposable;
 
@@ -106,6 +111,9 @@ export interface PluginContext {
   };
   skins: {
     register: (id: string, mount: PluginSkinMount) => Disposable;
+  };
+  startup: {
+    register: (id: string, mount: PluginStartupMount) => Disposable;
   };
   statusBar: {
     add: (item: PluginStatusBarItem) => Disposable;

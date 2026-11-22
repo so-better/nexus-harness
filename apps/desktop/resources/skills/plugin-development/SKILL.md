@@ -2,8 +2,21 @@
 name: plugin-development
 description: 当用户要创建、修改、调试或发布 Nexus 插件时使用；覆盖本地插件项目、用户插件、内置插件复制、manifest、renderer/main 入口、权限、插槽、事件与验证流程。
 metadata:
-  tags: [插件开发, plugin, manifest, renderer, main, slots, views, permissions, usage, 用户插件]
-  version: 1.2.0
+  tags:
+    [
+      插件开发,
+      plugin,
+      manifest,
+      renderer,
+      main,
+      slots,
+      views,
+      startup,
+      permissions,
+      usage,
+      用户插件
+    ]
+  version: 1.3.1
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -100,6 +113,7 @@ export function deactivate() {
 - 状态栏贡献：状态栏首次渲染时。
 - 视图/命令贡献：命令调用、`ctx.views.open` 或扩展页打开时。
 - 皮肤贡献：用户选择该皮肤时。
+- 启动动画贡献：应用启动并发现插件时。
 
 ## 权限
 
@@ -112,6 +126,7 @@ export function deactivate() {
 | `ui.command`      | 命令                       |
 | `ui.notification` | 应用内/系统通知            |
 | `ui.skin`         | 全局背景皮肤               |
+| `ui.startup`      | 启动动画                   |
 | `usage:read`      | 只读本地用量统计与历史     |
 | `workspace:read`  | 只读当前会话工作区         |
 | `events:<event>`  | 订阅指定事件               |
@@ -128,6 +143,7 @@ ctx.views.register(id, mount): Disposable
 ctx.views.open(id): Promise<void>
 ctx.slots.register(id, mount): Disposable
 ctx.skins.register(id, mount): Disposable
+ctx.startup.register(id, mount): Disposable
 ctx.statusBar.add(item): Disposable
 ctx.events.on(event, (payload, meta) => void): Disposable
 ctx.storage.get/set/delete
@@ -139,6 +155,34 @@ ctx.usage.getStats(query): Promise<UsageStats>
 ```
 
 使用 `ctx.settings` 读取 manifest 声明的设置；使用 `ctx.storage` 持久化插件数据，不能写入插件目录作为数据存储。
+
+## 启动动画
+
+声明 `startup` 贡献点并申请 `ui.startup`。宿主在应用启动时提供全屏隔离容器，插件负责绘制动画；mount 的第三个参数是 `finish`，动画完成后调用它即可结束。宿主按贡献点的 `durationMs` 设置兜底时长，默认 2.5 秒，范围 0.5–10 秒；用户点击遮罩也可跳过。用户在外观设置里选择启动动画，选择持久化；没有选择时不显示遮罩。多个插件可以同时提供动画，但启动时只播放用户选中的一个；插件被禁用或删除后选择自动清除。
+
+```json
+{
+  "permissions": ["ui.startup"],
+  "contributes": {
+    "startup": [{ "id": "intro", "title": "启动动画", "durationMs": 1200 }]
+  }
+}
+```
+
+```js
+export function activate(ctx) {
+  return ctx.startup.register('intro', (element, _ctx, finish) => {
+    const label = document.createElement('div');
+    label.textContent = 'Nexus';
+    element.appendChild(label);
+    const timer = setTimeout(finish, 1200);
+    return () => {
+      clearTimeout(timer);
+      label.remove();
+    };
+  });
+}
+```
 
 ## 常用插槽
 

@@ -10,6 +10,8 @@ const state = vi.hoisted(() => ({
   applyResult: true,
   clearCache: vi.fn(),
   saveAutoLaunch: vi.fn(),
+  loadStartupSelection: vi.fn(async () => null),
+  applyStartupSelection: vi.fn(async (selection: unknown) => selection),
   deleteArtifacts: vi.fn(),
   deleteFiles: vi.fn(),
   clearHttpCache: vi.fn()
@@ -32,6 +34,14 @@ vi.mock('../services/settings/startup-settings', () => ({
   loadAutoLaunch: vi.fn(async () => true),
   saveAutoLaunch: state.saveAutoLaunch,
   applyAutoLaunch: vi.fn(() => state.applyResult)
+}));
+
+vi.mock('../services/settings/startup-animation-settings', () => ({
+  loadStartupSelection: state.loadStartupSelection
+}));
+
+vi.mock('../services/settings/startup-animation-service', () => ({
+  applyStartupSelection: state.applyStartupSelection
 }));
 
 vi.mock('../services/cache/cache-service', () => ({
@@ -75,6 +85,8 @@ describe('settings IPC', () => {
     state.applyResult = true;
     state.clearCache.mockReset();
     state.saveAutoLaunch.mockReset();
+    state.loadStartupSelection.mockClear();
+    state.applyStartupSelection.mockClear();
     state.deleteArtifacts.mockReset();
     state.clearHttpCache.mockReset();
     registerSettingsIpc();
@@ -97,6 +109,26 @@ describe('settings IPC', () => {
     expect(result.ok).toBe(true);
     expect(result.data).toBe(true);
     expect(state.saveAutoLaunch).toHaveBeenCalledWith(true);
+  });
+
+  it('rejects an invalid startup animation selection', async () => {
+    const handler = state.handlers.get(IPC_CHANNELS.settingsSetStartup);
+    if (!handler) throw new Error('startup handler not registered');
+
+    const result = (await handler({}, { pluginId: 'x' })) as { ok: boolean };
+    expect(result.ok).toBe(false);
+    expect(state.applyStartupSelection).not.toHaveBeenCalled();
+  });
+
+  it('persists a valid startup animation selection', async () => {
+    const handler = state.handlers.get(IPC_CHANNELS.settingsSetStartup);
+    if (!handler) throw new Error('startup handler not registered');
+    const selection = { pluginId: 'nexus.startup-intro', startupId: 'fade' };
+
+    const result = (await handler({}, selection)) as { ok: boolean; data: unknown };
+    expect(result.ok).toBe(true);
+    expect(result.data).toEqual(selection);
+    expect(state.applyStartupSelection).toHaveBeenCalledWith(selection);
   });
 
   it('refuses cache clearing while a run is active', async () => {

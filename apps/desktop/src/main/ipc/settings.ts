@@ -15,7 +15,12 @@ import {
   type CacheInfo,
   type NotificationBadgeStyle
 } from '@shared/ipc/contracts';
-import { pluginSkinSelectionSchema, type PluginSkinSelection } from '@shared/plugin';
+import {
+  pluginSkinSelectionSchema,
+  pluginStartupSelectionSchema,
+  type PluginSkinSelection,
+  type PluginStartupSelection
+} from '@shared/plugin';
 import { fail, ok, type Result } from '@shared/ipc/result';
 import { imageSettingsSchema, type ImageSettings } from '@shared/image';
 import { searchSettingsSchema, type SearchSettings } from '@shared/search';
@@ -36,6 +41,8 @@ import {
 } from '../services/settings/notification-settings';
 import { loadSkinSelection } from '../services/settings/skin-settings';
 import { applySkinSelection } from '../services/settings/skin-service';
+import { loadStartupSelection } from '../services/settings/startup-animation-settings';
+import { applyStartupSelection } from '../services/settings/startup-animation-service';
 import { loadImageSettings, saveImageSettings } from '../services/settings/image-settings';
 import { loadSearchSettings, saveSearchSettings } from '../services/settings/search-settings';
 import { clearCache, getCacheInfo } from '../services/cache/cache-service';
@@ -248,6 +255,37 @@ export const registerSettingsIpc = (): void => {
         return fail(
           'SETTINGS_WRITE_FAILED',
           error instanceof Error ? error.message : '保存皮肤设置失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.settingsGetStartup,
+    async (): Promise<Result<PluginStartupSelection | null>> => {
+      try {
+        return ok(await loadStartupSelection());
+      } catch (error) {
+        return fail(
+          'SETTINGS_READ_FAILED',
+          error instanceof Error ? error.message : '读取启动动画设置失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.settingsSetStartup,
+    async (_event, rawSelection: unknown): Promise<Result<PluginStartupSelection | null>> => {
+      if (rawSelection !== null && !pluginStartupSelectionSchema.safeParse(rawSelection).success) {
+        return fail('SETTINGS_INVALID_INPUT', '启动动画参数不合法');
+      }
+      try {
+        return ok(await applyStartupSelection(rawSelection as PluginStartupSelection | null));
+      } catch (error) {
+        return fail(
+          'SETTINGS_WRITE_FAILED',
+          error instanceof Error ? error.message : '保存启动动画设置失败'
         );
       }
     }

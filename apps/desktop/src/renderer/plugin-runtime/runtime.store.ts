@@ -11,6 +11,7 @@ import type {
   PluginSettingValue,
   PluginSkinSelection,
   PluginSlotLocation,
+  PluginStartupSelection,
   PluginWorkspaceEntry
 } from '@shared/plugin';
 import type { UsageStats, UsageStatsInput } from '@shared/usage';
@@ -19,6 +20,7 @@ import {
   getPluginSettings,
   getPluginStorage,
   getSelectedSkin,
+  getSelectedStartup,
   getUsageStats as getPluginUsageStats,
   listPlugins,
   logPlugin,
@@ -32,7 +34,9 @@ import {
   setPluginSettings,
   setPluginStorage,
   setSelectedSkin,
+  setSelectedStartup,
   subscribeSkinChanges,
+  subscribeStartupChanges,
   subscribePluginChanges,
   subscribePluginEvents,
   uninstallPlugin
@@ -47,9 +51,27 @@ export interface PluginSkin {
 }
 
 export type PluginSkinMount = (element: HTMLElement, ctx: PluginContext) => () => void;
+export type PluginStartupMount = (
+  element: HTMLElement,
+  ctx: PluginContext,
+  finish: () => void
+) => () => void;
 
 export interface ActivePluginSkin extends PluginSkin {
   mount: PluginSkinMount;
+  context: PluginContext;
+}
+
+export interface PluginStartup {
+  pluginId: string;
+  pluginName: string;
+  id: string;
+  title: string;
+  durationMs?: number;
+}
+
+export interface ActivePluginStartup extends PluginStartup {
+  mount: PluginStartupMount;
   context: PluginContext;
 }
 
@@ -93,6 +115,9 @@ export interface PluginContext {
   };
   skins: {
     register: (id: string, mount: PluginSkinMount) => () => void;
+  };
+  startup: {
+    register: (id: string, mount: PluginStartupMount) => () => void;
   };
   statusBar: {
     add: (item: Omit<PluginStatusItem, 'align'> & { align?: 'left' | 'right' }) => () => void;
@@ -165,7 +190,11 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
   const loading = ref(false);
   const error = ref<string>();
   const selectedSkin = ref<PluginSkinSelection | null>(null);
+  const selectedStartup = ref<PluginStartupSelection | null>(null);
   const skinMounts = ref(new Map<string, { mount: PluginSkinMount; context: PluginContext }>());
+  const startupMounts = ref(
+    new Map<string, { mount: PluginStartupMount; context: PluginContext }>()
+  );
   const activeSessionId = ref<string>();
   const active = new Map<string, ActivePlugin>();
   const eventHandlers = new Map<
@@ -180,8 +209,10 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
   const activating = new Set<string>();
   const activationWaiters = new Map<string, Array<() => void>>();
   let initialized = false;
+  let initPromise: Promise<void> | undefined;
   let unsubscribeChanges: (() => void) | undefined;
   let unsubscribeSkinChanges: (() => void) | undefined;
+  let unsubscribeStartupChanges: (() => void) | undefined;
   let unsubscribeEvents: (() => void) | undefined;
   let activationNonce = 0;
 
@@ -209,6 +240,33 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     if (!skin) return null;
     const implementation = skinMounts.value.get(`${skin.pluginId}:${skin.id}`);
     return implementation ? { ...skin, ...implementation } : null;
+  });
+  const startupAnimations = computed<PluginStartup[]>(() =>
+    plugins.value.flatMap((plugin) =>
+      plugin.enabled && plugin.rendererUrl && hasPermission(plugin, 'ui.startup')
+        ? plugin.contributes.startup.map((startup) => ({
+            pluginId: plugin.id,
+            pluginName: plugin.name,
+            id: startup.id,
+            title: startup.title,
+            ...(startup.durationMs === undefined ? {} : { durationMs: startup.durationMs })
+          }))
+        : []
+    )
+  );
+  const activeStartup = computed(
+    () =>
+      startupAnimations.value.find(
+        (startup) =>
+          startup.pluginId === selectedStartup.value?.pluginId &&
+          startup.id === selectedStartup.value?.startupId
+      ) ?? null
+  );
+  const activeStartupMount = computed<ActivePluginStartup | null>(() => {
+    const startup = activeStartup.value;
+    if (!startup) return null;
+    const implementation = startupMounts.value.get(`${startup.pluginId}:${startup.id}`);
+    return implementation ? { ...startup, ...implementation } : null;
   });
 
   const bump = (): void => {
@@ -342,6 +400,27 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
               const current = new Map(skinMounts.value);
               current.delete(key);
               skinMounts.value = current;
+              bump();
+            };
+            currentDisposable.disposables.push(dispose);
+            return dispose;
+          }
+        },
+        startup: {
+          register: (id, mount) => {
+            if (!hasPermission(plugin, 'ui.startup')) throw new Error('缺少 ui.startup 权限');
+            if (!manifest.contributes.startup.some((item) => item.id === id)) {
+              throw new Error(`未声明的启动动画：${id}`);
+            }
+            const key = `${plugin.id}:${id}`;
+            const next = new Map(startupMounts.value);
+            next.set(key, { mount, context: ctx });
+            startupMounts.value = next;
+            bump();
+            const dispose = (): void => {
+              const current = new Map(startupMounts.value);
+              current.delete(key);
+              startupMounts.value = current;
               bump();
             };
             currentDisposable.disposables.push(dispose);
@@ -487,6 +566,7 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     openedView.value = null;
     slotRegistry.clear();
     skinMounts.value = new Map();
+    startupMounts.value = new Map();
     bump();
   };
 
@@ -502,6 +582,17 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     ) {
       selectedSkin.value = null;
       setSelectedSkin(null).catch(() => undefined);
+    }
+    if (
+      selectedStartup.value &&
+      !startupAnimations.value.some(
+        (startup) =>
+          startup.pluginId === selectedStartup.value?.pluginId &&
+          startup.id === selectedStartup.value?.startupId
+      )
+    ) {
+      selectedStartup.value = null;
+      setSelectedStartup(null).catch(() => undefined);
     }
     bump();
   };
@@ -524,6 +615,18 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     for (const plugin of plugins.value) {
       if (plugin.contributes.skins.length) await activatePlugin(plugin);
     }
+  };
+
+  const activateForStartup = async (): Promise<void> => {
+    const selected = selectedStartup.value;
+    if (!selected) return;
+    const plugin = plugins.value.find(
+      (item) =>
+        item.enabled &&
+        item.id === selected.pluginId &&
+        item.contributes.startup.some((startup) => startup.id === selected.startupId)
+    );
+    if (plugin) await activatePlugin(plugin);
   };
 
   const activateForSlot = async (location: PluginSlotLocation): Promise<void> => {
@@ -579,38 +682,90 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     }
   };
 
-  const init = async (): Promise<void> => {
-    if (initialized) return;
-    initialized = true;
-    loading.value = true;
-    try {
-      plugins.value = await listPlugins();
-      const savedSkin = await getSelectedSkin();
-      const exists =
-        savedSkin &&
-        skins.value.some(
-          (skin) => skin.pluginId === savedSkin.pluginId && skin.id === savedSkin.skinId
-        );
-      selectedSkin.value = exists ? savedSkin : null;
-      if (savedSkin && !exists) await setSelectedSkin(null).catch(() => undefined);
-      bump();
-      unsubscribeChanges = subscribePluginChanges((next) => {
-        applyPlugins(next).catch((reason: unknown) => notifyError('plugin-runtime', reason));
-      });
-      unsubscribeSkinChanges = subscribeSkinChanges((payload) => {
-        applyExternalSkin(payload.selection).catch((reason: unknown) =>
-          notifyError('plugin-runtime', reason)
-        );
-      });
-      unsubscribeEvents = subscribePluginEvents((event) => {
-        if (event.type === 'message.delta') return;
-        dispatchEvent(event).catch((reason: unknown) => notifyError('plugin-runtime', reason));
-      });
-    } catch (reason) {
-      error.value = reason instanceof Error ? reason.message : String(reason);
-    } finally {
-      loading.value = false;
+  const applyExternalStartup = async (selection: PluginStartupSelection | null): Promise<void> => {
+    if (
+      selection?.pluginId === selectedStartup.value?.pluginId &&
+      selection?.startupId === selectedStartup.value?.startupId
+    ) {
+      return;
     }
+    const previous = selectedStartup.value;
+    if (
+      selection &&
+      !startupAnimations.value.some(
+        (startup) => startup.pluginId === selection.pluginId && startup.id === selection.startupId
+      )
+    ) {
+      notifyError('plugin-runtime', '启动动画不存在或未启用');
+      await setSelectedStartup(previous).catch(() => undefined);
+      return;
+    }
+    selectedStartup.value = selection;
+    try {
+      if (selection) {
+        await activateForStartup();
+        if (!activeStartupMount.value) throw new Error('启动动画插件未提供可渲染的实现');
+      }
+      bump();
+    } catch (reason) {
+      selectedStartup.value = previous;
+      bump();
+      notifyError('plugin-runtime', reason);
+      await setSelectedStartup(previous).catch(() => undefined);
+    }
+  };
+
+  const init = (): Promise<void> => {
+    if (initialized) return Promise.resolve();
+    if (initPromise) return initPromise;
+    loading.value = true;
+    initPromise = (async () => {
+      try {
+        plugins.value = await listPlugins();
+        const savedSkin = await getSelectedSkin();
+        const exists =
+          savedSkin &&
+          skins.value.some(
+            (skin) => skin.pluginId === savedSkin.pluginId && skin.id === savedSkin.skinId
+          );
+        selectedSkin.value = exists ? savedSkin : null;
+        if (savedSkin && !exists) await setSelectedSkin(null).catch(() => undefined);
+        const savedStartup = await getSelectedStartup();
+        const startupExists =
+          savedStartup &&
+          startupAnimations.value.some(
+            (startup) =>
+              startup.pluginId === savedStartup.pluginId && startup.id === savedStartup.startupId
+          );
+        selectedStartup.value = startupExists ? savedStartup : null;
+        if (savedStartup && !startupExists) await setSelectedStartup(null).catch(() => undefined);
+        bump();
+        unsubscribeChanges = subscribePluginChanges((next) => {
+          applyPlugins(next).catch((reason: unknown) => notifyError('plugin-runtime', reason));
+        });
+        unsubscribeSkinChanges = subscribeSkinChanges((payload) => {
+          applyExternalSkin(payload.selection).catch((reason: unknown) =>
+            notifyError('plugin-runtime', reason)
+          );
+        });
+        unsubscribeStartupChanges = subscribeStartupChanges((payload) => {
+          applyExternalStartup(payload.selection).catch((reason: unknown) =>
+            notifyError('plugin-runtime', reason)
+          );
+        });
+        unsubscribeEvents = subscribePluginEvents((event) => {
+          if (event.type === 'message.delta') return;
+          dispatchEvent(event).catch((reason: unknown) => notifyError('plugin-runtime', reason));
+        });
+      } catch (reason) {
+        error.value = reason instanceof Error ? reason.message : String(reason);
+      } finally {
+        initialized = true;
+        loading.value = false;
+        initPromise = undefined;
+      }
+    })();
+    return initPromise;
   };
 
   const selectSkin = async (selection: PluginSkinSelection | null): Promise<void> => {
@@ -627,6 +782,32 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
       bump();
       notifyError('plugin-runtime', reason);
       await setSelectedSkin(previous).catch(() => undefined);
+    }
+  };
+
+  const selectStartup = async (selection: PluginStartupSelection | null): Promise<void> => {
+    if (
+      selection &&
+      !startupAnimations.value.some(
+        (startup) => startup.pluginId === selection.pluginId && startup.id === selection.startupId
+      )
+    ) {
+      notifyError('plugin-runtime', '启动动画不存在或未启用');
+      return;
+    }
+    const previous = selectedStartup.value;
+    selectedStartup.value = selection;
+    try {
+      await setSelectedStartup(selection);
+      if (selection) {
+        await activateForStartup();
+        if (!activeStartupMount.value) throw new Error('启动动画插件未提供可渲染的实现');
+      }
+    } catch (reason) {
+      selectedStartup.value = previous;
+      bump();
+      notifyError('plugin-runtime', reason);
+      await setSelectedStartup(previous).catch(() => undefined);
     }
   };
 
@@ -694,7 +875,12 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     selectedSkin,
     activeSkin,
     activeSkinMount,
+    startupAnimations,
+    selectedStartup,
+    activeStartup,
+    activeStartupMount,
     selectSkin,
+    selectStartup,
     statusItems,
     commands,
     views,
@@ -720,6 +906,7 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     activateStatusbar,
     activateForExtensions,
     activateForSkins,
+    activateForStartup,
     activateForSlot,
     setEnabled,
     importFromDirectory,
@@ -735,6 +922,8 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
       unsubscribeChanges = undefined;
       unsubscribeSkinChanges?.();
       unsubscribeSkinChanges = undefined;
+      unsubscribeStartupChanges?.();
+      unsubscribeStartupChanges = undefined;
       unsubscribeEvents?.();
       unsubscribeEvents = undefined;
       initialized = false;

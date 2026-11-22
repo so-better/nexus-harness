@@ -35,6 +35,7 @@ export const pluginPermissionSchema = z.enum([
   'ui.panel',
   'ui.slot',
   'ui.skin',
+  'ui.startup',
   'ui.statusbar',
   'ui.command',
   'ui.notification',
@@ -79,6 +80,12 @@ const pluginSkinSchema = z.object({
   title: z.string().min(1)
 });
 
+const pluginStartupSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  durationMs: z.number().int().min(500).max(10_000).optional()
+});
+
 export const pluginManifestSchema = z.object({
   id: z.string().regex(/^[a-z0-9]+(?:\.[a-z0-9-]+)+$/, '插件 id 必须是反向域名'),
   name: z.string().min(1),
@@ -96,7 +103,8 @@ export const pluginManifestSchema = z.object({
       statusBar: z.array(pluginStatusBarSchema).default([]),
       commands: z.array(pluginCommandSchema).default([]),
       settings: z.array(pluginSettingSchema).default([]),
-      skins: z.array(pluginSkinSchema).default([])
+      skins: z.array(pluginSkinSchema).default([]),
+      startup: z.array(pluginStartupSchema).default([])
     })
     .default({
       views: [],
@@ -104,7 +112,8 @@ export const pluginManifestSchema = z.object({
       statusBar: [],
       commands: [],
       settings: [],
-      skins: []
+      skins: [],
+      startup: []
     })
 });
 export type PluginManifest = z.infer<typeof pluginManifestSchema>;
@@ -132,9 +141,21 @@ export const pluginSkinSelectionSchema = z.object({
 });
 export type PluginSkinSelection = z.infer<typeof pluginSkinSelectionSchema>;
 
+export const pluginStartupSelectionSchema = z.object({
+  pluginId: z.string().min(1),
+  startupId: z.string().min(1)
+});
+export type PluginStartupSelection = z.infer<typeof pluginStartupSelectionSchema>;
+
 /** 皮肤变更广播：区分设置页与 AI 工具，便于 UI 展示来源或诊断。 */
 export interface PluginSkinChangedPayload {
   selection: PluginSkinSelection | null;
+  source: 'settings' | 'agent';
+}
+
+/** 启动动画选择变更广播。 */
+export interface PluginStartupChangedPayload {
+  selection: PluginStartupSelection | null;
   source: 'settings' | 'agent';
 }
 

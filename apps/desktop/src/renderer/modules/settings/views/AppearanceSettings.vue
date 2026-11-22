@@ -38,6 +38,18 @@
       />
       <p class="nh-appearance__hint">{{ t('settings.skinHint') }}</p>
     </div>
+
+    <div class="nh-appearance__group nh-appearance__startup-group">
+      <p class="nh-appearance__group-title">{{ t('settings.startupAnimation') }}</p>
+      <NSelect
+        :menu-props="selectMenuProps"
+        :value="selectedStartupValue"
+        :options="startupOptions"
+        :placeholder="t('settings.pleaseSelect')"
+        @update:value="changeStartup"
+      />
+      <p class="nh-appearance__hint">{{ t('settings.startupAnimationHint') }}</p>
+    </div>
   </section>
 </template>
 
@@ -73,6 +85,23 @@ const selectedSkinValue = computed(() =>
     : ''
 );
 
+const startupOptions = computed<SelectOption[]>(() => [
+  { label: t('settings.startupAnimationNone'), value: '' },
+  ...pluginRuntime.startupAnimations.map((startup) => ({
+    label:
+      startup.title === startup.pluginName
+        ? startup.title
+        : `${startup.title} · ${startup.pluginName}`,
+    value: `${startup.pluginId}:${startup.id}`
+  }))
+]);
+
+const selectedStartupValue = computed(() =>
+  pluginRuntime.selectedStartup
+    ? `${pluginRuntime.selectedStartup.pluginId}:${pluginRuntime.selectedStartup.startupId}`
+    : ''
+);
+
 const options = computed<
   Array<{ value: ThemeSource; label: string; icon: 'monitor' | 'sun' | 'moon' }>
 >(() => [
@@ -98,6 +127,11 @@ const load = async (): Promise<void> => {
 const changeSkin = async (value: string): Promise<void> => {
   const [pluginId, skinId] = value.split(':');
   await pluginRuntime.selectSkin(pluginId && skinId ? { pluginId, skinId } : null);
+};
+
+const changeStartup = async (value: string): Promise<void> => {
+  const [pluginId, startupId] = value.split(':');
+  await pluginRuntime.selectStartup(pluginId && startupId ? { pluginId, startupId } : null);
 };
 
 const changeTheme = async (value: ThemeSource): Promise<void> => {
@@ -127,7 +161,8 @@ onMounted(load);
   gap: 10px;
 }
 
-.nh-appearance__skin-group {
+.nh-appearance__skin-group,
+.nh-appearance__startup-group {
   margin-top: 24px;
 }
 

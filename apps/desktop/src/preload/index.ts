@@ -4,7 +4,11 @@
 
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
-import type { PluginPublic, PluginSkinChangedPayload } from '@shared/plugin';
+import type {
+  PluginPublic,
+  PluginSkinChangedPayload,
+  PluginStartupChangedPayload
+} from '@shared/plugin';
 import type { GeneralSettingsState } from '@shared/ipc/contracts';
 import type {
   NexusBridge,
@@ -93,6 +97,7 @@ const bridge: NexusBridge = {
     setNotificationBadge: (style) =>
       ipcRenderer.invoke(IPC_CHANNELS.settingsSetNotificationBadge, style),
     getSkin: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetSkin),
+    getStartup: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetStartup),
     getImage: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetImage),
     setImage: (value) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetImage, value),
     getSearch: () => ipcRenderer.invoke(IPC_CHANNELS.settingsGetSearch),
@@ -103,6 +108,13 @@ const bridge: NexusBridge = {
         handler(payload as PluginSkinChangedPayload);
       ipcRenderer.on(IPC_CHANNELS.settingsSkinChanged, listener);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.settingsSkinChanged, listener);
+    },
+    setStartup: (selection) => ipcRenderer.invoke(IPC_CHANNELS.settingsSetStartup, selection),
+    onStartupChanged: (handler) => {
+      const listener = (_event: unknown, payload: unknown) =>
+        handler(payload as PluginStartupChangedPayload);
+      ipcRenderer.on(IPC_CHANNELS.settingsStartupChanged, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.settingsStartupChanged, listener);
     }
   },
   usage: {

@@ -163,7 +163,8 @@ export class PluginHost {
               statusBar: [],
               commands: [],
               settings: [],
-              skins: []
+              skins: [],
+              startup: []
             }
           },
           directory,
