@@ -19,6 +19,9 @@ const TOOL_AND_FACT_RULES =
 
 const LINK_RULES = '链接：只用用户/工具 URL；引用可核验。';
 
+const BROWSER_RULES =
+  '浏览：用户说“打开/看看网页”时用 open_url 调系统默认浏览器；只有需要点击、登录、抓取或自动化时才用浏览器 MCP。';
+
 const FILE_RULES = '文件：修改前核对来源；数据不全先说明；保持格式并检查内容、路径。';
 
 const MEDIA_MARKDOWN_PROMPT =
@@ -45,6 +48,7 @@ export const buildAgentSystemPrompt = (input: { mode: AgentMode; hasWorkspace: b
     SAFETY_RULES,
     TOOL_AND_FACT_RULES,
     LINK_RULES,
+    ...(input.mode === 'build' ? [BROWSER_RULES] : []),
     FILE_RULES,
     modeSystemPrompt(input.mode),
     MEDIA_MARKDOWN_PROMPT,

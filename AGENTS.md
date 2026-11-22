@@ -622,6 +622,7 @@ interface ProviderCapabilities {
 | `apply_patch` | write | 是 |
 | `run_command` | execute | 是 |
 | `ask_user` | read | 否（等待用户） |
+| `open_url` | network | 是 |
 | `search_skills` | read | 否（系统内部） |
 | `read_skill` | read | 否（系统内部） |
 | `checkpoint` | write | 否（系统内部） |

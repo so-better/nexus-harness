@@ -139,6 +139,7 @@ describe('AgentService', () => {
       'glob',
       'grep',
       'ask_user',
+      'open_url',
       'save_file',
       'save_word',
       'save_excel',
@@ -288,6 +289,7 @@ describe('AgentService', () => {
     });
     expect(requests[0]?.tools?.map((tool) => tool.name)).not.toContain('write_file');
     expect(requests[0]?.tools?.map((tool) => tool.name)).not.toContain('save_file');
+    expect(requests[0]?.tools?.map((tool) => tool.name)).not.toContain('open_url');
     const failed = events.find(
       (event): event is NexusEvent<'tool.failed'> => event.type === 'tool.failed'
     );

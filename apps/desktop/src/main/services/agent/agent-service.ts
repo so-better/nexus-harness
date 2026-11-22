@@ -69,6 +69,7 @@ import { executeBackupTool, backupToolDefinitions } from './backup-tools';
 import { executePluginTool, pluginToolDefinitions } from './plugin-tools';
 import { executeSkillTool, skillToolDefinitions } from './skill-tools';
 import { executeMcpTool, mcpToolDefinitions } from './mcp-tools';
+import { executeOpenUrlTool, openUrlToolDefinition } from './open-url-tool';
 import {
   generalSettingsToolDefinitions,
   executeGeneralSettingsTool
@@ -877,6 +878,9 @@ export class AgentService {
         }
         if (call.name.startsWith('image_config_')) {
           return executeImageConfigTool(call.name, call.arguments);
+        }
+        if (call.name === 'open_url') {
+          return executeOpenUrlTool(call.arguments);
         }
         if (call.name === 'ask_user') {
           const parsed = askUserInputSchema.safeParse(call.arguments);
@@ -1720,6 +1724,7 @@ export class AgentService {
         ...(toolset?.definitions ?? fileToolDefinitions),
         ...mcpTools,
         askUserToolDefinition,
+        openUrlToolDefinition,
         saveFileToolDefinition,
         saveWordToolDefinition,
         saveExcelToolDefinition,

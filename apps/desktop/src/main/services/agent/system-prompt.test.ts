@@ -21,6 +21,7 @@ describe('agent system prompt', () => {
     expect(prompt).toContain('不编造事实');
     expect(prompt).toContain('只用用户/工具 URL');
     expect(prompt).toContain('文件：修改');
+    expect(prompt).toContain('open_url');
     expect(prompt).toContain('Build：');
     expect(prompt).toContain('图片/视频直接嵌入');
     expect(prompt).not.toContain('无工作区');
@@ -42,6 +43,7 @@ describe('agent system prompt', () => {
     expect(planPrompt).toContain('Plan：');
     expect(planPrompt).toContain('不得写文件');
     expect(planPrompt).toContain('无工作区');
+    expect(planPrompt).not.toContain('open_url');
   });
 
   it('formats platform, local time and timezone', () => {
