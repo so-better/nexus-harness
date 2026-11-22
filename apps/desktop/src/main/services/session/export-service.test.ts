@@ -15,6 +15,7 @@ const session: SessionSummary = {
   pinned: false,
   status: 'completed',
   mode: 'build',
+  approvalPolicy: 'ask',
   createdAt: 1,
   updatedAt: 2,
   lastActiveAt: 2

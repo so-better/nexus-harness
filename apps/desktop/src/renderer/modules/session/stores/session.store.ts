@@ -4,7 +4,12 @@
 
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import type { AgentMode, SessionStatus, SessionSummary } from '@shared/ipc/contracts';
+import type {
+  AgentMode,
+  ApprovalPolicy,
+  SessionStatus,
+  SessionSummary
+} from '@shared/ipc/contracts';
 import {
   clearAllSessions,
   createSession,
@@ -12,6 +17,7 @@ import {
   removeSession,
   renameSession,
   setSessionMode,
+  setSessionApprovalPolicy,
   setSessionModel,
   setSessionPinned
 } from '../api/session.api';
@@ -122,6 +128,24 @@ export const useSessionStore = defineStore('sessions', () => {
   };
 
   /**
+   * 设置会话审批策略。
+   */
+  const updateApprovalPolicy = async (
+    id: string,
+    approvalPolicy: ApprovalPolicy
+  ): Promise<boolean> => {
+    error.value = undefined;
+    try {
+      const updated = await setSessionApprovalPolicy(id, approvalPolicy);
+      sessions.value = sessions.value.map((session) => (session.id === id ? updated : session));
+      return true;
+    } catch (reason) {
+      error.value = reason instanceof Error ? reason.message : String(reason);
+      return false;
+    }
+  };
+
+  /**
    * 删除会话并选中下一个可用会话。
    */
   const remove = async (id: string): Promise<boolean> => {
@@ -201,6 +225,7 @@ export const useSessionStore = defineStore('sessions', () => {
     create,
     updateModel,
     updateMode,
+    updateApprovalPolicy,
     applyUpdate,
     rename,
     select,

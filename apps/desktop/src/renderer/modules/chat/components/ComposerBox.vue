@@ -97,12 +97,15 @@
       :disabled-reason="disabledReason"
       :running="running"
       :mode="mode"
+      :approval-policy="approvalPolicy"
+      :has-workspace="roots.length > 0"
       :can-send="Boolean(draft.trim() || selectedReferences.length || hasAttachments) && !uploading"
       :can-reference="roots.length > 0"
       :can-attach="!disabled && !running && !uploading"
       @attach="fileInput?.click()"
       @stop="emit('stop')"
       @update-mode="emit('update-mode', $event)"
+      @update-approval-policy="emit('update-approval-policy', $event)"
     />
   </form>
 </template>
@@ -115,7 +118,13 @@
 import { computed, ref, toRef } from 'vue';
 import { NInput, NPopover, type InputInst } from 'naive-ui';
 import type { MessageFileReference } from '@shared/events';
-import type { AgentMode, ProviderModel, ProviderPublic, SessionRoot } from '@shared/ipc/contracts';
+import type {
+  AgentMode,
+  ApprovalPolicy,
+  ProviderModel,
+  ProviderPublic,
+  SessionRoot
+} from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import { filesFromClipboard } from '../clipboard-files';
 import { useComposerAttachments } from '../use-composer-attachments';
@@ -139,6 +148,7 @@ const props = defineProps<{
   providers: ProviderPublic[];
   models: ProviderModel[];
   mode: AgentMode;
+  approvalPolicy: ApprovalPolicy;
   sessionId?: string | undefined;
   ensureSession: () => Promise<string | undefined>;
   usage?: ChatUsage | undefined;
@@ -161,6 +171,7 @@ const emit = defineEmits<{
   'open-settings': [];
   'update-model': [id: string];
   'update-mode': [mode: AgentMode];
+  'update-approval-policy': [policy: ApprovalPolicy];
 }>();
 
 const draft = ref('');
@@ -346,5 +357,4 @@ const {
 .nh-composer__file-input {
   display: none;
 }
-
 </style>

@@ -23,6 +23,7 @@ import { AgentService, createAgentProvider } from '../services/agent/agent-servi
 import { createSkillService } from '../services/skills/skill-service';
 import { getMcpService } from '../services/mcp/mcp-service-instance';
 import { approvalService } from '../services/agent/approval-service';
+import { canAutoApproveWorkspace } from '../services/agent/approval-policy';
 import { askUserService } from '../services/agent/ask-user-service';
 import { workspaceAuthService } from '../services/agent/workspace-auth-service';
 import { providerStore } from '../services/provider/provider-store';
@@ -284,8 +285,7 @@ export const registerAgentIpc = (): void => {
           runHistory = history.load(session.id, branchMessageId);
         }
 
-        const shouldGenerateTitle =
-          session.titleSource === 'auto' && session.title === '新会话';
+        const shouldGenerateTitle = session.titleSource === 'auto' && session.title === '新会话';
         let titleGenerationStarted = false;
         /**
          * 自动标题会占用一次模型请求，推迟到首个输出或 Run 结束后再发起，避免抢首 token。
@@ -455,9 +455,20 @@ export const registerAgentIpc = (): void => {
               history: runHistory,
               signal: controller.signal,
               terminalOwnerId: senderId,
-              approveTool: (_call, _tool, approvalId) => {
-                return approvalService.request(approvalId, runId, senderId);
+              autoApprove: async (call) => {
+                const policy = sessions.get(session.id)?.approvalPolicy ?? 'ask';
+                if (policy === 'always') return true;
+                return (
+                  policy === 'workspace' &&
+                  (await canAutoApproveWorkspace(
+                    call.name,
+                    call.arguments,
+                    sessions.listRoots(session.id)
+                  ))
+                );
               },
+              approveTool: (_call, _tool, approvalId) =>
+                approvalService.request(approvalId, runId, senderId),
               askUser: (requestId, _questions) =>
                 askUserService.request(requestId, runId, senderId),
               requestWorkspace: async (call) => {

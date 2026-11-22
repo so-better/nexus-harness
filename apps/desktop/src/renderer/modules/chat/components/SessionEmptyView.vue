@@ -23,6 +23,7 @@
         :providers="providers"
         :models="models"
         :mode="mode"
+        :approval-policy="approvalPolicy"
         :session-id="sessionId"
         :ensure-session="ensureSession"
         :provider-id="providerId"
@@ -32,6 +33,7 @@
         @update-provider="emit('update-provider', $event)"
         @update-model="emit('update-model', $event)"
         @update-mode="emit('update-mode', $event)"
+        @update-approval-policy="emit('update-approval-policy', $event)"
         @open-settings="emit('open-settings')"
         @send="
           (prompt, images, references, attachmentIds) =>
@@ -48,7 +50,13 @@
  * 会话内空状态：一条简短提示与主输入区。
  */
 
-import type { AgentMode, ProviderModel, ProviderPublic, SessionRoot } from '@shared/ipc/contracts';
+import type {
+  AgentMode,
+  ApprovalPolicy,
+  ProviderModel,
+  ProviderPublic,
+  SessionRoot
+} from '@shared/ipc/contracts';
 import type { MessageFileReference } from '@shared/events';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
@@ -62,6 +70,7 @@ defineProps<{
   providers: ProviderPublic[];
   models: ProviderModel[];
   mode: AgentMode;
+  approvalPolicy: ApprovalPolicy;
   sessionId?: string | undefined;
   ensureSession: () => Promise<string | undefined>;
   providerId?: string | undefined;
@@ -81,6 +90,7 @@ const emit = defineEmits<{
   'update-provider': [id: string];
   'update-model': [id: string];
   'update-mode': [mode: AgentMode];
+  'update-approval-policy': [policy: ApprovalPolicy];
   'open-settings': [];
 }>();
 </script>

@@ -9,11 +9,13 @@ import { assertGrantableRoot } from '@nexus/runtime-utils';
 import type { DatabaseSync } from 'node:sqlite';
 import type {
   AgentMode,
+  ApprovalPolicy,
   SessionCreateInput,
   SessionRenameInput,
   SessionRoot,
   SessionSetModeInput,
   SessionSetModelInput,
+  SessionSetApprovalPolicyInput,
   SessionStatus,
   SessionSummary
 } from '@shared/ipc/contracts';
@@ -37,6 +39,7 @@ interface SessionRow {
   pinned: number;
   status: string;
   mode: string;
+  approval_policy: string;
   provider_id: string | null;
   model_id: string | null;
   created_at: number;
@@ -63,6 +66,7 @@ const toSummary = (row: SessionRow): SessionSummary => ({
   pinned: row.pinned === 1,
   status: row.status as SessionStatus,
   mode: row.mode as AgentMode,
+  approvalPolicy: (row.approval_policy as ApprovalPolicy) ?? 'ask',
   createdAt: Number(row.created_at),
   updatedAt: Number(row.updated_at),
   lastActiveAt: Number(row.last_active_at),
@@ -85,19 +89,21 @@ export class SessionService {
     const now = Date.now();
     const title = input.title?.trim() || DEFAULT_SESSION_TITLE;
     const mode = input.mode ?? 'build';
+    const approvalPolicy = input.approvalPolicy ?? 'ask';
 
     return this.transaction(() => {
       this.db
         .prepare(
           `INSERT INTO sessions
-            (id, workspace_id, title, title_source, pinned, status, mode, provider_id, model_id, created_at, updated_at, last_active_at)
-           VALUES (?, ?, ?, 'auto', 0, 'idle', ?, ?, ?, ?, ?, ?)`
+            (id, workspace_id, title, title_source, pinned, status, mode, approval_policy, provider_id, model_id, created_at, updated_at, last_active_at)
+           VALUES (?, ?, ?, 'auto', 0, 'idle', ?, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           id,
           input.workspaceId ?? null,
           title,
           mode,
+          approvalPolicy,
           input.providerId ?? null,
           input.modelId ?? null,
           now,
@@ -403,6 +409,29 @@ export class SessionService {
           seq: 1,
           type: 'session.mode.changed',
           payload: { mode: input.mode }
+        })
+      );
+      return this.getRequired(input.id);
+    });
+  }
+
+  /**
+   * 设置会话审批策略；仅由用户操作触发。
+   */
+  setApprovalPolicy(input: SessionSetApprovalPolicyInput): SessionSummary {
+    const now = Date.now();
+    return this.transaction(() => {
+      this.db
+        .prepare(
+          'UPDATE sessions SET approval_policy = ?, updated_at = ?, last_active_at = ? WHERE id = ? AND deleted_at IS NULL'
+        )
+        .run(input.approvalPolicy, now, now, input.id);
+      this.events.append(
+        createNexusEvent({
+          sessionId: input.id,
+          seq: 1,
+          type: 'session.approvalPolicy.changed',
+          payload: { approvalPolicy: input.approvalPolicy }
         })
       );
       return this.getRequired(input.id);

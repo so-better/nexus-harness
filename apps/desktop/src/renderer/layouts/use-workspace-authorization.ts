@@ -54,7 +54,13 @@ export const useWorkspaceAuthorization = () => {
   const removeRoot = async (rootId: string): Promise<void> => {
     if (!activeId.value) return;
     const removed = await chat.removeRoot(activeId.value, rootId);
-    if (!removed) message.error(chat.error ?? t('app.rootRemoveFailed'));
+    if (!removed) {
+      message.error(chat.error ?? t('app.rootRemoveFailed'));
+      return;
+    }
+    if (sessions.activeSession?.approvalPolicy === 'workspace' && chat.roots.length === 0) {
+      await sessions.updateApprovalPolicy(activeId.value, 'ask');
+    }
   };
 
   /**

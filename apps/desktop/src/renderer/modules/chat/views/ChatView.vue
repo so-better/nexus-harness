@@ -50,6 +50,7 @@
       :providers="providers"
       :models="models"
       :mode="mode"
+      :approval-policy="session?.approvalPolicy ?? 'ask'"
       :session-id="session?.id"
       :ensure-session="ensureSession"
       :provider-id="providerId"
@@ -59,6 +60,7 @@
       @update-provider="emit('update-provider', $event)"
       @update-model="emit('update-model', $event)"
       @update-mode="emit('update-mode', $event)"
+      @update-approval-policy="emit('update-approval-policy', $event)"
       @open-settings="emit('open-settings')"
       @send="
         (prompt, images, references, attachmentIds) =>
@@ -125,6 +127,7 @@
           :providers="providers"
           :models="models"
           :mode="mode"
+          :approval-policy="session?.approvalPolicy ?? 'ask'"
           :session-id="session?.id"
           :ensure-session="ensureSession"
           :usage="projection.usage"
@@ -135,6 +138,7 @@
           @update-provider="emit('update-provider', $event)"
           @update-model="emit('update-model', $event)"
           @update-mode="emit('update-mode', $event)"
+          @update-approval-policy="emit('update-approval-policy', $event)"
           @send="
             (prompt, images, references, attachmentIds) =>
               emit('send', prompt, images, references, attachmentIds)
@@ -156,6 +160,7 @@ import { computed, nextTick, watch } from 'vue';
 import { NButton, NDropdown, NTag, type DropdownOption } from 'naive-ui';
 import type {
   AgentMode,
+  ApprovalPolicy,
   SessionExportFormat,
   ProviderModel,
   ProviderPublic,
@@ -200,6 +205,7 @@ const emit = defineEmits<{
   'update-provider': [id: string];
   'update-model': [id: string];
   'update-mode': [mode: AgentMode];
+  'update-approval-policy': [policy: ApprovalPolicy];
   'open-settings': [];
   send: [
     prompt: string,

@@ -41,6 +41,9 @@ export const eventPayloadSchemas = {
   'session.mode.changed': z.object({
     mode: z.enum(['plan', 'build'])
   }),
+  'session.approvalPolicy.changed': z.object({
+    approvalPolicy: z.enum(['ask', 'workspace', 'always'])
+  }),
   'session.model.changed': z.object({
     providerId: z.string(),
     modelId: z.string()
@@ -159,6 +162,11 @@ export const eventPayloadSchemas = {
     approvalId: z.string(),
     decision: z.enum(['approved', 'rejected', 'expired']),
     reason: z.string().optional()
+  }),
+  'approval.auto_approved': z.object({
+    approvalId: z.string(),
+    toolCallId: z.string(),
+    scope: z.string()
   }),
   'terminal.opened': z.object({
     terminalId: z.string(),

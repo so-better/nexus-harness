@@ -38,6 +38,7 @@ const eventTypes = [
   'usage.recorded',
   'approval.requested',
   'approval.resolved',
+  'approval.auto_approved',
   'context.compacted',
   'checkpoint.created',
   'checkpoint.restored'
@@ -262,6 +263,39 @@ describe('AgentLoop', () => {
     expect(executeTool).toHaveBeenCalledTimes(1);
     expect(events.some((event) => event.type === 'approval.requested')).toBe(true);
     expect(events.some((event) => event.type === 'approval.resolved')).toBe(true);
+  });
+
+  it('records automatic approval without requesting user approval', async () => {
+    const { bus, events } = createCollector();
+    const provider = new MockProvider([
+      {
+        toolCalls: [{ id: 'call-auto', name: 'write_file', arguments: { path: 'a.txt' } }],
+        finishReason: 'tool_calls'
+      },
+      { text: '完成', finishReason: 'stop' }
+    ]);
+    const executeTool = vi.fn().mockResolvedValue({ ok: true, output: 'written' });
+    const approveTool = vi.fn().mockResolvedValue(true);
+
+    const loop = new AgentLoop({
+      provider,
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '写文件' }],
+      tools: [writeTool],
+      permissionGateway: new PermissionGateway(['write']),
+      autoApprove: () => true,
+      approveTool,
+      executeTool,
+      eventBus: bus
+    });
+
+    await loop.run();
+
+    expect(approveTool).not.toHaveBeenCalled();
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    expect(events.some((event) => event.type === 'approval.auto_approved')).toBe(true);
+    expect(events.some((event) => event.type === 'approval.requested')).toBe(false);
   });
 
   it('prepares context before each model call and records compacted usage', async () => {

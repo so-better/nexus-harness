@@ -6,7 +6,9 @@
     :date-locale="naiveDateLocale"
   >
     <NMessageProvider>
-      <MainLayout />
+      <NDialogProvider>
+        <MainLayout />
+      </NDialogProvider>
     </NMessageProvider>
   </NConfigProvider>
 </template>
@@ -23,6 +25,7 @@ import {
   dateZhCN,
   enUS,
   NConfigProvider,
+  NDialogProvider,
   NMessageProvider,
   zhCN
 } from 'naive-ui';

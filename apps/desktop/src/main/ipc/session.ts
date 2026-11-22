@@ -15,6 +15,7 @@ import {
   sessionExportInputSchema,
   sessionRenameInputSchema,
   sessionSetModeInputSchema,
+  sessionSetApprovalPolicyInputSchema,
   sessionSetModelInputSchema,
   sessionSetPinnedInputSchema,
   type SessionClearAllResult,
@@ -224,6 +225,36 @@ export const registerSessionIpc = (): void => {
         return fail(
           'SESSION_MODE_FAILED',
           error instanceof Error ? error.message : '更新会话模式失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.sessionSetApprovalPolicy,
+    async (_event, rawInput: unknown): Promise<Result<SessionSummary>> => {
+      const parsed = sessionSetApprovalPolicyInputSchema.safeParse(rawInput);
+      if (!parsed.success) {
+        return fail('SESSION_INVALID_INPUT', '审批策略参数不合法', parsed.error.flatten());
+      }
+      if (!sessions.get(parsed.data.id)) {
+        return fail('SESSION_NOT_FOUND', `会话不存在：${parsed.data.id}`);
+      }
+      if (hasRunForSession(parsed.data.id)) {
+        return fail('SESSION_BUSY', '会话有运行中的任务，暂不能切换审批策略');
+      }
+      if (
+        parsed.data.approvalPolicy === 'workspace' &&
+        sessions.listRoots(parsed.data.id).length === 0
+      ) {
+        return fail('SESSION_WORKSPACE_REQUIRED', '工作区信任模式需要先选择工作区');
+      }
+      try {
+        return ok(sessions.setApprovalPolicy(parsed.data));
+      } catch (error) {
+        return fail(
+          'SESSION_APPROVAL_POLICY_FAILED',
+          error instanceof Error ? error.message : '更新审批策略失败'
         );
       }
     }

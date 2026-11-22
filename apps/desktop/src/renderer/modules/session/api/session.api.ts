@@ -6,6 +6,7 @@ import { nexus } from '@/app/nexus-bridge';
 import type { NexusEvent } from '@shared/events';
 import type {
   AgentMode,
+  ApprovalPolicy,
   SessionCreateInput,
   SessionExportResult,
   SessionRenameInput,
@@ -59,6 +60,11 @@ export const setSessionModel = async (
  */
 export const setSessionMode = async (id: string, mode: AgentMode): Promise<SessionSummary> =>
   unwrap(await nexus.session.setMode({ id, mode }));
+
+export const setSessionApprovalPolicy = async (
+  id: string,
+  approvalPolicy: ApprovalPolicy
+): Promise<SessionSummary> => unwrap(await nexus.session.setApprovalPolicy({ id, approvalPolicy }));
 
 /**
  * 读取会话已授权的工作区 root。

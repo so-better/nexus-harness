@@ -51,6 +51,7 @@
         @edit-message="editMessage"
         @regenerate-message="regenerateMessage"
         @export="(format) => exportActiveSession(format)"
+        @update-approval-policy="changeApprovalPolicy"
       />
       <TerminalPanel :session-id="activeId ?? undefined" :shortcut-enabled="!settingsOpen" />
     </div>
@@ -92,9 +93,9 @@
  */
 
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useMessage } from 'naive-ui';
+import { useDialog, useMessage } from 'naive-ui';
 import { storeToRefs } from 'pinia';
-import type { ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
+import type { ApprovalPolicy, ProviderPublic, SessionSummary } from '@shared/ipc/contracts';
 import { setLocale, t } from '@/app/i18n';
 import { effectiveTheme } from '@/app/theme';
 import ChatView from '@/modules/chat/views/ChatView.vue';
@@ -141,6 +142,7 @@ const TerminalPanel = defineAsyncComponent(
   () => import('@/modules/terminal/components/TerminalPanel.vue')
 );
 const message = useMessage();
+const dialog = useDialog();
 const { sessions: sessionList, activeId } = storeToRefs(sessions);
 const { providers, providerId, modelId, models, roots, runningBySession } = storeToRefs(chat);
 
@@ -194,6 +196,35 @@ const {
   rejectWorkspace,
   clearWorkspaceRequest
 } = useWorkspaceAuthorization();
+
+/**
+ * 切换会话审批策略；工作区信任必须有 workspace，始终信任需要二次确认。
+ */
+const changeApprovalPolicy = async (policy: ApprovalPolicy): Promise<void> => {
+  if (!activeId.value) return;
+  if (policy === 'workspace' && roots.value.length === 0) {
+    message.warning(t('approval.workspaceRequired'));
+    return;
+  }
+  if (policy === 'always') {
+    dialog.warning({
+      title: t('approval.alwaysConfirmTitle'),
+      content: t('approval.alwaysConfirm'),
+      positiveText: t('approval.enable'),
+      negativeText: t('approval.cancel'),
+      autoFocus: false,
+      onPositiveClick: () => {
+        if (!activeId.value) return;
+        sessions.updateApprovalPolicy(activeId.value, 'always').then((updated) => {
+          if (!updated) message.error(sessions.error ?? t('approval.workspaceRequired'));
+        });
+      }
+    });
+    return;
+  }
+  const updated = await sessions.updateApprovalPolicy(activeId.value, policy);
+  if (!updated) message.error(sessions.error ?? t('approval.workspaceRequired'));
+};
 
 const {
   send,

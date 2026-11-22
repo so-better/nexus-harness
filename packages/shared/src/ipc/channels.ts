@@ -80,6 +80,7 @@ export const IPC_CHANNELS = {
   sessionSetPinned: 'session:setPinned',
   sessionSetModel: 'session:setModel',
   sessionSetMode: 'session:setMode',
+  sessionSetApprovalPolicy: 'session:setApprovalPolicy',
   sessionRoots: 'session:roots',
   sessionAddRoots: 'session:addRoots',
   sessionRemoveRoot: 'session:removeRoot',

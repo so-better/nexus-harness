@@ -211,6 +211,11 @@ const migrate = (db: DatabaseSync): void => {
     db.exec('CREATE INDEX IF NOT EXISTS idx_events_type_ts ON events(type, ts)');
     db.exec('PRAGMA user_version = 11');
   }
+
+  if (version < 12) {
+    db.exec("ALTER TABLE sessions ADD COLUMN approval_policy TEXT NOT NULL DEFAULT 'ask'");
+    db.exec('PRAGMA user_version = 12');
+  }
 };
 
 /**

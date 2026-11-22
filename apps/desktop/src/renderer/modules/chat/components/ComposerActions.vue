@@ -9,6 +9,12 @@
       </span>
     </div>
     <div class="nh-composer__send-group">
+      <ApprovalPolicySelect
+        :approval-policy="approvalPolicy"
+        :disabled="running"
+        :has-workspace="hasWorkspace"
+        @update-approval-policy="emit('update-approval-policy', $event)"
+      />
       <AgentModeSelect
         :mode="mode"
         :disabled="running"
@@ -47,22 +53,30 @@
  */
 
 import { NButton, NText } from 'naive-ui';
-import type { AgentMode } from '@shared/ipc/contracts';
+import type { AgentMode, ApprovalPolicy } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import AgentModeSelect from './AgentModeSelect.vue';
+import ApprovalPolicySelect from './ApprovalPolicySelect.vue';
 
 defineProps<{
   disabled: boolean;
   disabledReason?: string | undefined;
   running: boolean;
   mode: AgentMode;
+  approvalPolicy: ApprovalPolicy;
+  hasWorkspace: boolean;
   canSend: boolean;
   canReference: boolean;
   canAttach: boolean;
 }>();
 
-const emit = defineEmits<{ stop: []; attach: []; 'update-mode': [mode: AgentMode] }>();
+const emit = defineEmits<{
+  stop: [];
+  attach: [];
+  'update-mode': [mode: AgentMode];
+  'update-approval-policy': [policy: ApprovalPolicy];
+}>();
 </script>
 
 <style scoped lang="less">

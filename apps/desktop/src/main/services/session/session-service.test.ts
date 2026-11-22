@@ -67,6 +67,20 @@ describe('session storage', () => {
     );
   });
 
+  it('defaults to ask and persists approval policy changes', () => {
+    const session = sessions.create();
+    expect(session.approvalPolicy).toBe('ask');
+
+    const updated = sessions.setApprovalPolicy({
+      id: session.id,
+      approvalPolicy: 'workspace'
+    });
+    expect(updated.approvalPolicy).toBe('workspace');
+    expect(
+      events.list(session.id).some((event) => event.type === 'session.approvalPolicy.changed')
+    ).toBe(true);
+  });
+
   it('sets auto titles only before a user title exists', () => {
     const session = sessions.create();
     expect(sessions.setAutoTitle(session.id, '自动标题')?.title).toBe('自动标题');

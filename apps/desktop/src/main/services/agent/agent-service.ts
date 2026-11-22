@@ -115,6 +115,7 @@ export interface AgentRunHooks {
     tool: AgentToolDefinition,
     approvalId: string
   ) => Promise<boolean>;
+  autoApprove?: (call: ProviderToolCall, tool: AgentToolDefinition) => boolean | Promise<boolean>;
   askUser?: (requestId: string, questions: AskQuestion[]) => Promise<AskUserAnswer[] | undefined>;
   requestWorkspace?: (call: {
     id?: string;
@@ -1818,6 +1819,7 @@ export class AgentService {
         prepareContext: (messages) => context.prepare(messages, tools),
         sanitizeToolInput: (call) => sanitizeImageConfigInput(call.name, call.arguments),
         ...(hooks.approveTool ? { approveTool: hooks.approveTool } : {}),
+        ...(hooks.autoApprove ? { autoApprove: hooks.autoApprove } : {}),
         eventBus,
         ...(providerConfig.extraParams ? { extraParams: providerConfig.extraParams } : {}),
         ...(hooks.signal ? { signal: hooks.signal } : {}),

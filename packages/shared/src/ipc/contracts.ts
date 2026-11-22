@@ -251,6 +251,7 @@ export interface NexusBridge {
     setPinned: (input: SessionSetPinnedInput) => Promise<Result<SessionSummary>>;
     setModel: (input: SessionSetModelInput) => Promise<Result<SessionSummary>>;
     setMode: (input: SessionSetModeInput) => Promise<Result<SessionSummary>>;
+    setApprovalPolicy: (input: SessionSetApprovalPolicyInput) => Promise<Result<SessionSummary>>;
     roots: (id: string) => Promise<Result<SessionRoot[]>>;
     addRoots: (input: SessionAddRootsInput) => Promise<Result<SessionRoot[]>>;
     removeRoot: (input: SessionRemoveRootInput) => Promise<Result<SessionRoot[]>>;
@@ -526,6 +527,7 @@ export const sessionStatusSchema = z.enum([
 ]);
 
 export const agentModeSchema = z.enum(['plan', 'build']);
+export const approvalPolicySchema = z.enum(['ask', 'workspace', 'always']);
 
 /**
  * 会话导出格式与结果。
@@ -552,6 +554,7 @@ export const sessionSummarySchema = z.object({
   pinned: z.boolean(),
   status: sessionStatusSchema,
   mode: agentModeSchema,
+  approvalPolicy: approvalPolicySchema,
   providerId: z.string().optional(),
   modelId: z.string().optional(),
   createdAt: z.number(),
@@ -564,7 +567,8 @@ export const sessionCreateInputSchema = z.object({
   workspaceId: z.string().optional(),
   providerId: z.string().optional(),
   modelId: z.string().optional(),
-  mode: agentModeSchema.optional()
+  mode: agentModeSchema.optional(),
+  approvalPolicy: approvalPolicySchema.optional()
 });
 
 export const sessionRenameInputSchema = z.object({
@@ -605,6 +609,11 @@ export const sessionSetModeInputSchema = z.object({
   mode: agentModeSchema
 });
 
+export const sessionSetApprovalPolicyInputSchema = z.object({
+  id: z.string().min(1),
+  approvalPolicy: approvalPolicySchema
+});
+
 export const sessionRootSchema = z.object({
   id: z.string().min(1),
   sessionId: z.string().min(1),
@@ -627,6 +636,7 @@ export const sessionRemoveRootInputSchema = z.object({
 
 export type SessionStatus = z.infer<typeof sessionStatusSchema>;
 export type AgentMode = z.infer<typeof agentModeSchema>;
+export type ApprovalPolicy = z.infer<typeof approvalPolicySchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type SessionCreateInput = z.infer<typeof sessionCreateInputSchema>;
 export type SessionRenameInput = z.infer<typeof sessionRenameInputSchema>;
@@ -636,6 +646,7 @@ export type SessionSearchResult = z.infer<typeof sessionSearchResultSchema>;
 export type SessionSetPinnedInput = z.infer<typeof sessionSetPinnedInputSchema>;
 export type SessionSetModelInput = z.infer<typeof sessionSetModelInputSchema>;
 export type SessionSetModeInput = z.infer<typeof sessionSetModeInputSchema>;
+export type SessionSetApprovalPolicyInput = z.infer<typeof sessionSetApprovalPolicyInputSchema>;
 export type SessionRoot = z.infer<typeof sessionRootSchema>;
 export type SessionAddRootsInput = z.infer<typeof sessionAddRootsInputSchema>;
 export type SessionRemoveRootInput = z.infer<typeof sessionRemoveRootInputSchema>;

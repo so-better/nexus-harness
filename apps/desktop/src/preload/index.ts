@@ -60,6 +60,7 @@ const bridge: NexusBridge = {
     setPinned: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionSetPinned, input),
     setModel: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionSetModel, input),
     setMode: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionSetMode, input),
+    setApprovalPolicy: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionSetApprovalPolicy, input),
     roots: (id) => ipcRenderer.invoke(IPC_CHANNELS.sessionRoots, id),
     addRoots: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionAddRoots, input),
     removeRoot: (input) => ipcRenderer.invoke(IPC_CHANNELS.sessionRemoveRoot, input),

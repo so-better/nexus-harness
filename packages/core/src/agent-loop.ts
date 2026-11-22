@@ -65,6 +65,7 @@ export interface AgentLoopOptions {
     tool: AgentToolDefinition,
     approvalId: string
   ) => Promise<boolean>;
+  autoApprove?: (call: ProviderToolCall, tool: AgentToolDefinition) => boolean | Promise<boolean>;
   signal?: AbortSignal;
 }
 
@@ -418,6 +419,16 @@ export class AgentLoop {
     }
 
     if (tool.requiresApproval) {
+      if (this.options.autoApprove && (await this.options.autoApprove(call, tool))) {
+        const approvalId = randomUUID();
+        this.emit('approval.auto_approved', {
+          approvalId,
+          toolCallId: call.id,
+          scope: tool.name
+        });
+        this.approvalStatuses.set(call.id, 'approved');
+        return undefined;
+      }
       const approve = this.options.approveTool;
       if (!approve) {
         return { code: 'TOOL_APPROVAL_REQUIRED', message: `工具需要审批：${call.name}` };
