@@ -361,6 +361,17 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 
+.nh-layout--skin :deep(.nh-composer) {
+  background: transparent;
+}
+
+.nh-layout--skin :deep(.nh-composer .n-input),
+.nh-layout--skin :deep(.nh-composer .n-input:hover),
+.nh-layout--skin :deep(.nh-composer .n-input.n-input--focus),
+.nh-layout--skin :deep(.nh-composer .n-input.n-input--stateful) {
+  background-color: transparent;
+}
+
 .nh-layout__body,
 .nh-layout :deep(.nh-statusbar) {
   position: relative;
