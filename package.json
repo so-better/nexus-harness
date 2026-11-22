@@ -16,7 +16,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "rebuild:native": "pnpm --filter @nexus/desktop rebuild:native",
-    "postinstall": "pnpm --filter @nexus/desktop rebuild:native"
+    "postinstall": "pnpm --filter @nexus/desktop rebuild:native",
+    "dist:mac": "pnpm --filter @nexus/desktop dist:mac",
+    "dist:win": "pnpm --filter @nexus/desktop dist:win",
+    "dist": "pnpm --filter @nexus/desktop dist"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

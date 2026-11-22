@@ -1649,7 +1649,12 @@ pnpm test           # 单元测试
 pnpm test:e2e       # 端到端测试
 pnpm format         # Prettier
 pnpm rebuild:native # 为 Electron 重建 node-pty
+pnpm dist:mac      # 构建 macOS dmg/zip
+pnpm dist:win      # 构建 Windows NSIS 安装包
 ```
+
+- `dist:mac` / `dist:win` 会先执行 `electron-vite build`，再由 electron-builder 打包到 `apps/desktop/release`。
+- macOS 本机推荐分别执行 `dist:mac`；Windows 安装包建议在 Windows runner 构建，跨平台构建依赖 Wine 与对应原生模块。
 
 - 禁止提交 `typecheck` 或 `lint` 失败代码。
 - 禁止在源码中写死环境路径、密钥、服务地址。

@@ -11,7 +11,13 @@
     "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json --composite false",
-    "rebuild:native": "electron-rebuild -f -w node-pty"
+    "rebuild:native": "electron-rebuild -f -w node-pty",
+    "dist:mac": "pnpm build && electron-builder --mac",
+    "dist:mac:arm64": "pnpm build && electron-builder --mac --arm64",
+    "dist:mac:x64": "pnpm build && electron-builder --mac --x64",
+    "dist:win": "pnpm build && electron-builder --win",
+    "dist:win:x64": "pnpm build && electron-builder --win --x64",
+    "dist": "pnpm build && electron-builder"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
@@ -47,6 +53,7 @@
     "@types/node": "^26.6.6",
     "@vitejs/plugin-vue": "^6.0.11",
     "electron": "^45.3.3",
+    "electron-builder": "^26.18.0",
     "electron-vite": "^6.0.0",
     "jsdom": "^31.0.1",
     "less": "^4.9.1",
@@ -85,6 +92,44 @@
         "to": "icon.ico"
       }
     ],
-    "icon": "build/icon"
-  }
+    "icon": "build/icon",
+    "appId": "com.nexus.harness",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.icns"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "description": "Nexus AI Agent desktop workspace",
+  "author": "Nexus",
+  "packageManager": "pnpm@10.27.0"
 }
