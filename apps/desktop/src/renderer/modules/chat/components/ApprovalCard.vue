@@ -132,7 +132,7 @@ const title = computed(() => {
   padding: 8px 10px;
   border: 1px solid var(--nh-border-subtle);
   border-radius: 8px;
-  background: var(--nh-color-bg-elevated);
+  background: var(--nh-surface-elevated);
 }
 
 .nh-approval-summary__main {

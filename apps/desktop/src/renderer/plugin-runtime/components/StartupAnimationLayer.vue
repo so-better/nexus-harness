@@ -150,7 +150,7 @@ onBeforeUnmount(() => {
 <style scoped lang="less">
 .nh-startup {
   position: fixed;
-  z-index: 1000;
+  z-index: var(--nh-z-overlay);
   inset: 0;
   overflow: hidden;
   background: var(--nh-color-bg-base);

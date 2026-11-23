@@ -16,8 +16,16 @@
   --nh-space-lg: 24px;
   --nh-surface-base: var(--nh-color-bg-base);
   --nh-surface-elevated: var(--nh-color-bg-elevated);
+  --nh-surface-overlay: var(--nh-color-bg-modal);
+  --nh-surface-popover: var(--nh-color-bg-popover);
+  --nh-surface-input: var(--nh-color-bg-base);
   --nh-border-subtle: var(--nh-color-border);
-  --nh-input-bg: var(--nh-color-bg-base);
+  --nh-input-bg: var(--nh-surface-input);
+  --nh-z-skin: 0;
+  --nh-z-content: 1;
+  --nh-z-chrome: 2;
+  --nh-z-overlay: 1000;
+  --nh-z-overlay-raised: 1001;
   --nh-mask: #000;
   --nh-shadow-card: 0 1px 2px rgb(28 27 25 / 4%), 0 8px 24px rgb(28 27 25 / 5%);
   --nh-shadow-float: 0 2px 8px rgb(28 27 25 / 6%), 0 16px 48px rgb(28 27 25 / 8%);
@@ -31,6 +39,13 @@
   --nh-duration-base: 200ms;
   --nh-duration-panel: 240ms;
   --nh-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+:root[data-skin='active'] {
+  --nh-surface-base: color-mix(in srgb, var(--nh-color-bg-base) 52%, transparent);
+  --nh-surface-elevated: color-mix(in srgb, var(--nh-color-bg-elevated) 60%, transparent);
+  --nh-border-subtle: color-mix(in srgb, var(--nh-color-border) 66%, transparent);
+  --nh-surface-input: color-mix(in srgb, var(--nh-color-bg-base) 76%, transparent);
 }
 
 :root[data-theme='dark'] {
@@ -112,10 +127,24 @@ body:has(.n-modal-mask) .nh-titlebar {
 }
 
 /**
+ * 弹层保持独立不透明表面；重置皮肤 surface，避免输入框和边框被主界面皮肤污染。
+ */
+.n-modal,
+.n-dialog,
+.n-popover,
+.n-dropdown-menu {
+  --nh-surface-base: var(--nh-color-bg-base);
+  --nh-surface-elevated: var(--nh-color-bg-elevated);
+  --nh-surface-input: var(--nh-color-bg-base);
+  --nh-border-subtle: var(--nh-color-border);
+  --nh-input-bg: var(--nh-color-bg-base);
+}
+
+/**
  * 全局卡片式模态框：用独立表面色和描边与主界面拉开层级。
  */
 .n-modal.n-card {
-  background: var(--nh-color-bg-modal);
+  background: var(--nh-surface-overlay);
   box-shadow:
     var(--nh-shadow-float),
     inset 0 0 0 1px color-mix(in srgb, var(--nh-border-subtle) 68%, transparent);
@@ -123,9 +152,14 @@ body:has(.n-modal-mask) .nh-titlebar {
 
 .n-popover:not(.n-tooltip, .n-popconfirm),
 .n-dropdown-menu {
+  background: var(--nh-surface-popover);
   box-shadow: var(--nh-shadow-popover);
   outline: 1px solid color-mix(in srgb, var(--nh-border-subtle) 55%, transparent);
   outline-offset: -1px;
+}
+
+.n-dialog {
+  background-color: var(--nh-surface-overlay);
 }
 
 ::-webkit-scrollbar {

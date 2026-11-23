@@ -1411,6 +1411,13 @@ interface AskUserAnswer {
 - 插件 UI 只允许使用 `--nh-*` 语义变量，禁止写死颜色与字体。
 - 插件不得覆盖全局 token，只能读取；`themes` 贡献点不开放。
 
+皮肤兼容：
+
+- 皮肤激活时由宿主在 `<html data-skin="active">` 上统一覆盖 surface token，不能只依赖 `.nh-layout` 局部变量，否则 Teleport 弹层拿不到。
+- 可跟随皮肤的主内容面使用 `--nh-surface-base` / `--nh-surface-elevated` / `--nh-surface-input`；不要再直接使用 `--nh-color-bg-base` 或 `--nh-color-bg-elevated` 作为内容表面。
+- 弹窗、Popover、Dropdown、Dialog 使用不透明的 `--nh-surface-overlay` / `--nh-surface-popover`，保证可读性；终端、Monaco、代码块、启动动画属于固定不透明区域，不跟随皮肤。
+- 层级统一使用 `--nh-z-skin`、`--nh-z-content`、`--nh-z-chrome`、`--nh-z-overlay` / `--nh-z-overlay-raised`，禁止新增散落的 z-index 魔法值。
+
 ### 5.3 动效与质感
 
 - 只使用动效 token：即时反馈 `--nh-duration-fast`，常规过渡 `--nh-duration-base`，面板进出 `--nh-duration-panel`。

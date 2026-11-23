@@ -75,7 +75,7 @@ onBeforeUnmount(unmountSkin);
 <style scoped lang="less">
 .nh-plugin-skin {
   position: fixed;
-  z-index: 0;
+  z-index: var(--nh-z-skin);
   inset: 0;
   overflow: hidden;
   pointer-events: none;

@@ -73,13 +73,13 @@ watch(
 <style scoped lang="less">
 .nh-terminal-menu-mask {
   position: fixed;
-  z-index: 1000;
+  z-index: var(--nh-z-overlay);
   inset: 0;
 }
 
 .nh-terminal-menu {
   position: fixed;
-  z-index: 1001;
+  z-index: var(--nh-z-overlay-raised);
   display: flex;
   width: 208px;
   flex-direction: column;

@@ -86,7 +86,7 @@ const canPreview = computed(() => {
   padding: 8px 10px;
   border: 1px solid var(--nh-border-subtle);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--nh-color-bg-base) 82%, transparent);
+  background: var(--nh-surface-base);
 }
 
 .nh-output-file__row {

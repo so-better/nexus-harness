@@ -61,7 +61,7 @@ const handleAfterLeave = (): void => {
 .nh-plugin-view-modal :deep(.n-card-header) {
   padding: 18px 24px;
   border-bottom: 1px solid var(--nh-border-subtle);
-  background: color-mix(in srgb, var(--nh-color-bg-elevated) 72%, transparent);
+  background: var(--nh-surface-overlay);
 }
 
 .nh-plugin-view-modal :deep(.n-card-header__main) {
@@ -74,6 +74,6 @@ const handleAfterLeave = (): void => {
   max-height: min(720px, calc(100vh - 180px));
   padding: 18px 24px 24px;
   overflow: auto;
-  background: color-mix(in srgb, var(--nh-color-bg-base) 78%, transparent);
+  background: var(--nh-surface-overlay);
 }
 </style>

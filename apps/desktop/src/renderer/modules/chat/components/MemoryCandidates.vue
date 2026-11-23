@@ -135,7 +135,7 @@ watch(
   max-width: 1104px;
   border: 1px solid var(--nh-border-subtle);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--nh-color-bg-elevated) 72%, transparent);
+  background: var(--nh-surface-elevated);
 }
 
 .nh-memory-candidates__header,

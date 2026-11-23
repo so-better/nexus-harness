@@ -1,5 +1,5 @@
 <template>
-  <div class="nh-layout" :class="{ 'nh-layout--skin': pluginRuntime.activeSkin }">
+  <div class="nh-layout" :class="{ 'nh-layout--skin': Boolean(pluginRuntime.activeSkinMount) }">
     <PluginSkinLayer />
     <AppTitleBar :title="sessions.activeSession?.title" :platform="platform" />
     <div class="nh-layout__body">
@@ -147,6 +147,15 @@ const { sessions: sessionList, activeId } = storeToRefs(sessions);
 const { providers, providerId, modelId, models, roots, runningBySession } = storeToRefs(chat);
 
 const { version, platform, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
+
+watch(
+  () => Boolean(pluginRuntime.activeSkinMount),
+  (active) => {
+    if (active) document.documentElement.dataset.skin = 'active';
+    else delete document.documentElement.dataset.skin;
+  },
+  { immediate: true }
+);
 const {
   exporting,
   focusMessage,
@@ -346,6 +355,7 @@ onBeforeUnmount(() => {
   unsubscribeWorkspaceSettled = undefined;
   unsubscribeGeneralSettings?.();
   unsubscribeGeneralSettings = undefined;
+  delete document.documentElement.dataset.skin;
   chat.dispose();
   pluginRuntime.dispose().catch(() => undefined);
 });
@@ -353,11 +363,6 @@ onBeforeUnmount(() => {
 
 <style scoped lang="less">
 .nh-layout.nh-layout--skin {
-  --nh-surface-base: color-mix(in srgb, var(--nh-color-bg-base) 52%, transparent);
-  --nh-surface-elevated: color-mix(in srgb, var(--nh-color-bg-elevated) 60%, transparent);
-  --nh-border-subtle: color-mix(in srgb, var(--nh-color-border) 66%, transparent);
-  --nh-input-bg: color-mix(in srgb, var(--nh-color-bg-base) 76%, transparent);
-
   background: transparent;
 }
 
@@ -375,12 +380,12 @@ onBeforeUnmount(() => {
 .nh-layout__body,
 .nh-layout :deep(.nh-statusbar) {
   position: relative;
-  z-index: 1;
+  z-index: var(--nh-z-content);
 }
 
 .nh-layout :deep(.nh-titlebar) {
   position: relative;
-  z-index: 2;
+  z-index: var(--nh-z-chrome);
 }
 
 .nh-layout {
