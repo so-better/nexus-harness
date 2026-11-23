@@ -259,6 +259,8 @@ describe('AgentService', () => {
       'save_excel',
       'save_ppt',
       'save_pdf',
+      'web_search',
+      'web_fetch',
       'theme_get',
       'theme_update',
       'skin_list',

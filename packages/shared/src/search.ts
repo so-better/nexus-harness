@@ -5,7 +5,8 @@
 import { z } from 'zod';
 
 export const searchSettingsSchema = z.object({
-  pexelsApiKey: z.string().optional()
+  pexelsApiKey: z.string().optional(),
+  anysearchApiKey: z.string().optional()
 });
 
 export type SearchSettings = z.infer<typeof searchSettingsSchema>;

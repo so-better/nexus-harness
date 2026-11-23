@@ -97,6 +97,13 @@ const summary = computed<{ label: string; value: string; meta?: string }>(() => 
   if ((name === 'search_images' || name === 'search_videos') && query) {
     return { label: t('chat.approvalSummarySearch'), value: query };
   }
+  if (name === 'web_search' && query) {
+    return { label: t('chat.approvalSummaryWebSearch'), value: query };
+  }
+  const url = stringValue('url');
+  if (name === 'web_fetch' && url) {
+    return { label: t('chat.approvalSummaryWebFetch'), value: url };
+  }
   return { label: t('chat.approvalSummaryTool'), value: name ?? props.approval.scope };
 });
 

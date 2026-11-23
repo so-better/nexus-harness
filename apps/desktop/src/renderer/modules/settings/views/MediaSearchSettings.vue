@@ -64,6 +64,74 @@
       <span class="nh-media__local">{{ t('settings.pexelsLocalOnly') }}</span>
     </div>
   </section>
+
+  <section class="nh-media">
+    <div class="nh-media__header">
+      <div class="nh-media__heading">
+        <span class="nh-media__icon"><AppIcon name="globe" :size="18" /></span>
+        <div>
+          <p class="nh-media__title">{{ t('settings.webSearch') }}</p>
+          <p class="nh-media__hint">{{ t('settings.webSearchHint') }}</p>
+        </div>
+      </div>
+      <NTag size="small" :bordered="false" :type="anysearchConfigured ? 'success' : 'default'">
+        {{
+          anysearchConfigured ? t('settings.anysearchConfigured') : t('settings.anysearchAnonymous')
+        }}
+      </NTag>
+    </div>
+
+    <div class="nh-media__field">
+      <label class="nh-media__label" for="anysearch-api-key">
+        {{ t('settings.anysearchApiKey') }}
+      </label>
+      <div class="nh-media__form">
+        <NInput
+          id="anysearch-api-key"
+          v-model:value="anysearchApiKey"
+          size="large"
+          type="password"
+          show-password-on="click"
+          clearable
+          :placeholder="t('settings.anysearchPlaceholder')"
+        >
+          <template #prefix><AppIcon name="key" :size="15" /></template>
+        </NInput>
+        <NButton
+          type="primary"
+          size="large"
+          :loading="savingAnysearch"
+          :disabled="!anysearchApiKey.trim() && !savedAnysearchKey"
+          @click="saveAnysearch"
+        >
+          {{ t('settings.save') }}
+        </NButton>
+      </div>
+    </div>
+
+    <div class="nh-media__steps">
+      <div class="nh-media__step">
+        <span class="nh-media__step-index">1</span>
+        <p>{{ t('settings.anysearchStep1') }}</p>
+      </div>
+      <div class="nh-media__step">
+        <span class="nh-media__step-index">2</span>
+        <p>{{ t('settings.anysearchStep2') }}</p>
+      </div>
+      <div class="nh-media__step">
+        <span class="nh-media__step-index">3</span>
+        <p>{{ t('settings.anysearchStep3') }}</p>
+      </div>
+    </div>
+
+    <div class="nh-media__footer">
+      <NButton text type="primary" size="small" @click="openAnysearch">
+        {{ t('settings.anysearchOpen') }}
+        <template #icon><AppIcon name="export" :size="14" /></template>
+      </NButton>
+      <span class="nh-media__local">{{ t('settings.anysearchLocalOnly') }}</span>
+    </div>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -81,13 +149,27 @@ const message = useMessage();
 const pexelsApiKey = ref('');
 const savedKey = ref('');
 const savingSearch = ref(false);
+const savingAnysearch = ref(false);
+const anysearchApiKey = ref('');
+const savedAnysearchKey = ref('');
 const configured = computed(() => Boolean(savedKey.value.trim()));
+const anysearchConfigured = computed(() => Boolean(savedAnysearchKey.value.trim()));
 
 const load = async (): Promise<void> => {
   try {
     const settings = await getSearchSettings();
     savedKey.value = settings?.pexelsApiKey ?? '';
     pexelsApiKey.value = savedKey.value;
+    savedAnysearchKey.value = settings?.anysearchApiKey ?? '';
+    anysearchApiKey.value = savedAnysearchKey.value;
+  } catch (reason) {
+    message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
+  }
+};
+
+const openAnysearch = async (): Promise<void> => {
+  try {
+    await openExternalLink('https://www.anysearch.com/console/api-keys');
   } catch (reason) {
     message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
   }
@@ -105,7 +187,8 @@ const saveMediaSearch = async (): Promise<void> => {
   savingSearch.value = true;
   try {
     await setSearchSettings({
-      ...(pexelsApiKey.value.trim() ? { pexelsApiKey: pexelsApiKey.value.trim() } : {})
+      ...(pexelsApiKey.value.trim() ? { pexelsApiKey: pexelsApiKey.value.trim() } : {}),
+      ...(savedAnysearchKey.value.trim() ? { anysearchApiKey: savedAnysearchKey.value.trim() } : {})
     });
     savedKey.value = pexelsApiKey.value.trim();
     pexelsApiKey.value = savedKey.value;
@@ -114,6 +197,23 @@ const saveMediaSearch = async (): Promise<void> => {
     message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
   } finally {
     savingSearch.value = false;
+  }
+};
+
+const saveAnysearch = async (): Promise<void> => {
+  savingAnysearch.value = true;
+  try {
+    await setSearchSettings({
+      ...(savedKey.value.trim() ? { pexelsApiKey: savedKey.value.trim() } : {}),
+      ...(anysearchApiKey.value.trim() ? { anysearchApiKey: anysearchApiKey.value.trim() } : {})
+    });
+    savedAnysearchKey.value = anysearchApiKey.value.trim();
+    anysearchApiKey.value = savedAnysearchKey.value;
+    message.success(t('settings.saved'));
+  } catch (reason) {
+    message.error(reason instanceof Error ? reason.message : t('settings.loadFailed'));
+  } finally {
+    savingAnysearch.value = false;
   }
 };
 

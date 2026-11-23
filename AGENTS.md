@@ -633,6 +633,8 @@ interface ProviderCapabilities {
 | `save_file` | write | 否（写入 `files`） |
 | `save_word` / `save_excel` / `save_ppt` / `save_pdf` | write | 否（写入 `files`） |
 | `search_images` / `search_videos` | network | 是 |
+| `web_search` | network | 是（AnySearch，无 Key 匿名限流） |
+| `web_fetch` | network | 是（AnySearch 网页正文） |
 | `generate_image` | network | 是（计费操作） |
 | `plugin_list` / `plugin_read` / `skill_list` / `skill_refresh` | read | 否 |
 | `mcp_list` / `mcp_read` | read | 否 |
@@ -1159,7 +1161,7 @@ export function activate(ctx) {
 ### 4.7.1 网络策略
 
 - 默认拒绝所有出站网络；按 provider、域名、端口显式放行。
-- 图像生成、媒体搜索与 MCP HTTP 分别配置域名白名单；`localhost` 也需要显式允许。
+- 图像生成、媒体搜索、AnySearch 联网搜索与 MCP HTTP 分别配置域名白名单；`localhost` 也需要显式允许。
 - URL 经 DNS 解析后拒绝私网、回环、链路本地与云元数据地址；重定向每跳重新校验并限制次数。
 - 网络响应设置大小与超时上限；大文件流式写入 `files`，不整体载入内存。
 - 用户配置的 Base URL、图像模板与 MCP HTTP 地址同样做 SSRF 校验。
@@ -1170,7 +1172,7 @@ export function activate(ctx) {
 
 - 设置分三个层级，优先级为 **Session > Workspace > App**；读取时逐层合并，写入时记录 scope。
 - 设置分类：通用、记忆、模型与提供商、终端、外观、缓存、权限与审批、快捷键、高级；终端设置包含 shell、字号、滚回、选中即复制与 WebGL；字体使用默认等宽字体，默认字号 12px，自动检测的 shell 路径需回显。
-- 模型与提供商：对话 Provider 保持 Base URL、API Key、模型名、上下文窗口、`extraParams` 与自定义 headers；图像模型在独立入口配置完整请求 URL、模型、Key、headers、请求体模板与结果路径；媒体搜索在通用设置中配置 Pexels API Key。当前不做本地 token 单价配置，费用仅记录 Provider 返回的 cost。
+- 模型与提供商：对话 Provider 保持 Base URL、API Key、模型名、上下文窗口、`extraParams` 与自定义 headers；图像模型在独立入口配置完整请求 URL、模型、Key、headers、请求体模板与结果路径；媒体搜索在通用设置中配置 Pexels API Key；联网搜索配置 AnySearch API Key（可选，匿名访问也可用，但有更严格的限速与每日额度）。当前不做本地 token 单价配置，费用仅记录 Provider 返回的 cost。
 - 支持连接测试与模型列表刷新；API Key 随本地 Provider 配置保存；不写死默认模型。
 - 图像模型可选；未配置时不注册 `generate_image`，设置页提供引导。
 - 权限与审批：默认审批策略、命令白名单、敏感路径策略、工作区信任管理。
@@ -1840,7 +1842,7 @@ CHANGELOG.md         # 版本变更记录
 | 路径授权 | 会话级 | 会话流内联授权卡，按目标路径请求，敏感目录始终拒绝 |
 | 检查点 | 逐文件快照 | 不依赖 git，工作区与临时会话通用 |
 | AI 输出文件 | `<userData>/files` | 永久保留，手动清理；仅通过 fileId 另存为 |
-| Office/媒体工具 | 核心工具 | `save_*` 与 Pexels 图片/视频搜索内置 |
+| Office/媒体工具 | 核心工具 | `save_*`、Pexels 图片/视频搜索与 AnySearch 联网搜索内置 |
 | Prompt 策略 | 静态前缀 + 动态追加 | 动态上下文追加到用户消息，保护 prompt cache |
 | Prompt 行为 | 内置约束 | 反幻觉、工具诚实、运行元信息、链接真实性、文件生成自检 |
 | 图像生成 | 工具化 | 独立图像模板（URL + body + result + 可选 poll），文本模型通过 `generate_image` 调用 |
@@ -1865,7 +1867,7 @@ CHANGELOG.md         # 版本变更记录
 | 跨会话搜索 | SQLite FTS5 | 消息正文；结果附会话标题与定位信息 |
 | 网络访问 | 默认拒绝 | 按 provider / 域名显式放行 |
 | 发布 | 签名 + 自动更新 | stable / beta 双通道 |
-| 网络工具 | 仅内置媒体搜索 | Pexels API Key 本地配置；其他网络能力后续通过 MCP 或 Skill 扩展 |
+| 网络工具 | 内置媒体搜索 + 联网搜索/正文读取 | Pexels / AnySearch Key 本地配置；AnySearch 无 Key 时匿名限流；其他网络能力通过 MCP 或 Skill 扩展 |
 | MCP 接入时机 | M3 | 先支持本地 stdio Server |
 | 高风险插件权限 | 已定 | `workspace:write`、`network` 不开放；工作区写入走 Agent 工具与审批，外部网络统一通过 MCP |
 | 自动更新渠道 | M5 | stable / beta 双通道 |

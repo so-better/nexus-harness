@@ -10,5 +10,7 @@ export * from './save-pdf';
 export { createFileToolset, fileToolDefinitions, runCommandInputSchema } from './file-toolset';
 export type { FileToolDefinition, FileToolResult, FileToolset } from './file-toolset';
 export * from './search-images';
+export * from './web-search';
+export * from './web-fetch';
 export * from './search-videos';
 export { readTextFileOrExtract } from './read-file/binary-reader';
