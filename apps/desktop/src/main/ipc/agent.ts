@@ -19,7 +19,11 @@ import {
 } from '@shared/ipc/contracts';
 import { askUserResolveInputSchema, type AskUserResolveResult } from '@shared/ask-user';
 import { fail, ok, type Result } from '@shared/ipc/result';
-import { AgentService, createAgentProvider } from '../services/agent/agent-service';
+import {
+  AgentService,
+  buildModelExtraParams,
+  createAgentProvider
+} from '../services/agent/agent-service';
 import { createSkillService } from '../services/skills/skill-service';
 import { getMcpService } from '../services/mcp/mcp-service-instance';
 import { approvalService } from '../services/agent/approval-service';
@@ -301,7 +305,10 @@ export const registerAgentIpc = (): void => {
             parsed.data.prompt.trim() ||
               parsed.data.references?.map((reference) => reference.name).join(', ') ||
               '',
-            provider.extraParams
+            (() => {
+              const model = provider.models.find((item) => item.id === parsed.data.modelId);
+              return model ? buildModelExtraParams(model, provider.protocol) : undefined;
+            })()
           )
             .then(({ title, usage }) => {
               const updated = sessions.setAutoTitle(session.id, title);

@@ -58,43 +58,101 @@
           </div>
 
           <div v-if="isSelected(model.id)" class="nh-model-row__config">
-            <label class="nh-model-row__field">
-              <span>{{ t('settings.modelContext') }}</span>
-              <NInputNumber
-                size="small"
-                style="width: 100%"
-                :value="model.contextWindow"
-                :min="4096"
-                :step="1024"
-                @update:value="
-                  (value: number | null) => updateModel(model.id, 'contextWindow', value)
-                "
-              />
-            </label>
-            <label class="nh-model-row__field">
-              <span>{{ t('settings.modelOutput') }}</span>
-              <NInputNumber
-                size="small"
-                style="width: 100%"
-                :value="model.maxOutputTokens"
-                :min="256"
-                :step="256"
-                @update:value="
-                  (value: number | null) => updateModel(model.id, 'maxOutputTokens', value)
-                "
-              />
-            </label>
-            <label
+            <div class="nh-model-row__row nh-model-row__row--budget">
+              <label class="nh-model-row__field">
+                <span>{{ t('settings.modelContext') }}</span>
+                <NInputNumber
+                  size="small"
+                  style="width: 100%"
+                  :value="model.contextWindow"
+                  :min="4096"
+                  :step="1024"
+                  @update:value="
+                    (value: number | null) => updateModel(model.id, 'contextWindow', value)
+                  "
+                >
+                  <template #suffix>
+                    <span class="nh-model-row__unit">{{ t('settings.modelTokensUnit') }}</span>
+                  </template>
+                </NInputNumber>
+              </label>
+              <label class="nh-model-row__field">
+                <span>{{ t('settings.modelOutput') }}</span>
+                <NInputNumber
+                  size="small"
+                  style="width: 100%"
+                  :value="model.maxOutputTokens"
+                  :min="256"
+                  :step="256"
+                  @update:value="
+                    (value: number | null) => updateModel(model.id, 'maxOutputTokens', value)
+                  "
+                >
+                  <template #suffix>
+                    <span class="nh-model-row__unit">{{ t('settings.modelTokensUnit') }}</span>
+                  </template>
+                </NInputNumber>
+              </label>
+            </div>
+
+            <div
               v-if="protocol !== 'anthropic'"
-              class="nh-model-row__field nh-model-row__field--checkbox"
+              class="nh-model-row__row nh-model-row__row--reasoning"
             >
-              <span>{{ t('settings.modelReasoningPassback') }}</span>
-              <NCheckbox
-                :checked="model.reasoningPassback === true"
-                @update:checked="
-                  (checked: boolean) => updateModel(model.id, 'reasoningPassback', checked)
-                "
-              />
+              <label class="nh-model-row__field nh-model-row__field--switch">
+                <span>{{ t('settings.thinkingMode') }}</span>
+                <NSwitch
+                  size="small"
+                  :value="model.thinkingMode !== 'disabled'"
+                  @update:value="
+                    (value: boolean) =>
+                      updateModel(model.id, 'thinkingMode', value ? 'enabled' : 'disabled')
+                  "
+                />
+              </label>
+              <label class="nh-model-row__field nh-model-row__field--switch">
+                <span>{{ t('settings.modelReasoningPassback') }}</span>
+                <NSwitch
+                  size="small"
+                  :value="model.reasoningPassback !== false"
+                  @update:value="
+                    (value: boolean) => updateModel(model.id, 'reasoningPassback', value)
+                  "
+                />
+              </label>
+              <label class="nh-model-row__field">
+                <span>{{ t('settings.reasoningEffort') }}</span>
+                <NSelect
+                  size="small"
+                  :value="model.reasoningEffort ?? 'default'"
+                  :options="effortOptions"
+                  @update:value="(value: string) => updateModel(model.id, 'reasoningEffort', value)"
+                />
+              </label>
+            </div>
+
+            <label class="nh-model-row__field nh-model-row__field--extra">
+              <span class="nh-model-row__label-row">
+                <span>{{ t('settings.modelExtraParams') }}</span>
+                <small class="nh-model-row__hint">
+                  {{ t('settings.modelExtraParamsHint') }}
+                </small>
+              </span>
+              <div class="nh-model-row__extra-body">
+                <NInput
+                  :value="extraText(model)"
+                  type="textarea"
+                  size="small"
+                  :autosize="{ minRows: 4, maxRows: 10 }"
+                  :placeholder="t('settings.extraParamsPlaceholder')"
+                  v-bind="extraErrors[model.id] ? { status: 'error' } : {}"
+                  @update:value="(value: string) => updateExtraDraft(model, value)"
+                  @blur="resetExtraDraft(model)"
+                />
+                <small v-if="extraErrors[model.id]" class="nh-model-row__error">
+                  {{ extraErrors[model.id] }}
+                </small>
+              </div>
             </label>
           </div>
         </div>
@@ -148,10 +206,20 @@
  * 多模型配置：获取模型后以复选框列表选择，并配置预算与默认模型。
  */
 
-import { computed, ref, watch } from 'vue';
-import { NButton, NCheckbox, NFormItem, NInput, NInputNumber, NRadio } from 'naive-ui';
+import { computed, reactive, ref, watch } from 'vue';
+import {
+  NButton,
+  NCheckbox,
+  NFormItem,
+  NInput,
+  NInputNumber,
+  NRadio,
+  NSelect,
+  NSwitch
+} from 'naive-ui';
 import type { ProviderModel } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
+import { parseExtraParams } from '../validation/extra-params';
 import AppIcon from '@/components/AppIcon.vue';
 
 const props = defineProps<{
@@ -165,6 +233,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:models': [models: ProviderModel[]];
   'update:defaultModelId': [id: string];
+  'update:valid': [valid: boolean];
   test: [];
 }>();
 
@@ -178,14 +247,70 @@ const rows = computed<ProviderModel[]>(() => {
       props.models.find((model) => model.id === id) ?? {
         id,
         contextWindow: 128_000,
-        maxOutputTokens: 4_096
+        maxOutputTokens: 8_192
       }
   );
 });
 
+const effortOptions = computed(() => [
+  { label: t('settings.effortDefault'), value: 'default' },
+  { label: t('settings.effortLow'), value: 'low' },
+  { label: t('settings.effortHigh'), value: 'high' },
+  { label: t('settings.effortMax'), value: 'max' }
+]);
+
+const extraDrafts = reactive<Record<string, string>>({});
+const extraErrors = reactive<Record<string, string>>({});
+
+const extraText = (model: ProviderModel): string =>
+  extraDrafts[model.id] ?? JSON.stringify(model.extraParams ?? {}, null, 2);
+
+const emitValidity = (): void => {
+  emit('update:valid', Object.keys(extraErrors).length === 0);
+};
+
+const clearModelExtraState = (modelId: string): void => {
+  delete extraDrafts[modelId];
+  delete extraErrors[modelId];
+};
+
+const updateExtraDraft = (model: ProviderModel, text: string): void => {
+  extraDrafts[model.id] = text;
+  try {
+    const parsed = parseExtraParams(text, t('settings.modelExtraParamsInvalid'));
+    delete extraErrors[model.id];
+    updateModel(model.id, 'extraParams', parsed);
+  } catch {
+    extraErrors[model.id] = t('settings.modelExtraParamsInvalid');
+  }
+  emitValidity();
+};
+
+const resetExtraDraft = (model: ProviderModel): void => {
+  if (extraErrors[model.id]) return;
+  delete extraDrafts[model.id];
+};
+
 const manualModelId = ref('');
 const manualError = ref('');
 const showManual = ref(false);
+
+watch(
+  () => Object.keys(extraErrors).length === 0,
+  (valid) => emit('update:valid', valid),
+  { immediate: true }
+);
+
+watch(
+  () => rows.value.map((model) => model.id).join('\u0000'),
+  () => {
+    const ids = new Set(rows.value.map((model) => model.id));
+    for (const id of new Set([...Object.keys(extraDrafts), ...Object.keys(extraErrors)])) {
+      if (!ids.has(id)) clearModelExtraState(id);
+    }
+    emitValidity();
+  }
+);
 
 watch(manualModelId, () => {
   manualError.value = '';
@@ -216,7 +341,7 @@ const addManualModel = (): void => {
     id,
     role: 'chat',
     contextWindow: 128_000,
-    maxOutputTokens: 4_096
+    maxOutputTokens: 8_192
   };
   emit('update:models', [...props.models, model]);
   if (!props.defaultModelId) emit('update:defaultModelId', id);
@@ -236,6 +361,7 @@ const toggleModel = (id: string, checked: boolean): void => {
     return;
   }
 
+  clearModelExtraState(id);
   const next = props.models.filter((model) => model.id !== id);
   emit('update:models', next);
   if (props.defaultModelId === id) emit('update:defaultModelId', next[0]?.id ?? '');
@@ -262,8 +388,14 @@ const toggleAll = (checked: boolean): void => {
  */
 const updateModel = (
   id: string,
-  key: 'contextWindow' | 'maxOutputTokens' | 'reasoningPassback',
-  value: number | string | boolean | null
+  key:
+    | 'contextWindow'
+    | 'maxOutputTokens'
+    | 'thinkingMode'
+    | 'reasoningEffort'
+    | 'reasoningPassback'
+    | 'extraParams',
+  value: number | string | boolean | Record<string, unknown> | null
 ): void => {
   if (value === null) return;
   emit(
@@ -370,9 +502,8 @@ const updateModel = (
 
 .nh-models-field__list {
   display: flex;
-  max-height: 320px;
   flex-direction: column;
-  overflow: auto;
+  overflow: visible;
   border: 1px solid var(--nh-border-subtle);
   border-radius: 10px;
 }
@@ -416,25 +547,92 @@ const updateModel = (
 }
 
 .nh-model-row__config {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  padding-left: 24px;
+  margin: 2px 0 2px 26px;
+  padding: 0;
+}
+
+.nh-model-row__row {
+  display: grid;
+  gap: 12px 28px;
+}
+
+.nh-model-row__row--budget {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.nh-model-row__row--reasoning {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .nh-model-row__field {
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   color: var(--nh-color-text-secondary);
   font-size: 12px;
 }
 
-.nh-model-row__field--checkbox {
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  grid-column: 1 / -1;
+.nh-model-row__field > span {
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.nh-model-row__field--switch :deep(.n-switch) {
+  align-self: flex-start;
+}
+
+.nh-model-row__field--extra {
+  gap: 5px;
+}
+
+.nh-model-row__extra-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nh-model-row__unit {
+  color: var(--nh-color-text-disabled);
+  font-size: 11px;
+}
+
+.nh-model-row__label-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.nh-model-row__hint {
+  color: var(--nh-color-text-disabled);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.nh-model-row__error {
+  color: var(--nh-color-danger);
+  font-size: 11px;
+}
+
+@media (width <= 880px) {
+  .nh-model-row__config {
+    margin-left: 0;
+  }
+
+  .nh-model-row__row--reasoning {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (width <= 640px) {
+  .nh-model-row__row--budget,
+  .nh-model-row__row--reasoning {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

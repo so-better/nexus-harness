@@ -14,7 +14,7 @@ import {
 import type { NexusEvent } from '@shared/events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDatabase } from '../storage/database';
-import { AgentService } from './agent-service';
+import { AgentService, buildModelExtraParams } from './agent-service';
 import { AttachmentService } from '../attachments/attachment-service';
 import { MemoryService } from '../memory/memory-service';
 
@@ -28,6 +28,31 @@ describe('AgentService', () => {
 
   afterEach(async () => {
     await rm(root, { recursive: true, force: true });
+  });
+
+  it('merges model-level extra and thinking params', () => {
+    expect(
+      buildModelExtraParams({
+        extraParams: { thinking: { type: 'enabled' }, custom: true },
+        thinkingMode: 'disabled',
+        reasoningEffort: 'high'
+      })
+    ).toEqual({
+      thinking: { type: 'disabled' },
+      custom: true,
+      reasoning_effort: 'high'
+    });
+    expect(buildModelExtraParams({ thinkingMode: 'default' })).toBeUndefined();
+    expect(
+      buildModelExtraParams(
+        {
+          extraParams: { custom: true },
+          thinkingMode: 'enabled',
+          reasoningEffort: 'high'
+        },
+        'anthropic'
+      )
+    ).toEqual({ custom: true });
   });
 
   it('prepends session history and persists the current user message', async () => {

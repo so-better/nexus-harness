@@ -6,7 +6,7 @@
       </template>
       {{ t('settings.backToList') }}
     </NButton>
-    <NButton type="primary" :loading="saving" @click="emit('save')">
+    <NButton type="primary" :loading="saving" :disabled="disabled" @click="emit('save')">
       <template #icon>
         <AppIcon name="check" :size="14" />
       </template>
@@ -24,7 +24,7 @@ import { NButton } from 'naive-ui';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 
-defineProps<{ saving: boolean }>();
+defineProps<{ saving: boolean; disabled?: boolean }>();
 
 const emit = defineEmits<{ back: []; save: [] }>();
 </script>

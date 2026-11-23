@@ -65,7 +65,8 @@ import type {
   AgentProviderConfig,
   AgentRunInput,
   AgentRunResult,
-  GeneralSettingsState
+  GeneralSettingsState,
+  ProviderModel
 } from '@shared/ipc/contracts';
 import { askUserInputSchema, type AskQuestion, type AskUserAnswer } from '@shared/ask-user';
 import { executeThemeTool, themeToolDefinitions } from './theme-tools';
@@ -761,6 +762,25 @@ const loadAttachmentContext = async (
   return { attachments, images, items, textBytes };
 };
 
+/**
+ * 合并模型级额外参数与思考参数；default 表示不覆盖。
+ */
+export const buildModelExtraParams = (
+  model: Pick<ProviderModel, 'extraParams' | 'thinkingMode' | 'reasoningEffort'>,
+  protocol: AgentProviderConfig['protocol'] = 'openai'
+): Record<string, unknown> | undefined => {
+  const extra = { ...model.extraParams };
+  if (protocol !== 'anthropic') {
+    if (model.thinkingMode && model.thinkingMode !== 'default') {
+      extra['thinking'] = { type: model.thinkingMode };
+    }
+    if (model.reasoningEffort && model.reasoningEffort !== 'default') {
+      extra['reasoning_effort'] = model.reasoningEffort;
+    }
+  }
+  return Object.keys(extra).length ? extra : undefined;
+};
+
 export const createAgentProvider: ProviderFactory = (config) => {
   const shared = {
     baseUrl: config.baseUrl,
@@ -772,9 +792,10 @@ export const createAgentProvider: ProviderFactory = (config) => {
   if (config.protocol === 'ollama') return new OllamaProvider(shared);
   return new OpenAICompatibleProvider({
     ...shared,
-    reasoningPassback: (modelId) =>
-      config.reasoningPassback === true ||
-      config.models.find((model) => model.id === modelId)?.reasoningPassback === true
+    reasoningPassback: (modelId) => {
+      const model = config.models.find((item) => item.id === modelId);
+      return model ? model.reasoningPassback !== false : false;
+    }
   });
 };
 
@@ -959,6 +980,7 @@ ${assistant.slice(0, 3_000)}`;
       let generatedImageCount = 0;
 
       const mode = input.mode ?? 'build';
+      const extraParams = buildModelExtraParams(modelConfig, providerConfig.protocol);
       let toolset =
         input.rootPaths.length > 0 ? await createFileToolset(input.rootPaths) : undefined;
       const provider = this.createProvider(providerConfig);
@@ -973,7 +995,7 @@ ${assistant.slice(0, 3_000)}`;
         artifacts,
         sessionId: input.sessionId,
         runId,
-        ...(providerConfig.extraParams ? { extraParams: providerConfig.extraParams } : {}),
+        ...(extraParams ? { extraParams } : {}),
         ...(hooks.signal ? { signal: hooks.signal } : {})
       });
       let checkpointRoot = toolset ? await toolset.resolvePath('.') : undefined;
@@ -1991,7 +2013,7 @@ ${assistant.slice(0, 3_000)}`;
         ...(hooks.approveTool ? { approveTool: hooks.approveTool } : {}),
         ...(hooks.autoApprove ? { autoApprove: hooks.autoApprove } : {}),
         eventBus,
-        ...(providerConfig.extraParams ? { extraParams: providerConfig.extraParams } : {}),
+        ...(extraParams ? { extraParams } : {}),
         ...(hooks.signal ? { signal: hooks.signal } : {}),
         maxTokens: modelConfig.maxOutputTokens,
         ...(input.maxSteps === undefined ? {} : { maxSteps: input.maxSteps })

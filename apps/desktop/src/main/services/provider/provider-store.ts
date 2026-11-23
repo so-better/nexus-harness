@@ -14,11 +14,7 @@ import type {
   ProviderSettings
 } from '@shared/ipc/contracts';
 import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_OUTPUT_TOKENS } from '@nexus/core';
-import {
-  defaultProviderExtraParams,
-  findReservedProviderParams,
-  findSensitiveProviderParams
-} from '@shared/provider-params';
+import { findReservedProviderParams, findSensitiveProviderParams } from '@shared/provider-params';
 import { getAppDataPaths } from '../storage/paths';
 
 interface StoredProvider {
@@ -78,8 +74,11 @@ const normalizeModels = (
       id: model.id,
       contextWindow: model.contextWindow,
       maxOutputTokens: model.maxOutputTokens,
+      ...(model.extraParams ? { extraParams: publicExtraParams(model.extraParams) } : {}),
       ...(model.role ? { role: model.role } : {}),
       ...(model.endpoint ? { endpoint: model.endpoint } : {}),
+      ...(model.thinkingMode === undefined ? {} : { thinkingMode: model.thinkingMode }),
+      ...(model.reasoningEffort === undefined ? {} : { reasoningEffort: model.reasoningEffort }),
       ...(model.reasoningPassback === undefined
         ? {}
         : { reasoningPassback: model.reasoningPassback })
@@ -142,45 +141,50 @@ const migrateLegacySecrets = (provider: StoredProvider): boolean => {
   return changed;
 };
 
-/**
- * 从上一版模型级 thinking 字段迁移为 Provider extraParams。
- */
-const migrateLegacyReasoning = (
-  provider: StoredProvider
-): { extraParams?: Record<string, unknown>; reasoningPassback?: boolean } => {
-  const legacy = provider.models?.some(
-    (model) => 'thinkingMode' in model || 'reasoningEffort' in model
+function publicExtraParams(params: Record<string, unknown>): Record<string, unknown> | undefined {
+  const entries = Object.entries(params).filter(
+    ([key]) =>
+      !findReservedProviderParams({ [key]: true }).length &&
+      !findSensitiveProviderParams({ [key]: true }).length
   );
-  if (!legacy) {
-    return {
-      ...(provider.extraParams ? { extraParams: provider.extraParams } : {}),
-      reasoningPassback: provider.reasoningPassback ?? true
-    };
-  }
-  const extraParams: Record<string, unknown> = { ...provider.extraParams };
-  let effort: string | undefined;
-  for (const raw of provider.models ?? []) {
-    const model = raw as unknown as { thinkingMode?: string; reasoningEffort?: string };
-    if (model.thinkingMode && model.thinkingMode !== 'default') {
-      extraParams['thinking'] = { type: model.thinkingMode };
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+/**
+ * 把旧 Provider 级 extraParams/reasoningPassback 迁移到每个模型。
+ */
+const migrateLegacyProviderParams = (provider: StoredProvider): boolean => {
+  let changed = false;
+  if (provider.extraParams) {
+    for (const model of provider.models ?? []) {
+      if (model.extraParams === undefined) model.extraParams = { ...provider.extraParams };
     }
-    if (model.reasoningEffort && model.reasoningEffort !== 'default') {
-      effort = model.reasoningEffort;
-    }
+    delete provider.extraParams;
+    changed = true;
   }
-  if (effort) extraParams['reasoning_effort'] = effort;
-  return {
-    ...(Object.keys(extraParams).length ? { extraParams } : {}),
-    reasoningPassback: provider.reasoningPassback ?? true
-  };
+  if (provider.reasoningPassback !== undefined) {
+    for (const model of provider.models ?? []) {
+      if (model.reasoningPassback === undefined) {
+        model.reasoningPassback = provider.reasoningPassback;
+      }
+    }
+    delete provider.reasoningPassback;
+    changed = true;
+  }
+  return changed;
 };
 
 const toPublic = (provider: StoredProvider): ProviderPublic => {
   const normalized = normalizeModels(provider);
   const protocol = provider.protocol ?? 'openai';
-  const migrated = migrateLegacyReasoning(provider);
-  const extraParams = migrated.extraParams ?? defaultProviderExtraParams(protocol);
-  const supportsPassback = protocol === 'openai' || protocol === 'ollama';
+  const legacyExtra = provider.extraParams ? publicExtraParams(provider.extraParams) : undefined;
+  const models = normalized.models.map((model) => ({
+    ...model,
+    ...(model.extraParams || !legacyExtra ? {} : { extraParams: legacyExtra }),
+    ...(model.reasoningPassback === undefined && provider.reasoningPassback !== undefined
+      ? { reasoningPassback: provider.reasoningPassback }
+      : {})
+  }));
   return {
     id: provider.id,
     protocol,
@@ -188,12 +192,8 @@ const toPublic = (provider: StoredProvider): ProviderPublic => {
     baseUrl: provider.baseUrl,
     apiKey: provider.apiKey ?? '',
     enabled: provider.enabled,
-    models: normalized.models,
-    defaultModelId: normalized.defaultModelId,
-    ...(extraParams ? { extraParams } : {}),
-    ...(supportsPassback
-      ? { reasoningPassback: migrated.reasoningPassback ?? true }
-      : { reasoningPassback: false })
+    models,
+    defaultModelId: normalized.defaultModelId
   };
 };
 
@@ -239,6 +239,7 @@ export class ProviderStore {
       for (const provider of file.providers) {
         try {
           changed = migrateLegacySecrets(provider) || changed;
+          changed = migrateLegacyProviderParams(provider) || changed;
         } catch {
           // 单个旧配置无法迁移时保留原数据，不阻断其他 Provider
         }
@@ -290,17 +291,14 @@ export class ProviderStore {
     if (!apiKey && protocol !== 'ollama') throw new Error('保存 Provider 需要 API Key');
 
     const headers = input.headers !== undefined ? input.headers : existing?.headers;
-    const extraParams = input.extraParams !== undefined ? input.extraParams : existing?.extraParams;
-    if (extraParams) {
-      const reserved = findReservedProviderParams(extraParams);
-      if (reserved.length) throw new Error(`额外参数不能覆盖保留字段：${reserved.join(', ')}`);
-      const sensitive = findSensitiveProviderParams(extraParams);
-      if (sensitive.length) throw new Error(`额外参数不能包含敏感字段：${sensitive.join(', ')}`);
+    for (const model of input.models) {
+      if (!model.extraParams) continue;
+      const reserved = findReservedProviderParams(model.extraParams);
+      if (reserved.length) throw new Error(`模型额外参数不能覆盖保留字段：${reserved.join(', ')}`);
+      const sensitive = findSensitiveProviderParams(model.extraParams);
+      if (sensitive.length)
+        throw new Error(`模型额外参数不能包含敏感字段：${sensitive.join(', ')}`);
     }
-    const reasoningPassback =
-      input.reasoningPassback !== undefined
-        ? input.reasoningPassback
-        : (existing?.reasoningPassback ?? true);
 
     const provider: StoredProvider = {
       id,
@@ -311,9 +309,7 @@ export class ProviderStore {
       models: input.models,
       defaultModelId,
       apiKey,
-      ...(headers === undefined ? {} : { headers }),
-      ...(extraParams === undefined ? {} : { extraParams }),
-      ...(reasoningPassback === undefined ? {} : { reasoningPassback })
+      ...(headers === undefined ? {} : { headers })
     };
 
     if (existing) {
@@ -338,8 +334,7 @@ export class ProviderStore {
 
     return {
       ...publicConfig,
-      ...(provider.headers ? { headers: provider.headers } : {}),
-      ...(provider.extraParams ? { extraParams: provider.extraParams } : {})
+      ...(provider.headers ? { headers: provider.headers } : {})
     };
   }
 

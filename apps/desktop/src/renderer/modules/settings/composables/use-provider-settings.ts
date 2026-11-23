@@ -2,7 +2,7 @@
  * Provider 设置状态：服务商、多模型、连接测试与保存。
  */
 
-import { computed, onMounted, ref, watch, type ComputedRef, type Ref } from 'vue';
+import { computed, onMounted, ref, type ComputedRef, type Ref } from 'vue';
 import { useMessage, type SelectOption } from 'naive-ui';
 import type {
   ProviderModel,
@@ -12,8 +12,6 @@ import type {
 } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import { listProviders, removeProvider, saveProvider, testProvider } from '../api/settings.api';
-import { defaultProviderExtraParams } from '@shared/provider-params';
-import { parseExtraParams } from '../validation/extra-params';
 
 export interface ProviderFormState {
   protocol: ProviderProtocol;
@@ -23,8 +21,6 @@ export interface ProviderFormState {
   enabled: boolean;
   models: ProviderModel[];
   defaultModelId: string;
-  reasoningPassback: boolean;
-  extraParamsText: string;
 }
 
 interface ProviderSettingsState {
@@ -47,11 +43,6 @@ interface ProviderSettingsState {
 /**
  * 创建 Provider 设置状态；onChanged 在保存或删除后触发。
  */
-const extraParamsTextFor = (protocol: ProviderProtocol): string => {
-  const defaults = defaultProviderExtraParams(protocol);
-  return defaults ? JSON.stringify(defaults, null, 2) : '';
-};
-
 export const useProviderSettings = (
   onChanged: (action: 'saved' | 'deleted') => void
 ): ProviderSettingsState => {
@@ -63,7 +54,6 @@ export const useProviderSettings = (
   const testing = ref(false);
   const autoFetched = new Set<string>();
 
-  let lastNonAnthropicPassback = true;
   const providerForm = ref<ProviderFormState>({
     protocol: 'openai',
     name: '',
@@ -71,37 +61,8 @@ export const useProviderSettings = (
     apiKey: '',
     enabled: true,
     models: [],
-    defaultModelId: '',
-    reasoningPassback: false,
-    extraParamsText: ''
+    defaultModelId: ''
   });
-
-  watch(
-    () => providerForm.value.protocol,
-    (protocol, previous) => {
-      const previousDefault = extraParamsTextFor(previous);
-      if (
-        !providerForm.value.extraParamsText.trim() ||
-        providerForm.value.extraParamsText === previousDefault
-      ) {
-        providerForm.value.extraParamsText = extraParamsTextFor(protocol);
-      }
-      if (protocol === 'anthropic') {
-        providerForm.value.reasoningPassback = false;
-      } else if (previous === 'anthropic') {
-        providerForm.value.reasoningPassback = lastNonAnthropicPassback;
-      }
-    }
-  );
-
-  watch(
-    () => providerForm.value.reasoningPassback,
-    (value) => {
-      if (providerForm.value.protocol !== 'anthropic') {
-        lastNonAnthropicPassback = value;
-      }
-    }
-  );
 
   const providerOptions = computed<SelectOption[]>(() =>
     providers.value.map((provider) => ({
@@ -130,9 +91,6 @@ export const useProviderSettings = (
     const provider = providers.value.find((item) => item.id === id);
     if (!provider) return;
     selectedId.value = provider.id;
-    if (provider.protocol !== 'anthropic') {
-      lastNonAnthropicPassback = provider.reasoningPassback !== false;
-    }
     providerForm.value = {
       protocol: provider.protocol,
       name: provider.name,
@@ -140,11 +98,7 @@ export const useProviderSettings = (
       apiKey: provider.apiKey,
       enabled: provider.enabled,
       models: provider.models.map((model) => ({ ...model })),
-      defaultModelId: provider.defaultModelId,
-      reasoningPassback: provider.reasoningPassback !== false,
-      extraParamsText: provider.extraParams
-        ? JSON.stringify(provider.extraParams, null, 2)
-        : extraParamsTextFor(provider.protocol)
+      defaultModelId: provider.defaultModelId
     };
     availableModels.value = provider.models.map((model) => model.id);
     if (!autoFetched.has(provider.id) && provider.baseUrl.trim()) {
@@ -158,7 +112,6 @@ export const useProviderSettings = (
    */
   const newProvider = (): void => {
     selectedId.value = null;
-    lastNonAnthropicPassback = true;
     providerForm.value = {
       protocol: 'openai',
       name: '',
@@ -166,9 +119,7 @@ export const useProviderSettings = (
       apiKey: '',
       enabled: true,
       models: [],
-      defaultModelId: '',
-      reasoningPassback: true,
-      extraParamsText: extraParamsTextFor('openai')
+      defaultModelId: ''
     };
     availableModels.value = [];
   };
@@ -183,14 +134,13 @@ export const useProviderSettings = (
         id: model.id.trim(),
         contextWindow: model.contextWindow,
         maxOutputTokens: model.maxOutputTokens,
+        ...(model.extraParams ? { extraParams: model.extraParams } : {}),
+        ...(model.thinkingMode === undefined ? {} : { thinkingMode: model.thinkingMode }),
+        ...(model.reasoningEffort === undefined ? {} : { reasoningEffort: model.reasoningEffort }),
         ...(model.reasoningPassback === undefined
           ? {}
           : { reasoningPassback: model.reasoningPassback })
       }));
-      const extraParams = parseExtraParams(
-        providerForm.value.extraParamsText,
-        t('settings.extraParamsInvalid')
-      );
       const defaultModelId = models.some((model) => model.id === providerForm.value.defaultModelId)
         ? providerForm.value.defaultModelId
         : (models[0]?.id ?? '');
@@ -202,8 +152,6 @@ export const useProviderSettings = (
         enabled: providerForm.value.enabled,
         models,
         defaultModelId,
-        reasoningPassback: providerForm.value.reasoningPassback,
-        extraParams,
         ...(selectedId.value ? { id: selectedId.value } : {}),
         ...(providerForm.value.apiKey.trim() ? { apiKey: providerForm.value.apiKey.trim() } : {})
       };
@@ -273,9 +221,7 @@ export const useProviderSettings = (
         baseUrl: provider.baseUrl,
         enabled,
         models: provider.models,
-        defaultModelId: provider.defaultModelId,
-        reasoningPassback: provider.reasoningPassback !== false,
-        extraParams: provider.extraParams ?? {}
+        defaultModelId: provider.defaultModelId
       });
       await load();
     } catch (reason) {

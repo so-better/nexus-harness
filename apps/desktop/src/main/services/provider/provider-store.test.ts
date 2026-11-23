@@ -53,8 +53,6 @@ describe('ProviderStore', () => {
     const saved = await save();
 
     expect(saved.apiKey).toBe('secret');
-    expect(saved.reasoningPassback).toBe(true);
-    expect(saved.extraParams).toEqual({ thinking: { type: 'enabled' } });
     const raw = await readFile(join(directory, 'providers.json'), 'utf8');
     expect(raw).toContain('"apiKey": "secret"');
 
@@ -77,49 +75,74 @@ describe('ProviderStore', () => {
     expect(full).toMatchObject({ protocol: 'ollama', apiKey: '' });
   });
 
-  it('persists generic reasoning params and passback capability', async () => {
+  it('persists model-level extra params and passback capability', async () => {
     const saved = await save({
-      reasoningPassback: true,
-      extraParams: { thinking: { type: 'enabled' }, custom: 1 }
+      models: [
+        {
+          ...model('gpt-test'),
+          extraParams: { thinking: { type: 'enabled' }, custom: 1 },
+          reasoningPassback: false
+        }
+      ]
     });
 
-    expect(saved.reasoningPassback).toBe(true);
-    expect(saved.extraParams).toEqual({ thinking: { type: 'enabled' }, custom: 1 });
+    expect(saved.models[0]?.reasoningPassback).toBe(false);
+    expect(saved.models[0]?.extraParams).toEqual({
+      thinking: { type: 'enabled' },
+      custom: 1
+    });
     const full = await store.get(saved.id);
-    expect(full?.extraParams).toEqual({ thinking: { type: 'enabled' }, custom: 1 });
-    expect(full?.reasoningPassback).toBe(true);
-  });
-
-  it('uses protocol-specific default thinking params', async () => {
-    const openai = await save();
-    expect(openai.extraParams).toEqual({ thinking: { type: 'enabled' } });
-
-    const anthropic = await save({
-      protocol: 'anthropic',
-      name: 'Anthropic',
-      models: [model('claude-test')],
-      defaultModelId: 'claude-test'
+    expect(full?.models[0]?.extraParams).toEqual({
+      thinking: { type: 'enabled' },
+      custom: 1
     });
-    expect(anthropic.extraParams).toBeUndefined();
-    expect(anthropic.reasoningPassback).toBe(false);
+    expect(full?.models[0]?.reasoningPassback).toBe(false);
+  });
 
-    const ollama = await save({
-      protocol: 'ollama',
-      name: 'Ollama',
-      baseUrl: 'http://127.0.0.1:11434/v1',
-      models: [model('llama-test')],
-      defaultModelId: 'llama-test'
+  it('migrates legacy provider extra params into models', async () => {
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      join(directory, 'providers.json'),
+      JSON.stringify({
+        version: 1,
+        providers: [
+          {
+            id: 'legacy-extra',
+            name: 'Legacy',
+            baseUrl: 'https://example.com/v1',
+            enabled: true,
+            apiKey: 'secret',
+            extraParams: { thinking: { type: 'enabled' } },
+            models: [model('legacy-model')],
+            defaultModelId: 'legacy-model'
+          }
+        ]
+      })
+    );
+
+    const providers = await store.list();
+    expect(providers[0]?.models[0]?.extraParams).toEqual({
+      thinking: { type: 'enabled' }
     });
-    expect(ollama.extraParams).toBeUndefined();
-    expect(ollama.reasoningPassback).toBe(true);
+    const raw = JSON.parse(await readFile(join(directory, 'providers.json'), 'utf8')) as {
+      providers: Array<Record<string, unknown>>;
+    };
+    expect(raw.providers[0]).not.toHaveProperty('extraParams');
+    expect(raw.providers[0]?.['models']).toEqual([
+      expect.objectContaining({ extraParams: { thinking: { type: 'enabled' } } })
+    ]);
   });
 
-  it('rejects reserved and sensitive extra params', async () => {
-    await expect(save({ extraParams: { model: 'override' } })).rejects.toThrow('保留字段');
-    await expect(save({ extraParams: { api_key: 'secret' } })).rejects.toThrow('敏感字段');
+  it('rejects reserved and sensitive model extra params', async () => {
+    await expect(
+      save({ models: [{ ...model('gpt-test'), extraParams: { model: 'override' } }] })
+    ).rejects.toThrow('保留字段');
+    await expect(
+      save({ models: [{ ...model('gpt-test'), extraParams: { api_key: 'secret' } }] })
+    ).rejects.toThrow('敏感字段');
   });
 
-  it('migrates legacy model thinking fields to provider params', async () => {
+  it('preserves model-level thinking fields', async () => {
     await mkdir(directory, { recursive: true });
     await writeFile(
       join(directory, 'providers.json'),
@@ -147,13 +170,13 @@ describe('ProviderStore', () => {
 
     const providers = await store.list();
     expect(providers[0]).toMatchObject({
-      reasoningPassback: true,
-      extraParams: {
-        thinking: { type: 'disabled' },
-        reasoning_effort: 'high'
-      }
+      models: [
+        expect.objectContaining({
+          thinkingMode: 'disabled',
+          reasoningEffort: 'high'
+        })
+      ]
     });
-    expect(providers[0]?.models[0]).not.toHaveProperty('thinkingMode');
   });
 
   it('stores custom headers locally and keeps them out of public configs', async () => {

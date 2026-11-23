@@ -77,48 +77,17 @@
         </div>
 
         <div class="nh-provider-settings__section">
-          <h3 class="nh-provider-settings__section-title">{{ t('settings.reasoning') }}</h3>
-          <div class="nh-provider-settings__panel">
-            <div v-if="providerForm.protocol !== 'anthropic'" class="nh-provider-settings__enabled">
-              <div>
-                <p class="nh-provider-settings__field-title">
-                  {{ t('settings.reasoningPassback') }}
-                </p>
-                <p class="nh-provider-settings__field-hint">
-                  {{ t('settings.reasoningPassbackHint') }}
-                </p>
-              </div>
-              <NSwitch
-                :value="providerForm.reasoningPassback"
-                @update:value="(value: boolean) => (providerForm.reasoningPassback = value)"
-              />
-            </div>
-            <NFormItem
-              class="nh-provider-settings__item"
-              :label="t('settings.extraParams')"
-              :show-feedback="false"
-            >
-              <NInput
-                :value="providerForm.extraParamsText"
-                type="textarea"
-                :autosize="{ minRows: 3, maxRows: 10 }"
-                :placeholder="t('settings.extraParamsPlaceholder')"
-                @update:value="(value: string) => (providerForm.extraParamsText = value)"
-              />
-            </NFormItem>
-          </div>
-        </div>
-
-        <div class="nh-provider-settings__section">
           <h3 class="nh-provider-settings__section-title">{{ t('settings.models') }}</h3>
           <NFormItem class="nh-provider-settings__item" path="models" :show-label="false">
             <ProviderModelsField
+              :key="selectedId ?? 'new-provider'"
               :models="providerForm.models"
               :available-models="availableModels"
               :default-model-id="providerForm.defaultModelId"
               :testing="testing"
               :protocol="providerForm.protocol"
               @update:models="(value) => (providerForm.models = value)"
+              @update:valid="(value: boolean) => (modelsExtraValid = value)"
               @update:default-model-id="(value) => (providerForm.defaultModelId = value)"
               @test="testConnection"
             />
@@ -126,7 +95,12 @@
         </div>
       </NForm>
 
-      <ProviderSettingsActions :saving="saving" @back="backToList" @save="handleSave" />
+      <ProviderSettingsActions
+        :saving="saving"
+        :disabled="!modelsExtraValid"
+        @back="backToList"
+        @save="handleSave"
+      />
     </template>
   </section>
 </template>
@@ -137,15 +111,7 @@
  */
 
 import { selectMenuProps } from '@/app/menu-props';
-import {
-  NForm,
-  NFormItem,
-  NInput,
-  NSelect,
-  NSwitch,
-  type FormInst,
-  type InputInst
-} from 'naive-ui';
+import { NForm, NFormItem, NInput, NSelect, type FormInst, type InputInst } from 'naive-ui';
 import { computed, ref } from 'vue';
 import type { ProviderProtocol } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
@@ -188,6 +154,7 @@ const protocolOptions = computed(() => [
 const formRef = ref<FormInst | null>(null);
 const nameInputRef = ref<InputInst | null>(null);
 
+const modelsExtraValid = ref(true);
 const busyId = ref('');
 const handleToggle = async (id: string, enabled: boolean): Promise<void> => {
   busyId.value = id;

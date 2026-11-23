@@ -70,6 +70,11 @@ export const providerModelSchema = z
     endpoint: z.string().url().optional(),
     contextWindow: z.number().int().min(4_096).max(2_000_000),
     maxOutputTokens: z.number().int().min(256).max(131_072),
+    /** 模型级额外请求参数，按模型供应商配置 */
+    extraParams: z.record(z.string(), z.unknown()).optional(),
+    /** 模型级思考参数；default 表示不覆盖 Provider 的额外参数 */
+    thinkingMode: z.enum(['default', 'enabled', 'disabled']).optional(),
+    reasoningEffort: z.enum(['default', 'low', 'high', 'max']).optional(),
     reasoningPassback: z.boolean().optional()
   })
   .refine((value) => value.maxOutputTokens < value.contextWindow, {
@@ -88,8 +93,6 @@ export const providerSettingsSchema = z
     baseUrl: z.string().min(1),
     apiKey: z.string().min(1).optional(),
     headers: z.record(z.string(), z.string()).optional(),
-    extraParams: z.record(z.string(), z.unknown()).optional(),
-    reasoningPassback: z.boolean().optional(),
     enabled: z.boolean().optional(),
     models: z.array(providerModelSchema).min(1),
     defaultModelId: z.string().min(1)
@@ -110,13 +113,12 @@ export const providerPublicSchema = z.object({
   apiKey: z.string(),
   enabled: z.boolean(),
   models: z.array(providerModelSchema).min(1),
-  defaultModelId: z.string().min(1),
-  extraParams: z.record(z.string(), z.unknown()).optional(),
-  reasoningPassback: z.boolean().optional()
+  defaultModelId: z.string().min(1)
 });
 
 /**
- * 主进程内部使用的完整 Provider 配置；headers 视为敏感字段，extraParams 只允许非敏感请求参数。
+ * 主进程内部使用的完整 Provider 配置；headers 视为敏感字段，模型 extraParams 只允许非敏感请求参数。
+ * reasoningPassback 只存在于模型级。
  */
 export const agentProviderConfigSchema = providerPublicSchema.extend({
   headers: z.record(z.string(), z.string()).optional()

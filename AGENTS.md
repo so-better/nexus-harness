@@ -519,7 +519,7 @@ interface ProviderCapabilities {
 
 系统提示由宿主统一组装：身份与安全约束、工具使用规则、工作区规则与当前任务；提供商适配层只做格式转换，不允许各提供商各自实现一套。
 
-思考能力通过 Provider 配置的通用 `reasoningPassback` 与 `extraParams` 表达，不在核心代码中按厂商、域名或模型 ID 特判；具体思考参数由用户在 Provider 设置为 JSON 请求参数。启用 `reasoningPassback` 时，历史 assistant reasoning 必须随请求回传。`extraParams` 不得覆盖 `model`、`messages`、`stream`、`tools`、`max_tokens` 等协议保留字段，也不得写入密钥；Provider 与模型任一开启即启用 reasoning 回传。
+思考能力通过模型级 `reasoningPassback` 与 `extraParams` 表达，不在核心代码中按厂商、域名或模型 ID 特判；具体思考参数由用户在模型设置为 JSON 请求参数。启用 `reasoningPassback` 时，历史 assistant reasoning 必须随请求回传。`extraParams` 不得覆盖 `model`、`messages`、`stream`、`tools`、`max_tokens` 等协议保留字段，也不得写入密钥；reasoning 回传由模型级开关控制。
 
 系统提示保持稳定的静态前缀；平台、时间等动态上下文追加到最后一条用户消息，避免破坏 prompt cache。用户自定义提示词可追加，但与默认系统提示冲突时以默认提示为准；场景模式提示词按需追加。
 

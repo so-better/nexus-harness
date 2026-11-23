@@ -2,18 +2,6 @@
  * Provider 额外请求参数校验：阻止覆盖核心协议字段与写入敏感值。
  */
 
-/**
- * 按协议返回默认请求参数；不同协议不混用厂商字段。
- */
-export const defaultProviderExtraParams = (
-  protocol: string
-): Record<string, unknown> | undefined => {
-  if (protocol === 'openai') {
-    return { thinking: { type: 'enabled' } };
-  }
-  return undefined;
-};
-
 const RESERVED_PARAMS = new Set([
   'model',
   'messages',
