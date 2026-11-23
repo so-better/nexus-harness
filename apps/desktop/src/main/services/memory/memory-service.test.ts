@@ -11,11 +11,13 @@ import { MemoryService } from './memory-service';
 
 describe('MemoryService', () => {
   let directory = '';
+  let db: ReturnType<typeof createDatabase>;
   let service: MemoryService;
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'nexus-memory-'));
-    service = new MemoryService(createDatabase(join(directory, 'nexus.db')));
+    db = createDatabase(join(directory, 'nexus.db'));
+    service = new MemoryService(db);
   });
 
   afterEach(async () => {
@@ -64,6 +66,28 @@ describe('MemoryService', () => {
     expect(service.context().text).toContain('简洁中文回答');
   });
 
+  it('falls back to LIKE when the FTS table is unavailable', () => {
+    service.create({ title: '回答风格', content: '偏好简洁中文回答。', kind: 'preference' });
+    db.exec('DROP TABLE memory_fts');
+    expect(service.search('回答风格')).toHaveLength(1);
+    expect(service.create({ title: '其他', content: '另一个事实。', kind: 'fact' })).toBeTruthy();
+  });
+
+  it('searches active memories and deduplicates normalized candidates', () => {
+    service.create({ title: '回答风格', content: '偏好简洁中文回答。', kind: 'preference' });
+    expect(service.search('回答风格')).toHaveLength(1);
+    expect(
+      service.propose({ title: '回答风格副本', content: '偏好简洁中文回答', kind: 'preference' })
+    ).toBeUndefined();
+  });
+
+  it('does not inject two memories with the same title', () => {
+    service.create({ title: '回答风格', content: '偏好简洁回答。', kind: 'preference' });
+    service.create({ title: '回答风格', content: '偏好详细回答。', kind: 'preference' });
+    const occurrences = service.context().text.split('回答风格').length - 1;
+    expect(occurrences).toBe(1);
+  });
+
   it('rejects obvious secrets', () => {
     expect(() =>
       service.create({
@@ -72,6 +96,38 @@ describe('MemoryService', () => {
         kind: 'fact'
       })
     ).toThrow('疑似密钥或密码');
+  });
+
+  it('rebuilds missing FTS database and keeps search working', () => {
+    service.create({ title: '回答风格', content: '偏好简洁中文回答。', kind: 'preference' });
+    db.exec('DROP TABLE memory_fts');
+    expect(service.rebuildIndex()).toBe(true);
+    expect(service.search('回答风格')).toHaveLength(1);
+  });
+
+  it('touches only the memories actually injected when titles conflict', () => {
+    const first = service.create({
+      title: '回答风格',
+      content: '偏好简洁回答。',
+      kind: 'preference',
+      priority: 90
+    });
+    const second = service.create({
+      title: '回答风格',
+      content: '偏好详细回答。',
+      kind: 'preference',
+      priority: 80
+    });
+    const third = service.create({
+      title: '包管理器',
+      content: '优先使用 pnpm。',
+      kind: 'fact',
+      priority: 70
+    });
+    const context = service.context();
+    expect(context.ids).toContain(first.id);
+    expect(context.ids).toContain(third.id);
+    expect(context.ids).not.toContain(second.id);
   });
 
   it('limits injected context and records last use', () => {

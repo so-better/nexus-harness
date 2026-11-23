@@ -28,6 +28,12 @@ export const getMemorySettings = async (): Promise<MemorySettings> =>
 export const setMemorySettings = async (settings: MemorySettings): Promise<MemorySettings> =>
   unwrap(await nexus.memory.setSettings(settings));
 
+export const subscribeMemoryChanges = (handler: () => void): (() => void) =>
+  nexus.memory.onChanged(handler);
+
+export const rebuildMemoryIndex = async (): Promise<boolean> =>
+  unwrap(await nexus.memory.rebuildIndex()).rebuilt;
+
 export const subscribeMemoryCandidateEvents = (handler: () => void): (() => void) =>
   nexus.agent.onEvent((event) => {
     if (event.type === 'memory.proposed') handler();

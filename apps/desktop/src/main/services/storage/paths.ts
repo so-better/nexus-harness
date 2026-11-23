@@ -30,6 +30,11 @@ export const getBuiltinSkillsDirectory = (): string =>
     ? join(process.resourcesPath, 'skills')
     : join(__dirname, '../../resources/skills');
 
+/**
+ * MCP stdio 子进程的固定工作目录；所有 MCP 自动产物都落在这里。
+ */
+export const getMcpWorkdirPath = (mcpDirectory: string): string => join(mcpDirectory, 'workdir');
+
 export interface AppDataPaths {
   root: string;
   plugins: string;
@@ -72,6 +77,7 @@ export const ensureAppDataDirectories = async (): Promise<void> => {
     paths.plugins,
     paths.skills,
     paths.mcp,
+    getMcpWorkdirPath(paths.mcp),
     paths.settings,
     paths.files,
     paths.attachments,

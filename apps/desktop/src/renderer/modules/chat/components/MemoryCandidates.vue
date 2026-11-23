@@ -14,20 +14,26 @@
         <p>{{ item.content }}</p>
       </div>
       <div class="nh-memory-candidates__actions">
-        <NButton size="medium" secondary @click="dismiss(item)">
-          <template #icon><AppIcon name="close" :size="14" /></template>
-          {{ t('memory.ignore') }}
-        </NButton>
-        <NButton
-          size="medium"
-          type="primary"
-          secondary
-          :loading="saving === item.id"
-          @click="save(item)"
-        >
-          <template #icon><AppIcon name="check" :size="14" /></template>
-          {{ t('memory.save') }}
-        </NButton>
+        <span v-if="savedIds.includes(item.id)" class="nh-memory-candidates__saved">
+          <AppIcon name="check" :size="14" />
+          {{ t('memory.saved') }}
+        </span>
+        <template v-else>
+          <NButton size="medium" secondary @click="dismiss(item)">
+            <template #icon><AppIcon name="close" :size="14" /></template>
+            {{ t('memory.ignore') }}
+          </NButton>
+          <NButton
+            size="medium"
+            type="primary"
+            secondary
+            :loading="saving === item.id"
+            @click="save(item)"
+          >
+            <template #icon><AppIcon name="check" :size="14" /></template>
+            {{ t('memory.save') }}
+          </NButton>
+        </template>
       </div>
     </article>
   </section>
@@ -54,6 +60,8 @@ const props = defineProps<{ running: boolean }>();
 const message = useMessage();
 const candidates = ref<MemoryItem[]>([]);
 const saving = ref<string>();
+const savedIds = ref<string[]>([]);
+const savedTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let unsubscribeCandidates: (() => void) | undefined;
 
 const load = async (): Promise<void> => {
@@ -66,10 +74,17 @@ const load = async (): Promise<void> => {
 };
 
 const save = async (item: MemoryItem): Promise<void> => {
+  if (savedIds.value.includes(item.id)) return;
   saving.value = item.id;
   try {
     await updateMemory({ id: item.id, status: 'active' });
-    candidates.value = candidates.value.filter((candidate) => candidate.id !== item.id);
+    savedIds.value = [...savedIds.value, item.id];
+    const timer = setTimeout(() => {
+      candidates.value = candidates.value.filter((candidate) => candidate.id !== item.id);
+      savedIds.value = savedIds.value.filter((id) => id !== item.id);
+      savedTimers.delete(item.id);
+    }, 2_500);
+    savedTimers.set(item.id, timer);
     message.success(t('memory.saved'));
   } catch (reason) {
     message.error(reason instanceof Error ? reason.message : t('memory.saveFailed'));
@@ -97,6 +112,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   unsubscribeCandidates?.();
   unsubscribeCandidates = undefined;
+  for (const timer of savedTimers.values()) clearTimeout(timer);
+  savedTimers.clear();
 });
 
 watch(
@@ -177,5 +194,13 @@ watch(
 .nh-memory-candidates__actions {
   flex: none;
   gap: 4px;
+}
+
+.nh-memory-candidates__saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--nh-color-success);
+  font-size: 12px;
 }
 </style>

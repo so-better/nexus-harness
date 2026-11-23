@@ -10,6 +10,8 @@ export const mcpServerConfigSchema = z.object({
   type: mcpTransportSchema.optional(),
   command: z.string().min(1).optional(),
   args: z.array(z.string()).default([]),
+  /** stdio 工作目录；相对路径以 mcp.json 所在目录为基准，缺省为 mcp/workdir */
+  cwd: z.string().min(1).optional(),
   env: z.record(z.string(), z.string()).default({}),
   url: z.string().url().optional(),
   headers: z.record(z.string(), z.string()).default({}),

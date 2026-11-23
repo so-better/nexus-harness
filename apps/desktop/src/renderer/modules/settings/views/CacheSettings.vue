@@ -62,7 +62,7 @@
 
 <script setup lang="ts">
 /**
- * 缓存设置：统计并清理 AI 文件、工具产物与日志。
+ * 缓存设置：统计并清理 AI 文件、工具产物、日志与 MCP 运行缓存。
  */
 
 import { computed, onMounted, reactive, ref } from 'vue';
@@ -78,6 +78,7 @@ const info = reactive<CacheInfo>({
   filesBytes: 0,
   artifactsBytes: 0,
   logsBytes: 0,
+  mcpBytes: 0,
   totalBytes: 0,
   failed: []
 });
@@ -90,7 +91,7 @@ const items = computed<
     target: CacheTarget;
     label: string;
     bytes: number;
-    icon: 'file' | 'spark' | 'terminal';
+    icon: 'file' | 'spark' | 'terminal' | 'plug';
   }>
 >(() => [
   {
@@ -110,6 +111,12 @@ const items = computed<
     label: t('settings.cacheLogs'),
     bytes: info.logsBytes,
     icon: 'terminal'
+  },
+  {
+    target: 'mcp',
+    label: t('settings.cacheMcp'),
+    bytes: info.mcpBytes,
+    icon: 'plug'
   }
 ]);
 

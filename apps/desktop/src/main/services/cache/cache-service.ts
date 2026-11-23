@@ -1,8 +1,8 @@
 /**
- * 应用缓存：统计与清理 AI 文件、Artifacts 与日志目录。
+ * 应用缓存：统计与清理 AI 文件、Artifacts、日志与 MCP 运行缓存。
  */
 
-import { mkdir, readdir, rm, stat } from 'node:fs/promises';
+import { lstat, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { CacheTarget } from '@shared/ipc/contracts';
 
@@ -10,12 +10,14 @@ export interface CacheDirectories {
   files: string;
   artifacts: string;
   logs: string;
+  mcpWorkdir: string;
 }
 
 export interface CacheInfo {
   filesBytes: number;
   artifactsBytes: number;
   logsBytes: number;
+  mcpBytes: number;
   totalBytes: number;
   failed: CacheTarget[];
 }
@@ -55,12 +57,14 @@ export const getCacheInfo = async (directories: CacheDirectories): Promise<Cache
   const filesBytes = await directorySize(directories.files);
   const artifactsBytes = await directorySize(directories.artifacts);
   const logsBytes = await directorySize(directories.logs);
+  const mcpBytes = await directorySize(directories.mcpWorkdir);
 
   return {
     filesBytes,
     artifactsBytes,
     logsBytes,
-    totalBytes: filesBytes + artifactsBytes + logsBytes,
+    mcpBytes,
+    totalBytes: filesBytes + artifactsBytes + logsBytes + mcpBytes,
     failed: []
   };
 };
@@ -73,19 +77,49 @@ export const clearCache = async (
   target: CacheTarget
 ): Promise<CacheInfo> => {
   const targets: Array<keyof CacheDirectories> =
-    target === 'all' ? ['files', 'artifacts', 'logs'] : [target];
-  const failed: CacheTarget[] = [];
+    target === 'all'
+      ? ['files', 'artifacts', 'logs', 'mcpWorkdir']
+      : target === 'mcp'
+        ? ['mcpWorkdir']
+        : [target];
+  const failed = new Set<CacheTarget>();
+
+  /**
+   * 清空目录内容但保留目录本身；MCP 子进程可能正以 workdir 为 cwd。
+   * 拒绝跟随符号链接，避免清理落到用户目录之外。
+   */
+  const clearContents = async (directory: string): Promise<void> => {
+    try {
+      const info = await lstat(directory);
+      if (info.isSymbolicLink() || !info.isDirectory()) {
+        await rm(directory, { recursive: true, force: true });
+        await mkdir(directory, { recursive: true });
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      await mkdir(directory, { recursive: true });
+    }
+    const entries = await readdir(directory);
+    await Promise.all(
+      entries.map((entry) => rm(join(directory, entry), { recursive: true, force: true }))
+    );
+  };
 
   for (const key of targets) {
     const directory = directories[key];
+    const cacheTarget: CacheTarget = key === 'mcpWorkdir' ? 'mcp' : key;
     try {
-      await rm(directory, { recursive: true, force: true });
-      await mkdir(directory, { recursive: true });
+      if (key === 'mcpWorkdir') {
+        await clearContents(directory);
+      } else {
+        await rm(directory, { recursive: true, force: true });
+        await mkdir(directory, { recursive: true });
+      }
     } catch (error) {
-      failed.push(key);
+      failed.add(cacheTarget);
       console.error(`缓存目录清理失败：${key}`, error);
     }
   }
 
-  return { ...(await getCacheInfo(directories)), failed };
+  return { ...(await getCacheInfo(directories)), failed: [...failed] };
 };

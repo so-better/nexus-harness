@@ -15,7 +15,7 @@ vi.mock('electron', () => ({
   }
 }));
 
-import { ensureAppDataDirectories, getAppDataPaths } from './paths';
+import { ensureAppDataDirectories, getAppDataPaths, getMcpWorkdirPath } from './paths';
 
 describe('app data paths', () => {
   beforeEach(async () => {
@@ -34,6 +34,7 @@ describe('app data paths', () => {
       paths.plugins,
       paths.skills,
       paths.mcp,
+      getMcpWorkdirPath(paths.mcp),
       paths.settings,
       paths.files,
       paths.artifacts,

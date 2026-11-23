@@ -7,7 +7,7 @@ import { session } from 'electron';
 import type { AgentToolDefinition, ToolExecutionResult } from '@nexus/core';
 import { cacheTargetSchema, type CacheInfo, type CacheTarget } from '@shared/ipc/contracts';
 import type { AppDataPaths } from '../storage/paths';
-import { getAppDataPaths } from '../storage/paths';
+import { getAppDataPaths, getMcpWorkdirPath } from '../storage/paths';
 import { clearCache, getCacheInfo } from '../cache/cache-service';
 import { hasOtherActiveRuns } from './run-registry';
 
@@ -15,6 +15,8 @@ export interface CacheToolOptions {
   paths?: AppDataPaths;
   database?: DatabaseSync;
   runId?: string;
+  /** 清理 MCP 缓存前释放连接，清理后重建，避免删除运行中产物。 */
+  mcp?: { dispose: () => Promise<void>; prewarm: () => Promise<void> };
 }
 
 const cacheGetSchema = z.object({}).strict();
@@ -35,11 +37,11 @@ const tool = (
 });
 
 export const cacheToolDefinitions: AgentToolDefinition[] = [
-  tool('cache_get_info', '读取文件、工具产物与日志缓存占用。', {}, [], false),
+  tool('cache_get_info', '读取文件、工具产物、日志与 MCP 运行缓存占用。', {}, [], false),
   tool(
     'cache_clear',
-    '清理指定缓存；有其他人任务运行时拒绝执行；当前 Run 清理可能删除其引用的产物文件；清理 files/artifacts 时同步删除数据库记录。',
-    { target: { type: 'string', enum: ['files', 'artifacts', 'logs', 'all'] } },
+    '清理指定缓存；有其他人任务运行时拒绝执行；当前 Run 清理可能删除其引用的产物文件；清理 files/artifacts 时同步删除数据库记录；不删除 MCP 配置。',
+    { target: { type: 'string', enum: ['files', 'artifacts', 'logs', 'mcp', 'all'] } },
     ['target'],
     true
   )
@@ -59,7 +61,8 @@ const failure = (code: string, message: string): ToolExecutionResult => ({
 const cacheDirectories = (paths: AppDataPaths) => ({
   files: paths.files,
   artifacts: paths.artifacts,
-  logs: paths.logs
+  logs: paths.logs,
+  mcpWorkdir: getMcpWorkdirPath(paths.mcp)
 });
 
 /**
@@ -90,7 +93,16 @@ export const executeCacheTool = async (
   }
 
   try {
+    const resetsMcp = parsed.data.target === 'mcp' || parsed.data.target === 'all';
+    if (resetsMcp && options.mcp) {
+      await options.mcp.dispose();
+    }
     const info = await clearCache(cacheDirectories(paths), parsed.data.target as CacheTarget);
+    if (resetsMcp && options.mcp) {
+      await options.mcp.prewarm().catch((error: unknown) => {
+        console.error('MCP 缓存清理后预热失败', error);
+      });
+    }
     if (
       (parsed.data.target === 'files' || parsed.data.target === 'all') &&
       !info.failed.includes('files')

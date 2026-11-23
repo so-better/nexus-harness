@@ -262,6 +262,33 @@ const migrate = (db: DatabaseSync): void => {
     db.exec("UPDATE memory_items SET status = 'active' WHERE status = 'archived'");
     db.exec('PRAGMA user_version = 15');
   }
+
+  if (version < 16) {
+    try {
+      db.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+          memory_id UNINDEXED,
+          title,
+          content,
+          tokenize = 'trigram'
+        );
+        INSERT INTO memory_fts (memory_id, title, content)
+        SELECT id, title, content FROM memory_items;
+      `);
+    } catch (error) {
+      console.warn('记忆 FTS5 索引不可用，降级为 LIKE 搜索', error);
+    }
+    db.exec('PRAGMA user_version = 16');
+  }
+
+  if (version < 17) {
+    db.exec('DROP INDEX IF EXISTS idx_memory_items_status');
+    db.exec('ALTER TABLE memory_items DROP COLUMN pinned');
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_memory_items_status ON memory_items(status, priority, updated_at)'
+    );
+    db.exec('PRAGMA user_version = 17');
+  }
 };
 
 /**

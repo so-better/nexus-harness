@@ -623,6 +623,7 @@ interface ProviderCapabilities {
 | `run_command` | execute | 是 |
 | `ask_user` | read | 否（等待用户） |
 | `open_url` | network | 是 |
+| `memory_search` | read | 否 |
 | `search_skills` | read | 否（系统内部） |
 | `read_skill` | read | 否（系统内部） |
 | `checkpoint` | write | 否（系统内部） |
@@ -648,6 +649,7 @@ interface ProviderCapabilities {
 #### MCP 工具接入
 
 - 启动时扫描 `<userData>/mcp/mcp.json`，校验 `mcpServers` 配置后在后台预热已启用 Server；配置保存或文件变化后重新预热，后续 Run 复用连接。
+- `stdio` Server 子进程的 `cwd` 固定为 `<userData>/mcp/workdir`，不得继承应用启动目录；MCP 自动产物统一落在该目录下。
 - 启动时从 `resources/mcp/mcp.json` 补齐 `userData/mcp` 中缺失的内置 Server；已存在的同名 Server 保持用户配置不变。内置模板默认 `enabled: true`，这是产品选择；Run 前可能启动 `npx`/`uvx` 等外部进程，首次使用可能下载依赖或失败，用户需在扩展页查看状态。已有配置的 `enabled` 不自动迁移。用户可通过 `enabled` 字段停用单个 Server，工具调用仍需审批。删除内置 Server 后下次启动会重新补齐，永久停用请设置 `enabled: false`。
 - Server 提供的工具以 `mcp_<serverId>_<toolName>` 命名注册，名称净化到 `[a-zA-Z0-9_-]{1,64}`，权限为 `execute`，始终审批。
 - 工具注册后参与正常工具选择，Agent 不需要了解 MCP 协议；调用时按普通工具走审批与事件流。
@@ -680,7 +682,7 @@ interface ProviderCapabilities {
 ```
 
 - `id` 必须与目录名一致；`transport` 支持 `stdio` 与 `http`。
-- `stdio` 使用 `command` / `args` / `env`；`http` 使用 `url` / `headers`。
+- `stdio` 使用 `command` / `args` / `cwd` / `env`；`http` 使用 `url` / `headers`。`cwd` 可省略，默认 `<userData>/mcp/workdir`；相对路径以 `mcp.json` 所在目录为基准。
 - 配置保存后会立即重新预热；首次启用仍需用户在扩展页确认命令与环境变量。
 
 执行顺序固定为：
@@ -1054,6 +1056,7 @@ export function activate(ctx) {
 ├─ plugins/<plugin-id>/  # 用户插件目录，启动时扫描
 ├─ skills/<skill-id>/    # 技能目录，启动时扫描
 ├─ mcp/mcp.json         # 标准 MCP 配置，启动时扫描
+├─ mcp/workdir/         # stdio MCP 子进程固定工作目录与自动产物
 ├─ settings/             # 启动设置（主题等，后续迁移到 settings 表）
 ├─ files/                # AI 输出文件与会话导出，按会话存放
 ├─ attachments/          # 用户上传附件与抽取内容，按会话存放
@@ -1083,6 +1086,7 @@ export function activate(ctx) {
 | `plugin_storage` | 按插件隔离的键值存储 |
 | `memory_items` | 全局长期记忆：类型、标题、内容、优先级、候选/已保存状态与来源 |
 | `memory_events` | 记忆创建、更新、删除的本地审计记录 |
+| `memory_fts` | 全局记忆全文索引（FTS5 trigram，不可用时降级 LIKE） |
 | `memory_settings` | 自动沉淀与记忆检索开关 |
 
 规则：
@@ -1106,7 +1110,7 @@ export function activate(ctx) {
 - 单实例锁，禁止两个进程同时写同一个 `userData`。
 - 迁移前自动备份数据库；迁移失败保留备份并拒绝启动写入。
 - 数据保留：events 随会话保留；AI 输出文件默认永久保留、不自动清理；artifacts/checkpoints/logs/usage 可设保留期与磁盘配额；清理不得删除仍被引用的文件。
-- 设置中的“清理缓存”只清 `files`、`artifacts`、`logs` 与浏览器 HTTP 缓存；会话、事件、检查点和工作区文件必须保留。AI 缓存清理同样同步删除 `files` / `artifacts` 数据库记录。
+- 设置中的“清理缓存”只清 `files`、`artifacts`、`logs`、MCP 运行缓存（`mcp/workdir` 内容）与浏览器 HTTP 缓存；会话、事件、检查点、工作区文件、`mcp/mcp.json` 和 `mcp/status.json` 必须保留。AI 缓存清理同样同步删除 `files` / `artifacts` 数据库记录，MCP 清理只清空目录内容、保留目录本身。
 - 每条 Usage 记录 provider、model、输入与输出 token、缓存读写、reasoning token、步数、状态与耗时。
 - 日志轮转，避免无限增长。
 - API Key 随本地 Provider 配置保存，不写入事件流。
@@ -1165,8 +1169,8 @@ export function activate(ctx) {
 - 权限与审批：默认审批策略、命令白名单、敏感路径策略、工作区信任管理。
 - 外观：`light / dark / system` 三态，默认 `system`；同时支持字号、密度与减少动效跟随系统；插件皮肤与启动动画分别选择，启动动画默认不启用。
 - 通用：开机自启默认开启，可在设置中关闭；开发态不注册系统登录项，打包后通过系统登录项生效。启动时以系统登录项实际状态为准回写偏好，避免覆盖用户在系统中做的修改。
-- 缓存：统计并清理 AI 输出文件、工具产物、运行日志与 Electron HTTP 缓存；不得删除会话、事件、检查点或用户工作区文件。
-- 设置页有 Run 运行时禁止清理缓存；AI 工具只允许当前 Run 清理，并拒绝其他活跃 Run；部分目录清理失败必须返回失败类别并提示用户，不得误报全部成功。
+- 缓存：统计并清理 AI 输出文件、工具产物、运行日志、MCP 运行缓存与 Electron HTTP 缓存；不得删除会话、事件、检查点、用户工作区文件或 MCP 配置。
+- 设置页有 Run 运行时禁止清理缓存；AI 工具只允许当前 Run 清理，并拒绝其他活跃 Run；MCP 缓存清理前先释放 MCP 连接，清理后后台预热；部分目录清理失败必须返回失败类别并提示用户，不得误报全部成功。
 - 高级：数据目录、日志、遥测开关（默认关闭）。
 - Extensions 弹窗独立管理插件、Skill、MCP，不混入设置；插件自身配置放在插件详情中。
 - 设置项必须由 zod schema 定义，未知键忽略；设置变更通过对应设置服务的 IPC 广播或领域服务同步，不写入会话事件流。

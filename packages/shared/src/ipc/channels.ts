@@ -70,6 +70,8 @@ export const IPC_CHANNELS = {
   memoryDelete: 'memory:delete',
   memoryGetSettings: 'memory:getSettings',
   memorySetSettings: 'memory:setSettings',
+  memoryChanged: 'memory:changed',
+  memoryRebuildIndex: 'memory:rebuildIndex',
   cacheGetInfo: 'cache:getInfo',
   cacheClear: 'cache:clear',
   providerList: 'provider:list',

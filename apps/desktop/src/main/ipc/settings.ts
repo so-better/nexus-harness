@@ -46,7 +46,8 @@ import { applyStartupSelection } from '../services/settings/startup-animation-se
 import { loadImageSettings, saveImageSettings } from '../services/settings/image-settings';
 import { loadSearchSettings, saveSearchSettings } from '../services/settings/search-settings';
 import { clearCache, getCacheInfo } from '../services/cache/cache-service';
-import { getAppDataPaths } from '../services/storage/paths';
+import { getAppDataPaths, getMcpWorkdirPath } from '../services/storage/paths';
+import { getMcpService } from '../services/mcp/mcp-service-instance';
 import { hasActiveRuns } from '../services/agent/run-registry';
 import { getDatabase } from '../services/storage/database';
 import { createBackup, getBackupStatus, stageBackup } from '../services/settings/backup-service';
@@ -373,7 +374,12 @@ export const registerSettingsIpc = (): void => {
   ipcMain.handle(IPC_CHANNELS.cacheGetInfo, async (): Promise<Result<CacheInfo>> => {
     try {
       return ok(
-        await getCacheInfo({ files: paths.files, artifacts: paths.artifacts, logs: paths.logs })
+        await getCacheInfo({
+          files: paths.files,
+          artifacts: paths.artifacts,
+          logs: paths.logs,
+          mcpWorkdir: getMcpWorkdirPath(paths.mcp)
+        })
       );
     } catch (error) {
       return fail('CACHE_INFO_FAILED', error instanceof Error ? error.message : '读取缓存失败');
@@ -392,8 +398,16 @@ export const registerSettingsIpc = (): void => {
       }
 
       try {
+        if (parsed.data === 'mcp' || parsed.data === 'all') {
+          await getMcpService().dispose();
+        }
         const info = await clearCache(
-          { files: paths.files, artifacts: paths.artifacts, logs: paths.logs },
+          {
+            files: paths.files,
+            artifacts: paths.artifacts,
+            logs: paths.logs,
+            mcpWorkdir: getMcpWorkdirPath(paths.mcp)
+          },
           parsed.data
         );
         if ((parsed.data === 'files' || parsed.data === 'all') && !info.failed.includes('files')) {
@@ -404,6 +418,11 @@ export const registerSettingsIpc = (): void => {
           !info.failed.includes('artifacts')
         ) {
           db.prepare('DELETE FROM artifacts').run();
+        }
+        if (parsed.data === 'mcp' || parsed.data === 'all') {
+          getMcpService()
+            .prewarm()
+            .catch((error: unknown) => console.error('MCP 缓存清理后预热失败', error));
         }
         if (parsed.data === 'all') {
           try {

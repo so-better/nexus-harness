@@ -14,7 +14,9 @@ const state = vi.hoisted(() => ({
   applyStartupSelection: vi.fn(async (selection: unknown) => selection),
   deleteArtifacts: vi.fn(),
   deleteFiles: vi.fn(),
-  clearHttpCache: vi.fn()
+  clearHttpCache: vi.fn(),
+  disposeMcp: vi.fn(async () => undefined),
+  prewarmMcp: vi.fn(async () => undefined)
 }));
 
 vi.mock('electron', () => ({
@@ -49,10 +51,15 @@ vi.mock('../services/cache/cache-service', () => ({
     filesBytes: 0,
     artifactsBytes: 0,
     logsBytes: 0,
+    mcpBytes: 0,
     totalBytes: 0,
     failed: []
   })),
   clearCache: state.clearCache
+}));
+
+vi.mock('../services/mcp/mcp-service-instance', () => ({
+  getMcpService: () => ({ dispose: state.disposeMcp, prewarm: state.prewarmMcp })
 }));
 
 vi.mock('../services/agent/run-registry', () => ({
@@ -63,8 +70,10 @@ vi.mock('../services/storage/paths', () => ({
   getAppDataPaths: () => ({
     files: '/tmp/files',
     artifacts: '/tmp/artifacts',
-    logs: '/tmp/logs'
-  })
+    logs: '/tmp/logs',
+    mcp: '/tmp/mcp'
+  }),
+  getMcpWorkdirPath: (mcp: string) => `${mcp}/workdir`
 }));
 
 vi.mock('../services/storage/database', () => ({
@@ -89,6 +98,8 @@ describe('settings IPC', () => {
     state.applyStartupSelection.mockClear();
     state.deleteArtifacts.mockReset();
     state.clearHttpCache.mockReset();
+    state.disposeMcp.mockReset();
+    state.prewarmMcp.mockReset();
     registerSettingsIpc();
   });
 
@@ -147,6 +158,7 @@ describe('settings IPC', () => {
       filesBytes: 0,
       artifactsBytes: 0,
       logsBytes: 0,
+      mcpBytes: 0,
       totalBytes: 0,
       failed: []
     });
@@ -157,6 +169,8 @@ describe('settings IPC', () => {
     expect(result.ok).toBe(true);
     expect(state.deleteArtifacts).toHaveBeenCalledTimes(1);
     expect(state.deleteFiles).toHaveBeenCalledTimes(1);
+    expect(state.disposeMcp).toHaveBeenCalledTimes(1);
+    expect(state.prewarmMcp).toHaveBeenCalledTimes(1);
     expect(state.clearHttpCache).toHaveBeenCalledTimes(1);
   });
 });

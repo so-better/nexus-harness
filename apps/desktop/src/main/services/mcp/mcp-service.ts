@@ -4,7 +4,7 @@
 
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import {
@@ -15,7 +15,7 @@ import {
 } from '@shared/mcp';
 import type { AgentToolDefinition } from '@nexus/core';
 import { assertPublicUrl } from '@nexus/runtime-utils';
-import { getAppDataPaths } from '../storage/paths';
+import { getAppDataPaths, getMcpWorkdirPath } from '../storage/paths';
 
 /**
  * 把 MCP 工具名转换为模型接口允许的 `[a-zA-Z0-9_-]`，并按需截断加哈希。
@@ -89,6 +89,7 @@ const configKey = (config: McpConfig): string =>
     config.transport,
     config.command,
     config.args,
+    config.cwd,
     config.env,
     config.url,
     config.headers
@@ -224,7 +225,9 @@ export class McpService {
     if (this.statusHydrated) return;
     this.statusHydrated = true;
     try {
-      const raw = JSON.parse(await readFile(join(this.directory, 'status.json'), 'utf8')) as unknown;
+      const raw = JSON.parse(
+        await readFile(join(this.directory, 'status.json'), 'utf8')
+      ) as unknown;
       if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
       for (const [id, value] of Object.entries(raw)) {
         if (typeof value === 'string') this.lastErrors.set(id, value);
@@ -343,9 +346,14 @@ export class McpService {
         }
       } else {
         if (!config.command) throw new Error('缺少 command');
+        // MCP 子进程不能继承启动目录；默认固定到 userData，避免产物写入安装目录或根目录
+        const defaultWorkdir = getMcpWorkdirPath(this.directory);
+        const workdir = config.cwd ? resolve(this.directory, config.cwd) : defaultWorkdir;
+        await mkdir(workdir, { recursive: true });
         const transport = new StdioClientTransport({
           command: config.command,
           args: config.args,
+          cwd: workdir,
           env: {
             PATH: process.env['PATH'] ?? '',
             HOME: process.env['HOME'] ?? '',
@@ -523,7 +531,10 @@ export class McpService {
     if (pruned) await this.persistStatus();
     const now = Date.now();
     const pending = configs.filter((config) => {
-      if (this.connected.has(config.id) && this.connectionKeys.get(config.id) === configKey(config)) {
+      if (
+        this.connected.has(config.id) &&
+        this.connectionKeys.get(config.id) === configKey(config)
+      ) {
         return false;
       }
       const retry = this.retryAt.get(config.id);

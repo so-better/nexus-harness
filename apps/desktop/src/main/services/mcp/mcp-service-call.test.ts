@@ -68,6 +68,28 @@ describe('McpService tool calls', () => {
     vi.clearAllMocks();
   });
 
+  it('runs stdio servers in a writable userData workdir', async () => {
+    await service.listTools();
+    expect(mocks.transport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: join(root, 'workdir')
+      })
+    );
+  });
+
+  it('resolves a configured stdio cwd relative to the MCP directory', async () => {
+    await writeFile(
+      join(root, 'mcp.json'),
+      JSON.stringify({
+        mcpServers: { demo: { command: 'node', args: [], cwd: 'custom-workdir' } }
+      })
+    );
+    await service.listTools();
+    expect(mocks.transport).toHaveBeenCalledWith(
+      expect.objectContaining({ cwd: join(root, 'custom-workdir') })
+    );
+  });
+
   it('routes sanitized public names back to the original MCP tool name', async () => {
     const tools = await service.listTools();
     expect(tools.map((tool) => tool.name)).toContain('mcp_demo_read_file');
@@ -141,9 +163,7 @@ describe('McpService tool calls', () => {
     await service.listTools();
     expect(mocks.connect).toHaveBeenCalledTimes(1);
 
-    await service.saveRaw(
-      JSON.stringify({ mcpServers: { demo: { command: 'node', args: [] } } })
-    );
+    await service.saveRaw(JSON.stringify({ mcpServers: { demo: { command: 'node', args: [] } } }));
     await service.listTools();
     expect(mocks.connect).toHaveBeenCalledTimes(2);
   });

@@ -42,6 +42,12 @@ import {
 } from '@nexus/toolkit';
 import { ArtifactService } from '../artifacts/artifact-service';
 import { MemoryService } from '../memory/memory-service';
+import {
+  executeMemoryReadTool,
+  executeMemorySearchTool,
+  memoryReadToolDefinition,
+  memorySearchToolDefinition
+} from './memory-tools';
 import { FileService } from '../files/file-service';
 import { AttachmentService } from '../attachments/attachment-service';
 import { CheckpointService } from '../checkpoint/checkpoint-service';
@@ -600,7 +606,9 @@ const PLAN_ALLOWED_TOOLS = new Set([
   'plugin_list',
   'skill_list',
   'skill_refresh',
-  'mcp_list'
+  'mcp_list',
+  'memory_search',
+  'memory_read'
 ]);
 
 const MCP_MANAGEMENT_TOOLS = new Set([
@@ -800,6 +808,7 @@ export class AgentService {
    */
   private async extractMemoryCandidates(
     provider: ChatProvider,
+    providerName: string,
     model: string,
     input: AgentRunInput,
     messages: ChatMessage[],
@@ -808,6 +817,14 @@ export class AgentService {
     signal?: AbortSignal
   ): Promise<void> {
     if (!this.memoryExtraction || !this.memory || !this.memory.settings().autoCapture) return;
+    // 先用本地信号过滤，只有可能包含长期信息时才调用抽取模型，降低每轮成本
+    if (
+      !/(记住|以后|今后|始终|总是|每次|默认|偏好|习惯|我喜欢|请不要|不要再|务必|记得)/.test(
+        input.prompt
+      )
+    ) {
+      return;
+    }
     const assistant = [...messages]
       .reverse()
       .find((message) => message.role === 'assistant' && message.content.trim())?.content;
@@ -818,6 +835,25 @@ ${input.prompt.slice(0, 3_500)}
 助手：
 ${assistant.slice(0, 3_000)}`;
     let output = '';
+    let usage: { inputTokens: number; outputTokens: number; cost?: number } | undefined;
+    const reportUsage = (): void => {
+      if (!usage) return;
+      eventBus.publish(
+        createNexusEvent({
+          sessionId: input.sessionId,
+          runId,
+          seq: 1,
+          type: 'usage.recorded',
+          payload: {
+            provider: providerName,
+            model,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            ...(usage.cost === undefined ? {} : { cost: usage.cost })
+          }
+        })
+      );
+    };
     try {
       for await (const event of provider.stream({
         model,
@@ -834,12 +870,18 @@ ${assistant.slice(0, 3_000)}`;
         ]
       })) {
         if (event.type === 'text-delta') output += event.text;
-        if (event.type === 'error') return;
+        if (event.type === 'usage') usage = event.usage;
+        if (event.type === 'error') {
+          reportUsage();
+          return;
+        }
       }
     } catch (error) {
       console.warn('记忆候选抽取失败', error);
+      reportUsage();
       return;
     }
+    reportUsage();
     const match = output.match(/\[[\s\S]*\]/);
     if (!match) return;
     let raw: unknown;
@@ -862,22 +904,26 @@ ${assistant.slice(0, 3_000)}`;
       const kind = ['preference', 'fact', 'decision', 'context'].includes(String(record['kind']))
         ? (record['kind'] as 'preference' | 'fact' | 'decision' | 'context')
         : 'context';
-      const candidate = this.memory.propose({
-        title,
-        content,
-        kind,
-        sourceSessionId: input.sessionId
-      });
-      if (candidate) {
-        eventBus.publish(
-          createNexusEvent({
-            sessionId: input.sessionId,
-            runId,
-            seq: 1,
-            type: 'memory.proposed',
-            payload: { candidateId: candidate.id }
-          })
-        );
+      try {
+        const candidate = this.memory.propose({
+          title,
+          content,
+          kind,
+          sourceSessionId: input.sessionId
+        });
+        if (candidate) {
+          eventBus.publish(
+            createNexusEvent({
+              sessionId: input.sessionId,
+              runId,
+              seq: 1,
+              type: 'memory.proposed',
+              payload: { candidateId: candidate.id }
+            })
+          );
+        }
+      } catch (error) {
+        console.warn('记忆候选写入失败', error);
       }
     }
   }
@@ -938,6 +984,7 @@ ${assistant.slice(0, 3_000)}`;
         if (call.name.startsWith('cache_')) {
           return executeCacheTool(call.name, call.arguments, {
             ...(this.database ? { database: this.database } : {}),
+            ...(this.mcp ? { mcp: this.mcp } : {}),
             runId
           });
         }
@@ -974,6 +1021,18 @@ ${assistant.slice(0, 3_000)}`;
         }
         if (call.name === 'open_url') {
           return executeOpenUrlTool(call.arguments);
+        }
+        if (call.name === 'memory_search' || call.name === 'memory_read') {
+          if (!this.memory) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'MEMORY_UNAVAILABLE', message: '记忆服务不可用' }
+            };
+          }
+          return call.name === 'memory_search'
+            ? executeMemorySearchTool(call.arguments, this.memory)
+            : executeMemoryReadTool(call.arguments, this.memory);
         }
         if (call.name === 'ask_user') {
           const parsed = askUserInputSchema.safeParse(call.arguments);
@@ -1822,6 +1881,9 @@ ${assistant.slice(0, 3_000)}`;
         ...mcpTools,
         askUserToolDefinition,
         openUrlToolDefinition,
+        ...(this.memory && this.memory.settings().retrieval
+          ? [memorySearchToolDefinition, memoryReadToolDefinition]
+          : []),
         saveFileToolDefinition,
         saveWordToolDefinition,
         saveExcelToolDefinition,
@@ -1932,6 +1994,7 @@ ${assistant.slice(0, 3_000)}`;
       const result = await loop.run();
       await this.extractMemoryCandidates(
         provider,
+        providerConfig.name,
         modelConfig.id,
         input,
         result.messages,

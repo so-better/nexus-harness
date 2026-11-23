@@ -252,6 +252,8 @@ export interface NexusBridge {
     remove: (id: string) => Promise<Result<{ removed: boolean }>>;
     getSettings: () => Promise<Result<MemorySettings>>;
     setSettings: (settings: MemorySettings) => Promise<Result<MemorySettings>>;
+    onChanged: (handler: () => void) => Unsubscribe;
+    rebuildIndex: () => Promise<Result<{ rebuilt: boolean }>>;
   };
   cache: {
     getInfo: () => Promise<Result<CacheInfo>>;
@@ -823,7 +825,7 @@ export type AppLanguage = z.infer<typeof languageSchema>;
 export const notificationBadgeStyleSchema = z.enum(['dot', 'count']);
 export type NotificationBadgeStyle = z.infer<typeof notificationBadgeStyleSchema>;
 
-export const cacheTargetSchema = z.enum(['files', 'artifacts', 'logs', 'all']);
+export const cacheTargetSchema = z.enum(['files', 'artifacts', 'logs', 'mcp', 'all']);
 
 /**
  * 缓存占用统计。
@@ -832,6 +834,7 @@ export const cacheInfoSchema = z.object({
   filesBytes: z.number().nonnegative(),
   artifactsBytes: z.number().nonnegative(),
   logsBytes: z.number().nonnegative(),
+  mcpBytes: z.number().nonnegative(),
   totalBytes: z.number().nonnegative(),
   failed: z.array(cacheTargetSchema)
 });

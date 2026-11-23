@@ -2,7 +2,7 @@
  * 全局记忆 IPC：列出、创建、更新与删除长期记忆。
  */
 
-import { ipcMain } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import {
   memoryCreateInputSchema,
@@ -20,6 +20,13 @@ import { MemoryService } from '../services/memory/memory-service';
  */
 export const registerMemoryIpc = (): void => {
   const service = new MemoryService(getDatabase());
+  // 尝试补齐/重建索引，修复迁移时 FTS5 不可用或索引缺失
+  service.rebuildIndex();
+  const broadcast = (): void => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) window.webContents.send(IPC_CHANNELS.memoryChanged);
+    }
+  };
 
   ipcMain.handle(IPC_CHANNELS.memoryList, (): Result<MemoryItem[]> => {
     try {
@@ -35,7 +42,9 @@ export const registerMemoryIpc = (): void => {
       const parsed = memoryCreateInputSchema.safeParse(rawInput);
       if (!parsed.success) return fail('MEMORY_INVALID_INPUT', '记忆参数不合法');
       try {
-        return ok(service.create(parsed.data));
+        const created = service.create(parsed.data);
+        broadcast();
+        return ok(created);
       } catch (error) {
         return fail(
           'MEMORY_CREATE_FAILED',
@@ -79,7 +88,9 @@ export const registerMemoryIpc = (): void => {
       const parsed = memorySettingsSchema.safeParse(rawInput);
       if (!parsed.success) return fail('MEMORY_INVALID_INPUT', '记忆设置参数不合法');
       try {
-        return ok(service.updateSettings(parsed.data));
+        const settings = service.updateSettings(parsed.data);
+        broadcast();
+        return ok(settings);
       } catch (error) {
         return fail(
           'MEMORY_SETTINGS_WRITE_FAILED',
@@ -89,13 +100,26 @@ export const registerMemoryIpc = (): void => {
     }
   );
 
+  ipcMain.handle(IPC_CHANNELS.memoryRebuildIndex, (): Result<{ rebuilt: boolean }> => {
+    try {
+      return ok({ rebuilt: service.rebuildIndex() });
+    } catch (error) {
+      return fail(
+        'MEMORY_REBUILD_FAILED',
+        error instanceof Error ? error.message : '重建记忆索引失败'
+      );
+    }
+  });
+
   ipcMain.handle(
     IPC_CHANNELS.memoryDelete,
     async (_event, rawInput: unknown): Promise<Result<{ removed: boolean }>> => {
       const parsed = memoryIdInputSchema.safeParse(rawInput);
       if (!parsed.success) return fail('MEMORY_INVALID_INPUT', '记忆参数不合法');
       try {
-        return ok({ removed: service.remove(parsed.data.id) });
+        const removed = service.remove(parsed.data.id);
+        if (removed) broadcast();
+        return ok({ removed });
       } catch (error) {
         return fail(
           'MEMORY_DELETE_FAILED',

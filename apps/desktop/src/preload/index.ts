@@ -127,7 +127,13 @@ const bridge: NexusBridge = {
     update: (input) => ipcRenderer.invoke(IPC_CHANNELS.memoryUpdate, input),
     remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.memoryDelete, { id }),
     getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.memoryGetSettings),
-    setSettings: (settings) => ipcRenderer.invoke(IPC_CHANNELS.memorySetSettings, settings)
+    setSettings: (settings) => ipcRenderer.invoke(IPC_CHANNELS.memorySetSettings, settings),
+    onChanged: (handler) => {
+      const listener = () => handler();
+      ipcRenderer.on(IPC_CHANNELS.memoryChanged, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.memoryChanged, listener);
+    },
+    rebuildIndex: () => ipcRenderer.invoke(IPC_CHANNELS.memoryRebuildIndex)
   },
   cache: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.cacheGetInfo),

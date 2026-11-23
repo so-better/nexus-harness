@@ -15,6 +15,7 @@ export const memoryItemSchema = z.object({
   status: memoryStatusSchema,
   priority: z.number().int(),
   sourceSessionId: z.string().optional(),
+  sourceSessionTitle: z.string().optional(),
   createdAt: z.number().int(),
   updatedAt: z.number().int(),
   lastUsedAt: z.number().int().optional()
@@ -52,12 +53,23 @@ export const memoryUpdateInputSchema = z
 
 export const memoryIdInputSchema = z.object({ id: z.string().min(1) }).strict();
 
+export const memoryReadInputSchema = z.object({ id: z.string().min(1) }).strict();
+
+export const memorySearchInputSchema = z
+  .object({
+    query: z.string().trim().min(1).max(200),
+    limit: z.number().int().min(1).max(20).optional()
+  })
+  .strict();
+
 export const memorySettingsSchema = z.object({
   autoCapture: z.boolean(),
   retrieval: z.boolean()
 });
 
 export type MemorySettings = z.infer<typeof memorySettingsSchema>;
+export type MemorySearchInput = z.infer<typeof memorySearchInputSchema>;
+export type MemoryReadInput = z.infer<typeof memoryReadInputSchema>;
 
 /**
  * 粗粒度识别明显密钥/密码，避免把它们写进全局记忆。
