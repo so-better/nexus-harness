@@ -13,6 +13,9 @@
     <div ref="host" class="nh-startup__stage" />
     <button type="button" class="nh-startup__skip" @click.stop="finish">
       {{ t('startup.skip') }}
+      <span v-if="remainingSeconds !== null" class="nh-startup__countdown">
+        · {{ remainingSeconds }}s
+      </span>
     </button>
   </div>
 </template>
@@ -30,9 +33,11 @@ const runtime = usePluginRuntimeStore();
 const host = ref<HTMLElement>();
 const overlay = ref<HTMLElement>();
 const visible = ref(false);
+const remainingSeconds = ref<number | null>(null);
 let previousFocus: HTMLElement | null = null;
 let shadowRoot: ShadowRoot | undefined;
 let cleanup: (() => void) | undefined;
+let countdownTimer: ReturnType<typeof setInterval> | undefined;
 let mounting = false;
 let started = false;
 let finished = false;
@@ -42,6 +47,11 @@ let finished = false;
  */
 const finish = (): void => {
   finished = true;
+  if (countdownTimer) {
+    clearInterval(countdownTimer);
+    countdownTimer = undefined;
+  }
+  remainingSeconds.value = null;
   const dispose = cleanup;
   cleanup = undefined;
   try {
@@ -83,6 +93,18 @@ const mountAnimation = async (): Promise<boolean> => {
       return true;
     }
     cleanup = dispose;
+    if (implementation.countdownMs !== undefined) {
+      const endAt = Date.now() + implementation.countdownMs;
+      remainingSeconds.value = Math.ceil(implementation.countdownMs / 1000);
+      countdownTimer = setInterval(() => {
+        const left = endAt - Date.now();
+        remainingSeconds.value = Math.max(0, Math.ceil(left / 1000));
+        if (left <= 0 && countdownTimer) {
+          clearInterval(countdownTimer);
+          countdownTimer = undefined;
+        }
+      }, 250);
+    }
     return true;
   } catch (reason) {
     runtime.reportPluginFailure(implementation.pluginId, reason);
@@ -143,20 +165,21 @@ onBeforeUnmount(() => {
   position: absolute;
   right: 24px;
   bottom: 22px;
-  padding: 6px 10px;
-  border: 1px solid color-mix(in srgb, var(--nh-color-border) 72%, transparent);
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--nh-color-bg-base) 42%, transparent);
+  padding: 4px 2px;
+  border: 0;
+  background: transparent;
   color: var(--nh-color-text-secondary);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
-  backdrop-filter: blur(12px);
 }
 
 .nh-startup__skip:hover {
-  background: color-mix(in srgb, var(--nh-color-bg-base) 64%, transparent);
   color: var(--nh-color-text-primary);
+}
+
+.nh-startup__countdown {
+  font-variant-numeric: tabular-nums;
 }
 
 .nh-startup__skip:focus-visible {

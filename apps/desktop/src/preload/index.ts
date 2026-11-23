@@ -36,6 +36,7 @@ const bridge: NexusBridge = {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo),
     openExternal: (url) => ipcRenderer.invoke(IPC_CHANNELS.appOpenExternal, url),
     openPath: (path) => ipcRenderer.invoke(IPC_CHANNELS.appOpenPath, path),
+    openDataLocation: (target) => ipcRenderer.invoke(IPC_CHANNELS.appOpenDataLocation, target),
     showItemInFolder: (path) => ipcRenderer.invoke(IPC_CHANNELS.appShowItemInFolder, path),
     relaunch: () => ipcRenderer.invoke(IPC_CHANNELS.appRelaunch),
     consumePendingSession: () => ipcRenderer.invoke(IPC_CHANNELS.appConsumePendingSession),

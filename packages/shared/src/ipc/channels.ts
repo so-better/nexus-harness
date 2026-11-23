@@ -6,6 +6,7 @@ export const IPC_CHANNELS = {
   appGetInfo: 'app:getInfo',
   appOpenExternal: 'app:openExternal',
   appOpenPath: 'app:openPath',
+  appOpenDataLocation: 'app:openDataLocation',
   appShowItemInFolder: 'app:showItemInFolder',
   appRelaunch: 'app:relaunch',
   windowMinimize: 'window:minimize',

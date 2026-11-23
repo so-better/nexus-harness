@@ -82,7 +82,8 @@ const pluginSkinSchema = z.object({
 
 const pluginStartupSchema = z.object({
   id: z.string().min(1),
-  title: z.string().min(1)
+  title: z.string().min(1),
+  countdownMs: z.number().int().min(100).max(30_000)
 });
 
 export const pluginManifestSchema = z.object({

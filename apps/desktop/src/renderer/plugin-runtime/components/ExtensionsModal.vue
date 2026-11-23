@@ -14,10 +14,16 @@
           <p>{{ t('plugins.hint') }}</p>
           <div class="nh-extensions__header-actions">
             <NButton type="primary" secondary :loading="importing" @click="importPlugin">
+              <template #icon><AppIcon name="download" :size="14" /></template>
               {{ t('plugins.import') }}
             </NButton>
-            <NButton secondary :loading="runtime.loading" @click="runtime.reload()">
+            <NButton secondary :loading="reloading" @click="reloadPlugins">
+              <template #icon><AppIcon name="refresh" :size="14" /></template>
               {{ t('plugins.reload') }}
+            </NButton>
+            <NButton secondary @click="openFolder('plugins')">
+              <template #icon><AppIcon name="folder" :size="14" /></template>
+              {{ t('plugins.openDirectory') }}
             </NButton>
           </div>
         </div>
@@ -76,6 +82,8 @@
 
 import { computed, onMounted, ref, watch } from 'vue';
 import { NButton, NEmpty, NInput, NModal, NTabPane, NTabs, useMessage } from 'naive-ui';
+import type { OpenDataLocation } from '@shared/ipc/contracts';
+import { openDataLocation } from '@/app/data-location.api';
 import AppIcon from '@/components/AppIcon.vue';
 import { t } from '@/app/i18n';
 import { usePluginRuntimeStore, type PluginCommand } from '../runtime.store';
@@ -90,6 +98,7 @@ const runtime = usePluginRuntimeStore();
 const message = useMessage();
 const busyId = ref<string>();
 const importing = ref(false);
+const reloading = ref(false);
 const pluginQuery = ref('');
 
 onMounted(() => {
@@ -112,6 +121,23 @@ const filteredPlugins = computed(() => {
     )
   );
 });
+
+const openFolder = async (target: OpenDataLocation): Promise<void> => {
+  try {
+    await openDataLocation(target);
+  } catch (reason) {
+    message.error(reason instanceof Error ? reason.message : t('extensions.openFailed'));
+  }
+};
+
+const reloadPlugins = async (): Promise<void> => {
+  reloading.value = true;
+  try {
+    await runtime.reload();
+  } finally {
+    reloading.value = false;
+  }
+};
 
 const importPlugin = async (): Promise<void> => {
   importing.value = true;

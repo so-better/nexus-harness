@@ -57,7 +57,7 @@ const plugin: PluginPublic = {
     commands: [{ id: 'usage.check', title: 'Check usage' }],
     settings: [],
     skins: [{ id: 'paper', title: 'Paper' }],
-    startup: [{ id: 'intro', title: 'Intro' }]
+    startup: [{ id: 'intro', title: 'Intro', countdownMs: 2000 }]
   },
   rendererUrl: `data:text/javascript,${encodeURIComponent(
     "export function activate(ctx) { ctx.skins.register('paper', () => () => {}); ctx.startup.register('intro', (_el, _ctx, finish) => { finish(); return () => {}; }); ctx.views.register('usage.dashboard', () => () => {}); ctx.commands.register('usage.check', () => ctx.usage.getStats({ bucket: 'day' })); }\n"

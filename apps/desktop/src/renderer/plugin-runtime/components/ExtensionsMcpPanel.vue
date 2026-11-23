@@ -4,13 +4,20 @@
       <p>{{ t('mcp.hint') }}</p>
       <div class="nh-extension-panel__actions">
         <NButton type="primary" secondary :loading="saving" @click="save()">
+          <template #icon><AppIcon name="check" :size="14" /></template>
           {{ t('mcp.save') }}
         </NButton>
         <NButton type="primary" tertiary :loading="testing" @click="test">
+          <template #icon><AppIcon name="play" :size="14" /></template>
           {{ t('mcp.test') }}
         </NButton>
         <NButton secondary :loading="loading" @click="load">
+          <template #icon><AppIcon name="refresh" :size="14" /></template>
           {{ t('mcp.refresh') }}
+        </NButton>
+        <NButton secondary @click="openFolder">
+          <template #icon><AppIcon name="folder" :size="14" /></template>
+          {{ t('mcp.openDirectory') }}
         </NButton>
       </div>
     </div>
@@ -147,6 +154,7 @@ import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue';
 import { NButton, NSwitch, NTag, NTooltip, useMessage } from 'naive-ui';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
+import { openDataLocation } from '@/app/data-location.api';
 import { getMcpStatus, loadMcpConfig, saveMcpConfig, testMcpConfig } from '../api/mcp.api';
 import type { McpServerStatus, McpTestServerResult } from '@shared/mcp';
 
@@ -158,6 +166,14 @@ const loading = ref(false);
 const saving = ref(false);
 const testing = ref(false);
 const testResults = ref<McpTestServerResult[]>([]);
+const openFolder = async (): Promise<void> => {
+  try {
+    await openDataLocation('mcp');
+  } catch (reason) {
+    message.error(reason instanceof Error ? reason.message : t('extensions.openFailed'));
+  }
+};
+
 const closeTestResults = (): void => {
   testResults.value = [];
 };

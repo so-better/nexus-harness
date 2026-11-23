@@ -49,6 +49,12 @@ export type ThemeSource = z.infer<typeof themeSourceSchema>;
 export type ThemeInfo = z.infer<typeof themeInfoSchema>;
 
 /**
+ * 可打开的本地数据位置；使用枚举避免渲染层传入任意路径。
+ */
+export const openDataLocationSchema = z.enum(['plugins', 'skills', 'mcp']);
+export type OpenDataLocation = z.infer<typeof openDataLocationSchema>;
+
+/**
  * Provider 协议：OpenAI 兼容、Anthropic 原生或 Ollama。
  */
 export const providerProtocolSchema = z.enum(['openai', 'anthropic', 'ollama']);
@@ -189,6 +195,7 @@ export interface NexusBridge {
     getInfo: () => Promise<Result<AppInfo>>;
     openExternal: (url: string) => Promise<Result<{ opened: boolean }>>;
     openPath: (path: string) => Promise<Result<{ opened: boolean }>>;
+    openDataLocation: (target: OpenDataLocation) => Promise<Result<{ opened: boolean }>>;
     showItemInFolder: (path: string) => Promise<Result<{ shown: boolean }>>;
     relaunch: () => Promise<Result<{ relaunched: boolean }>>;
     consumePendingSession: () => Promise<Result<string | null>>;

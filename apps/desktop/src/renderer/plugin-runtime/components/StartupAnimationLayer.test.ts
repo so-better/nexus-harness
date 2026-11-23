@@ -12,6 +12,7 @@ const runtimeState = vi.hoisted(() => ({
     id: string;
     title: string;
     pluginName: string;
+    countdownMs?: number;
     context: Record<string, never>;
     mount: (element: HTMLElement, ctx: unknown, finish: () => void) => () => void;
   },
@@ -61,6 +62,7 @@ describe('StartupAnimationLayer', () => {
       id: 'intro',
       title: 'Intro',
       pluginName: 'Startup',
+      countdownMs: 2000,
       context: {},
       mount: (_element, _ctx, done) => {
         finish = done;
@@ -76,6 +78,7 @@ describe('StartupAnimationLayer', () => {
     expect(runtimeState.activateForStartup).toHaveBeenCalledTimes(1);
     expect(finish).toBeTypeOf('function');
     expect(document.querySelector<HTMLElement>('.nh-startup')?.style.display).not.toBe('none');
+    expect(document.querySelector('.nh-startup__countdown')?.textContent).toContain('2s');
 
     finish?.();
     await flush();

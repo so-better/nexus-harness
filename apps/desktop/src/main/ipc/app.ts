@@ -6,7 +6,13 @@ import { app, ipcMain, shell } from 'electron';
 import { realpath, stat } from 'node:fs/promises';
 import { consumePendingSession } from '../services/notifications/notification-service';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
-import { appInfoSchema, type AppInfo } from '@shared/ipc/contracts';
+import {
+  appInfoSchema,
+  openDataLocationSchema,
+  type AppInfo,
+  type OpenDataLocation
+} from '@shared/ipc/contracts';
+import { getAppDataPaths } from '../services/storage/paths';
 import { fail, ok, type Result } from '@shared/ipc/result';
 import desktopPackage from '../../../package.json';
 
@@ -38,6 +44,22 @@ export const registerAppIpc = (): void => {
       return error
         ? { ok: false, error: { code: 'OPEN_PATH_FAILED', message: error } }
         : ok({ opened: true });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.appOpenDataLocation,
+    async (_event, rawTarget: unknown): Promise<Result<{ opened: boolean }>> => {
+      const parsed = openDataLocationSchema.safeParse(rawTarget);
+      if (!parsed.success) {
+        return fail('INVALID_DATA_LOCATION', '不支持的数据目录');
+      }
+      const paths = getAppDataPaths();
+      const target: OpenDataLocation = parsed.data;
+      const targetPath =
+        target === 'plugins' ? paths.plugins : target === 'skills' ? paths.skills : paths.mcp;
+      const error = await shell.openPath(targetPath);
+      return error ? fail('OPEN_DATA_LOCATION_FAILED', error) : ok({ opened: true });
     }
   );
 

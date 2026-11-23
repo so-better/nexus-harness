@@ -4,10 +4,16 @@
       <p>{{ t('skills.hint') }}</p>
       <div class="nh-extension-panel__actions">
         <NButton type="primary" secondary :loading="busy" @click="importSkill">
+          <template #icon><AppIcon name="download" :size="14" /></template>
           {{ t('skills.import') }}
         </NButton>
         <NButton secondary :loading="loading" @click="load">
+          <template #icon><AppIcon name="refresh" :size="14" /></template>
           {{ t('skills.refresh') }}
+        </NButton>
+        <NButton secondary @click="openFolder">
+          <template #icon><AppIcon name="folder" :size="14" /></template>
+          {{ t('skills.openDirectory') }}
         </NButton>
       </div>
     </div>
@@ -90,6 +96,7 @@ import type { SkillSummary } from '@shared/skills';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import { deleteSkill, importSkillDirectory, listSkills } from '@/modules/chat/api/skills.api';
+import { openDataLocation } from '@/app/data-location.api';
 
 const message = useMessage();
 const skills = ref<SkillSummary[]>([]);
@@ -106,6 +113,14 @@ const load = async (): Promise<void> => {
     message.error(reason instanceof Error ? reason.message : t('skills.loadFailed'));
   } finally {
     loading.value = false;
+  }
+};
+
+const openFolder = async (): Promise<void> => {
+  try {
+    await openDataLocation('skills');
+  } catch (reason) {
+    message.error(reason instanceof Error ? reason.message : t('extensions.openFailed'));
   }
 };
 

@@ -13,7 +13,8 @@
     "startup": [
       {
         "id": "fade",
-        "title": "淡入"
+        "title": "淡入",
+        "countdownMs": 2600
       }
     ]
   }
