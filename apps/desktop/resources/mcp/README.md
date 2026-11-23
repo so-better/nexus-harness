@@ -20,6 +20,22 @@
 - 依赖：`uv`/Python、Chrome；云浏览器或托管模型可能还需要 `BROWSER_USE_API_KEY`
 - 官方建议固定版本，升级前先验证命令与工具协议
 
+## DeepWiki MCP
+
+- 来源：DeepWiki 官方 MCP
+- 类型：HTTP
+- 地址：`https://mcp.deepwiki.com/mcp`
+- 依赖：网络，无需本地安装
+- 用途：理解开源仓库、检索仓库文档与代码结构
+
+## Microsoft Learn MCP
+
+- 来源：Microsoft Learn 官方 MCP
+- 类型：HTTP
+- 地址：`https://learn.microsoft.com/api/mcp`
+- 依赖：网络，无需本地安装
+- 用途：检索微软官方文档、教程与 API 说明
+
 ## Context7 MCP
 
 - 来源：Upstash `@upstash/context7-mcp`

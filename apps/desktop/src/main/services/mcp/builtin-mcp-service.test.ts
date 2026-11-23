@@ -54,7 +54,13 @@ describe('syncBuiltinMcpConfig', () => {
     const raw = JSON.parse(
       await readFile(join(process.cwd(), 'apps/desktop/resources/mcp/mcp.json'), 'utf8')
     ) as { mcpServers: Record<string, { enabled?: boolean }> };
-    expect(Object.keys(raw.mcpServers)).toEqual(['playwright', 'browser-use', 'context7']);
+    expect(Object.keys(raw.mcpServers)).toEqual([
+      'playwright',
+      'browser-use',
+      'context7',
+      'deepwiki',
+      'microsoft-learn'
+    ]);
     expect(Object.values(raw.mcpServers).every((server) => server.enabled === true)).toBe(true);
   });
 
