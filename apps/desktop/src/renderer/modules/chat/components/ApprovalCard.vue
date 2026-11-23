@@ -48,6 +48,10 @@ const input = computed<Record<string, unknown>>(() =>
 );
 const stringValue = (key: string): string | undefined =>
   typeof input.value[key] === 'string' ? (input.value[key] as string) : undefined;
+/**
+ * 按 Unicode 码点统计字符数，避免 emoji 被 String.length 算成两个字符。
+ */
+const countChars = (value: string | undefined): number => [...(value ?? '')].length;
 
 /**
  * 审批摘要：让用户无需展开工具卡就能知道将要执行什么。
@@ -74,7 +78,7 @@ const summary = computed<{ label: string; value: string; meta?: string }>(() => 
       value: path,
       ...(oldText !== undefined || newText !== undefined
         ? {
-            meta: `+${(newText ?? '').length} / -${(oldText ?? '').length}`
+            meta: `${t('chat.approvalDiffAdded')} ${countChars(newText)} ${t('chat.approvalDiffChars')} / ${t('chat.approvalDiffRemoved')} ${countChars(oldText)} ${t('chat.approvalDiffChars')}`
           }
         : {})
     };
