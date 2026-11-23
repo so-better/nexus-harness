@@ -1,6 +1,6 @@
 <template>
   <div class="nh-reasoning">
-    <NButton text block class="nh-reasoning__header" @click="open = !open">
+    <NButton text block class="nh-reasoning__header" @click="toggleOpen">
       <span class="nh-reasoning__main">
         <AppIcon
           :name="streaming ? 'loader' : 'lightbulb'"
@@ -24,18 +24,36 @@
  * 推理段：每次出现独立成块，可折叠，参与消息时间线排序。
  */
 
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { NButton } from 'naive-ui';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import MarkdownSegments from '../render/MarkdownSegments.vue';
 
-withDefaults(defineProps<{ text: string; streaming?: boolean }>(), {
+const props = withDefaults(defineProps<{ text: string; streaming?: boolean }>(), {
   streaming: false
 });
 
-// 每个推理块默认折叠，只有用户主动点击才展开
+// 每个推理块默认折叠；流式期间用户主动展开后，回复结束自动折叠
 const open = ref(false);
+let openedDuringStreaming = false;
+
+const toggleOpen = (): void => {
+  open.value = !open.value;
+  if (props.streaming && open.value) openedDuringStreaming = true;
+};
+
+watch(
+  () => props.streaming,
+  (streaming, previous) => {
+    if (streaming) {
+      openedDuringStreaming = false;
+    } else if (previous && openedDuringStreaming) {
+      open.value = false;
+      openedDuringStreaming = false;
+    }
+  }
+);
 </script>
 
 <style scoped lang="less">

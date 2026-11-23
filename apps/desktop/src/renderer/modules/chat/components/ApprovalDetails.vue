@@ -4,6 +4,10 @@
       <span class="nh-approval__label">{{ t('chat.approvalPath') }}</span>
       <code class="nh-approval__value">{{ path }}</code>
     </div>
+    <div v-if="cwd" class="nh-approval__field">
+      <span class="nh-approval__label">{{ t('chat.approvalCwd') }}</span>
+      <code class="nh-approval__value">{{ cwd }}</code>
+    </div>
     <div v-if="command" class="nh-approval__field">
       <pre class="nh-approval__pre nh-approval__pre--command">{{ command }}</pre>
     </div>
@@ -52,6 +56,7 @@ const stringValue = (key: string): string | undefined =>
   typeof input.value[key] === 'string' ? (input.value[key] as string) : undefined;
 const path = computed(() => stringValue('path'));
 const command = computed(() => stringValue('command'));
+const cwd = computed(() => stringValue('cwd'));
 const prompt = computed(() => stringValue('prompt'));
 const query = computed(() => stringValue('query'));
 const content = computed(() => stringValue('content'));

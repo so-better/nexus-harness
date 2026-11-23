@@ -1,8 +1,8 @@
 /**
  * 主布局会话动作：新建、选择、删除、重命名、导出与消息定位。
  */
-import { ref } from 'vue';
-import { useMessage } from 'naive-ui';
+import { computed, ref } from 'vue';
+import { useDialog, useMessage } from 'naive-ui';
 import { storeToRefs } from 'pinia';
 import { t } from '@/app/i18n';
 import { useChatStore } from '@/modules/chat/stores/chat.store';
@@ -13,9 +13,12 @@ export const useMainSessionActions = () => {
   const sessions = useSessionStore();
   const chat = useChatStore();
   const message = useMessage();
+  const dialog = useDialog();
   const { activeId } = storeToRefs(sessions);
   const { providerId, modelId } = storeToRefs(chat);
   const exporting = ref(false);
+  const confirmingExport = ref(false);
+  const exportBusy = computed(() => exporting.value || confirmingExport.value);
   const focusMessage = ref<{ id: string; token: number; sessionId: string }>();
   let focusSequence = 0;
 
@@ -74,13 +77,36 @@ export const useMainSessionActions = () => {
   };
 
   const exportActiveSession = async (format: 'markdown' | 'html' | 'pdf'): Promise<void> => {
-    if (!activeId.value || exporting.value) return;
-    exporting.value = true;
-    try {
-      await exportSession(activeId.value, format);
-    } finally {
-      exporting.value = false;
-    }
+    if (!activeId.value || exportBusy.value) return;
+    const sessionId = activeId.value;
+    confirmingExport.value = true;
+    dialog.info({
+      title: t('session.exportConfirmTitle'),
+      content: `${t('session.exportConfirmContent')}\n\n${t('session.exportConfirmFormat')}: ${format.toUpperCase()}`,
+      positiveText: t('session.exportConfirmAction'),
+      negativeText: t('settings.cancel'),
+      onPositiveClick: async () => {
+        confirmingExport.value = false;
+        exporting.value = true;
+        try {
+          await exportSession(sessionId, format);
+        } finally {
+          exporting.value = false;
+        }
+      },
+      onNegativeClick: () => {
+        confirmingExport.value = false;
+      },
+      onMaskClick: () => {
+        confirmingExport.value = false;
+      },
+      onEsc: () => {
+        confirmingExport.value = false;
+      },
+      onClose: () => {
+        confirmingExport.value = false;
+      }
+    });
   };
 
   const renameSession = async (id: string, title: string): Promise<void> => {
@@ -101,7 +127,7 @@ export const useMainSessionActions = () => {
   };
 
   return {
-    exporting,
+    exporting: exportBusy,
     focusMessage,
     createSession,
     selectSession,

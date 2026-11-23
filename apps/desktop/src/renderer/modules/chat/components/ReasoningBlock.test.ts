@@ -3,7 +3,7 @@
  * 推理块：流式时同时显示旋转图标与“思考中…”，结束后显示“思考过程”。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createApp, nextTick } from 'vue';
+import { createApp, h, nextTick, ref } from 'vue';
 import ReasoningBlock from './ReasoningBlock.vue';
 
 vi.mock('naive-ui', () => ({
@@ -58,6 +58,49 @@ describe('ReasoningBlock', () => {
     button?.click();
     await nextTick();
     expect(host.querySelector('.nh-reasoning__body')?.getAttribute('style') ?? '').not.toContain(
+      'display: none'
+    );
+    app.unmount();
+  });
+
+  it('collapses when streaming ends if the user opened it during streaming', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const streaming = ref(true);
+    const app = createApp({
+      render: () => h(ReasoningBlock, { text: '用户主动展开', streaming: streaming.value })
+    });
+    app.mount(host);
+
+    host.querySelector('button')?.click();
+    await nextTick();
+    expect(host.querySelector('.nh-reasoning__body')?.getAttribute('style') ?? '').not.toContain(
+      'display: none'
+    );
+
+    streaming.value = false;
+    await nextTick();
+    expect(host.querySelector('.nh-reasoning__body')?.getAttribute('style')).toContain(
+      'display: none'
+    );
+    app.unmount();
+  });
+
+  it('resets the streaming-open flag when a new stream starts', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const streaming = ref(false);
+    const app = createApp({
+      render: () => h(ReasoningBlock, { text: '重新开始', streaming: streaming.value })
+    });
+    app.mount(host);
+    streaming.value = true;
+    await nextTick();
+    host.querySelector('button')?.click();
+    await nextTick();
+    streaming.value = false;
+    await nextTick();
+    expect(host.querySelector('.nh-reasoning__body')?.getAttribute('style')).toContain(
       'display: none'
     );
     app.unmount();

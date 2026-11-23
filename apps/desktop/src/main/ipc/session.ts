@@ -319,21 +319,6 @@ export const registerSessionIpc = (): void => {
       const title = session.title.replace(/[\\/:*?"<>|]/g, '_') || 'session';
       const extension = parsed.data.format === 'markdown' ? 'md' : parsed.data.format;
       const window = BrowserWindow.fromWebContents(event.sender);
-      const confirmationOptions = {
-        type: 'info' as const,
-        title: '导出会话',
-        message: '确认导出范围',
-        detail:
-          '导出将包含消息、工具调用、审批、用量和检查点；常见密钥会自动脱敏，单个超长输出会被截断。',
-        buttons: ['继续导出', '取消'],
-        defaultId: 0,
-        cancelId: 1
-      };
-      const confirmation = window
-        ? await dialog.showMessageBox(window, confirmationOptions)
-        : await dialog.showMessageBox(confirmationOptions);
-      if (confirmation.response !== 0) return ok({ saved: false });
-
       const result = window
         ? await dialog.showSaveDialog(window, {
             title: '导出会话',
