@@ -504,7 +504,7 @@ interface ProviderCapabilities {
 - 对话模型配置保持 Provider + `models` 结构；图像模型使用独立入口和配置列表，不混入对话 Provider 的模型列表。
 - 会话与 Run 记录实际使用的 `providerId + modelId`；不得在未指定模型时静默使用默认模型。
 - 图像模型未配置时，`generate_image` 工具不注册，Agent 不能生成图片，UI 引导用户去设置。
-- 图像模型使用独立模板 JSON：`url`、可选 `headers`、`body`、`result` 与可选 `poll`；不假设固定厂商字段。
+- 图像模型使用独立模板 JSON：`url`、可选 `headers`、`body`、`result` 与可选 `poll`；不假设固定厂商字段。模板支持 `{{?key}}` 可选占位符：缺失时在数组项中移除整个对象，用于可选参考图内容块。
 - 请求体模板使用 JSON 占位符 `{{model}}`、`{{prompt}}`、`{{size}}`、`{{image_url}}`、`{{image_urls}}`；无参考图时移除包含图片占位符的字段/数组项。
 - `result.path/paths` 支持点号、数组下标与 `*` 通配符，例如 `data.0.url`、`data.*.b64_json`；编码支持 URL、Base64 与 binary。
 - 同步接口直接解析响应；异步接口通过 `poll.path`、`id_path`、`status_path` 与 `result_path` 轮询，不在代码中猜任务地址；必须校验响应大小、下载超时与图片类型。

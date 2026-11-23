@@ -79,6 +79,95 @@ describe('generateImages', () => {
     expect(body.images).toEqual(['https://example.com/input.jpg']);
   });
 
+  it('removes optional image content when no reference image is provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ data: [{ b64_json: Buffer.from('image').toString('base64') }] }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        }
+      )
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateImages({
+      template: {
+        url: 'https://example.com/generate',
+        body: {
+          model: '{{model}}',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: '{{prompt}}' },
+                { type: 'image_url', image_url: { url: '{{?image_url}}' } }
+              ]
+            }
+          ]
+        },
+        result: { path: 'data.0.b64_json', encoding: 'base64' }
+      },
+      model: 'hy-image',
+      prompt: 'cat',
+      count: 1
+    });
+
+    const request = fetchMock.mock.calls[0];
+    const body = JSON.parse((request?.[1] as RequestInit).body as string) as {
+      messages: Array<{ content: Array<Record<string, unknown>> }>;
+    };
+    expect(body.messages[0]?.content).toEqual([{ type: 'text', text: 'cat' }]);
+  });
+
+  it('keeps optional image content when a reference image is provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ data: [{ b64_json: Buffer.from('image').toString('base64') }] }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        }
+      )
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateImages({
+      template: {
+        url: 'https://example.com/generate',
+        body: {
+          model: '{{model}}',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: '{{prompt}}' },
+                { type: 'image_url', image_url: { url: '{{?image_url}}' } }
+              ]
+            }
+          ]
+        },
+        result: { path: 'data.0.b64_json', encoding: 'base64' }
+      },
+      model: 'hy-image',
+      prompt: 'cat',
+      count: 1,
+      images: ['https://example.com/cat.png']
+    });
+
+    const request = fetchMock.mock.calls[0];
+    const body = JSON.parse((request?.[1] as RequestInit).body as string) as {
+      messages: Array<{ content: Array<Record<string, unknown>> }>;
+    };
+    expect(body.messages[0]?.content).toEqual([
+      { type: 'text', text: 'cat' },
+      {
+        type: 'image_url',
+        image_url: { url: 'https://example.com/cat.png' }
+      }
+    ]);
+  });
+
   it('polls asynchronous image tasks', async () => {
     const fetchMock = vi
       .fn()

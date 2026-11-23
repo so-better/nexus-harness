@@ -28,10 +28,33 @@ const MAX_POLL_INTERVAL_MS = 30_000;
 const MAX_POLL_TIMEOUT_MS = 10 * 60 * 1000;
 
 /**
- * 渲染模板：完整占位符保留原值，缺失值会从对象/数组中移除。
+ * 可选占位符缺失标记：用于移除整个数组项，而不是留下空的 image_url 对象。
  */
-const renderTemplate = (node: unknown, variables: Record<string, unknown>): unknown => {
+const OPTIONAL_MISSING = Symbol('optional-missing');
+
+/**
+ * 渲染模板：完整占位符保留原值，缺失值会从对象/数组中移除。
+ * `{{?key}}` 表示可选字段；缺失时在数组项中移除整个对象。
+ */
+const renderTemplate = (
+  node: unknown,
+  variables: Record<string, unknown>,
+  inArray = false
+): unknown => {
   if (typeof node === 'string') {
+    const optional = /^\{\{\s*\?\s*(\w+)\s*\}\}$/.exec(node);
+    if (optional) {
+      const value = variables[optional[1] ?? ''];
+      if (
+        value === undefined ||
+        value === null ||
+        value === '' ||
+        (Array.isArray(value) && value.length === 0)
+      ) {
+        return OPTIONAL_MISSING;
+      }
+      return value;
+    }
     const exact = /^\{\{\s*(\w+)\s*\}\}$/.exec(node);
     if (exact) return variables[exact[1] ?? ''];
     return node.replace(/\{\{\s*(\w+)\s*\}\}/g, (_match, key: string) => {
@@ -40,12 +63,18 @@ const renderTemplate = (node: unknown, variables: Record<string, unknown>): unkn
     });
   }
   if (Array.isArray(node)) {
-    return node.map((item) => renderTemplate(item, variables)).filter((item) => item !== undefined);
+    return node
+      .map((item) => renderTemplate(item, variables, true))
+      .filter((item) => item !== undefined && item !== OPTIONAL_MISSING);
   }
   if (node && typeof node === 'object') {
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(node)) {
-      const rendered = renderTemplate(value, variables);
+      const rendered = renderTemplate(value, variables, inArray);
+      if (rendered === OPTIONAL_MISSING) {
+        if (inArray) return OPTIONAL_MISSING;
+        continue;
+      }
       if (rendered === undefined) continue;
       if (Array.isArray(rendered) && rendered.length === 0) continue;
       if (
