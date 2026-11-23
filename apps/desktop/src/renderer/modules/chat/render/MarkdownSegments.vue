@@ -53,7 +53,7 @@ const lastMdIndex = computed(() => {
 
 .nh-markdown-segments__iframe {
   width: 100%;
-  height: 360px;
+  height: clamp(320px, 52vh, 560px);
   margin: 12px 0;
   border: 1px solid var(--nh-border-subtle);
   border-radius: 9px;

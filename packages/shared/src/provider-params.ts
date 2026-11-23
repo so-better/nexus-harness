@@ -2,6 +2,8 @@
  * Provider 额外请求参数校验：阻止覆盖核心协议字段与写入敏感值。
  */
 
+const MANAGED_THINKING_PARAMS = new Set(['thinking', 'reasoning_effort']);
+
 const RESERVED_PARAMS = new Set([
   'model',
   'messages',
@@ -16,6 +18,12 @@ const RESERVED_PARAMS = new Set([
 ]);
 
 const SENSITIVE_KEY = /authorization|api[-_]?key|access[-_]?token|secret|password|passwd|cookie/i;
+
+/**
+ * 返回由模型思考开关/强度接管的字段；这些字段不能出现在额外参数 JSON 中。
+ */
+export const findManagedThinkingParams = (params: Record<string, unknown>): string[] =>
+  Object.keys(params).filter((key) => MANAGED_THINKING_PARAMS.has(key));
 
 /**
  * 返回被禁止的保留字段。

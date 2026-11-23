@@ -56,7 +56,7 @@ export interface AgentLoopOptions {
   runId?: string;
   maxSteps?: number;
   maxTokens?: number;
-  /** reasoning 字符预算；超过后中断本步并触发一次纠正 */
+  /** reasoning 字符预算；超过后中断本步并触发纠正 */
   reasoningBudgetChars?: number;
   extraParams?: Record<string, unknown>;
   prepareContext?: ContextPreparer;
@@ -79,7 +79,7 @@ export interface AgentLoopResult {
 }
 
 const DEFAULT_MAX_STEPS = 10;
-const DEFAULT_REASONING_BUDGET_CHARS = 4_000;
+const DEFAULT_REASONING_BUDGET_CHARS = 12_000;
 const REASONING_CORRECTION_PROMPT =
   '你刚才在 reasoning 中起草了完整实现并触及预算。停止在思考中展开完整代码或文件内容；根据任务需要继续：需要工具时调用合适的工具，不需要工具时直接给出结果或执行下一步。';
 

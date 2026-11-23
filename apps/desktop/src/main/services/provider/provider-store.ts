@@ -14,7 +14,11 @@ import type {
   ProviderSettings
 } from '@shared/ipc/contracts';
 import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_OUTPUT_TOKENS } from '@nexus/core';
-import { findReservedProviderParams, findSensitiveProviderParams } from '@shared/provider-params';
+import {
+  findManagedThinkingParams,
+  findReservedProviderParams,
+  findSensitiveProviderParams
+} from '@shared/provider-params';
 import { getAppDataPaths } from '../storage/paths';
 
 interface StoredProvider {
@@ -73,7 +77,11 @@ const normalizeModels = (
     const cleanModels = models.map((model) => ({
       id: model.id,
       contextWindow: model.contextWindow,
-      maxOutputTokens: model.maxOutputTokens,
+      // 思考模式会占用输出预算；旧默认 4096 不足以容纳 reasoning + 正文/工具参数
+      maxOutputTokens:
+        model.thinkingMode === 'enabled' && model.maxOutputTokens === 4096
+          ? Math.min(16_384, Math.max(256, model.contextWindow - 1024))
+          : model.maxOutputTokens,
       ...(model.extraParams ? { extraParams: publicExtraParams(model.extraParams) } : {}),
       ...(model.role ? { role: model.role } : {}),
       ...(model.endpoint ? { endpoint: model.endpoint } : {}),
@@ -293,6 +301,12 @@ export class ProviderStore {
     const headers = input.headers !== undefined ? input.headers : existing?.headers;
     for (const model of input.models) {
       if (!model.extraParams) continue;
+      if (protocol !== 'anthropic') {
+        const managed = findManagedThinkingParams(model.extraParams);
+        if (managed.length) {
+          throw new Error(`模型额外参数不能覆盖思考配置：${managed.join(', ')}`);
+        }
+      }
       const reserved = findReservedProviderParams(model.extraParams);
       if (reserved.length) throw new Error(`模型额外参数不能覆盖保留字段：${reserved.join(', ')}`);
       const sensitive = findSensitiveProviderParams(model.extraParams);

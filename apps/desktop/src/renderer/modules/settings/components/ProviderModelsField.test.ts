@@ -41,11 +41,47 @@ describe('ProviderModelsField', () => {
     expect(valid).toBe(false);
     expect(host.textContent).toContain('必须是 JSON 对象');
 
-    textarea.value = '{"thinking":{"type":"enabled"}}';
+    textarea.value = '{"custom":true}';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
     await nextTick();
     expect(valid).toBe(true);
     expect(host.textContent).not.toContain('必须是 JSON 对象');
+    app.unmount();
+    document.body.innerHTML = '';
+  });
+
+  it('blocks managed thinking keys in model extra JSON', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let valid = true;
+    const app = createApp({
+      render: () =>
+        h(ProviderModelsField, {
+          models: [
+            {
+              id: 'model-a',
+              contextWindow: 128_000,
+              maxOutputTokens: 8_192
+            }
+          ],
+          availableModels: ['model-a'],
+          defaultModelId: 'model-a',
+          testing: false,
+          protocol: 'openai',
+          'onUpdate:valid': (value: boolean) => {
+            valid = value;
+          }
+        })
+    });
+    app.mount(host);
+    await nextTick();
+    const textarea = host.querySelector<HTMLTextAreaElement>('textarea');
+    if (!textarea) throw new Error('model extra textarea not found');
+    textarea.value = '{"thinking":{"type":"disabled"}}';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+    expect(valid).toBe(false);
+    expect(host.textContent).toContain('thinking / reasoning_effort');
     app.unmount();
     document.body.innerHTML = '';
   });

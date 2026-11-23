@@ -27,21 +27,24 @@ const FILE_RULES = '文件：修改前核对来源；数据不全先说明；保
 const MEDIA_MARKDOWN_PROMPT =
   '图片/视频直接嵌入（图片 Markdown、视频 <video>），禁止裸链接或表格。';
 
+const PREVIEW_RULES =
+  '可预览页面：用户只要求预览/渲染 HTML 时，直接在回复中输出 ```iframe 完整 HTML```，不要调用 save_file；明确要求保存/下载文件时才使用文件工具。';
+
 const NO_WORKSPACE_BUILD_PROMPT =
-  '无工作区：独立文件/页面直接用 save_file/save_* 生成到输出目录，不要先调 list_dir 或因缺少工作区停下；确需读取/执行本地路径时请用户选择工作区或给出绝对路径，不假设 Desktop。';
+  '无工作区：需要保存独立文件时用 save_file/save_*；只预览 HTML 时输出 iframe，不要调用文件工具；不要先调 list_dir 或因缺少工作区停下；确需读取/执行本地路径时请用户选择工作区或给出绝对路径，不假设 Desktop。';
 
 const NO_WORKSPACE_PLAN_PROMPT =
   '无工作区：Plan 只读，不能写文件或执行命令；请用户选择工作区或切换到 Build；确需读取本地路径时让用户给出绝对路径，不假设 Desktop。';
 
 const ARTIFACT_RULES =
-  '产物：生成文件或长代码时直接调用 save_file/save_* 或 write_file，在工具参数中写内容；reasoning 只写计划与验证，禁止完整代码块或整份文件；长内容分段写入或拆文件，完成后说明文件与验证结果。';
+  '产物：明确要求保存/下载文件时直接调用 save_file/save_* 或 write_file；只要求预览页面时输出 iframe，不调用文件工具；reasoning 只写计划与验证，禁止完整代码块或整份文件；长内容分段写入或拆文件，完成后说明文件与验证结果。';
 
 /**
  * 模式约束：Plan 只读，Build 按权限执行。
  */
 const modeSystemPrompt = (mode: AgentMode): string =>
   mode === 'plan'
-    ? 'Plan：只读分析，不得写文件、执行命令、联网或启动 MCP；需执行时提示切换 Build；澄清用 ask_user。'
+    ? 'Plan：只读分析，不得写文件、执行命令、联网或启动 MCP；需执行时提示切换 Build；预览页面在 Build 中用 iframe 输出；澄清用 ask_user。'
     : 'Build：按权限/审批使用读写、执行工具；高风险需审批；澄清用 ask_user。';
 
 /**
@@ -63,6 +66,7 @@ export const buildAgentSystemPrompt = (input: {
     ...(input.mode === 'build' ? [ARTIFACT_RULES] : []),
     modeSystemPrompt(input.mode),
     MEDIA_MARKDOWN_PROMPT,
+    ...(input.mode === 'build' ? [PREVIEW_RULES] : []),
     ...(input.hasWorkspace
       ? []
       : [input.mode === 'build' ? NO_WORKSPACE_BUILD_PROMPT : NO_WORKSPACE_PLAN_PROMPT]),

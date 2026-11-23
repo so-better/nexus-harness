@@ -219,6 +219,7 @@ import {
 } from 'naive-ui';
 import type { ProviderModel } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
+import { findManagedThinkingParams } from '@shared/provider-params';
 import { parseExtraParams } from '../validation/extra-params';
 import AppIcon from '@/components/AppIcon.vue';
 
@@ -247,7 +248,7 @@ const rows = computed<ProviderModel[]>(() => {
       props.models.find((model) => model.id === id) ?? {
         id,
         contextWindow: 128_000,
-        maxOutputTokens: 8_192
+        maxOutputTokens: 16_384
       }
   );
 });
@@ -278,6 +279,9 @@ const updateExtraDraft = (model: ProviderModel, text: string): void => {
   extraDrafts[model.id] = text;
   try {
     const parsed = parseExtraParams(text, t('settings.modelExtraParamsInvalid'));
+    if (props.protocol !== 'anthropic' && findManagedThinkingParams(parsed).length) {
+      throw new Error(t('settings.modelExtraParamsManaged'));
+    }
     delete extraErrors[model.id];
     updateModel(model.id, 'extraParams', parsed);
   } catch {
@@ -341,7 +345,7 @@ const addManualModel = (): void => {
     id,
     role: 'chat',
     contextWindow: 128_000,
-    maxOutputTokens: 8_192
+    maxOutputTokens: 16_384
   };
   emit('update:models', [...props.models, model]);
   if (!props.defaultModelId) emit('update:defaultModelId', id);

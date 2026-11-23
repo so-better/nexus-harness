@@ -80,22 +80,16 @@ describe('ProviderStore', () => {
       models: [
         {
           ...model('gpt-test'),
-          extraParams: { thinking: { type: 'enabled' }, custom: 1 },
+          extraParams: { custom: 1 },
           reasoningPassback: false
         }
       ]
     });
 
     expect(saved.models[0]?.reasoningPassback).toBe(false);
-    expect(saved.models[0]?.extraParams).toEqual({
-      thinking: { type: 'enabled' },
-      custom: 1
-    });
+    expect(saved.models[0]?.extraParams).toEqual({ custom: 1 });
     const full = await store.get(saved.id);
-    expect(full?.models[0]?.extraParams).toEqual({
-      thinking: { type: 'enabled' },
-      custom: 1
-    });
+    expect(full?.models[0]?.extraParams).toEqual({ custom: 1 });
     expect(full?.models[0]?.reasoningPassback).toBe(false);
   });
 
@@ -131,6 +125,26 @@ describe('ProviderStore', () => {
     expect(raw.providers[0]?.['models']).toEqual([
       expect.objectContaining({ extraParams: { thinking: { type: 'enabled' } } })
     ]);
+  });
+
+  it('rejects managed thinking params in model extra params', async () => {
+    await expect(
+      save({ models: [{ ...model('gpt-test'), extraParams: { thinking: { type: 'disabled' } } }] })
+    ).rejects.toThrow('不能覆盖思考配置');
+    const saved = await save({
+      protocol: 'anthropic',
+      name: 'Anthropic',
+      models: [
+        {
+          ...model('claude-test'),
+          extraParams: { thinking: { type: 'enabled', budget_tokens: 1024 } }
+        }
+      ],
+      defaultModelId: 'claude-test'
+    });
+    expect(saved.models[0]?.extraParams).toEqual({
+      thinking: { type: 'enabled', budget_tokens: 1024 }
+    });
   });
 
   it('rejects reserved and sensitive model extra params', async () => {

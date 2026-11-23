@@ -33,7 +33,11 @@ describe('AgentService', () => {
   it('merges model-level extra and thinking params', () => {
     expect(
       buildModelExtraParams({
-        extraParams: { thinking: { type: 'enabled' }, custom: true },
+        extraParams: {
+          thinking: { type: 'enabled' },
+          reasoning_effort: 'max',
+          custom: true
+        },
         thinkingMode: 'disabled',
         reasoningEffort: 'high'
       })
@@ -46,13 +50,13 @@ describe('AgentService', () => {
     expect(
       buildModelExtraParams(
         {
-          extraParams: { custom: true },
-          thinkingMode: 'enabled',
+          extraParams: { thinking: { type: 'enabled' }, custom: true },
+          thinkingMode: 'disabled',
           reasoningEffort: 'high'
         },
         'anthropic'
       )
-    ).toEqual({ custom: true });
+    ).toEqual({ thinking: { type: 'enabled' }, custom: true });
   });
 
   it('prepends session history and persists the current user message', async () => {

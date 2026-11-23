@@ -353,6 +353,22 @@ describe('AgentLoop', () => {
     expect(events.some((event) => event.type === 'run.failed')).toBe(true);
   });
 
+  it('keeps reasoning below the default budget without aborting', async () => {
+    const loop = new AgentLoop({
+      provider: new MockProvider([
+        { reasoning: 'x'.repeat(10_000), text: '完成', finishReason: 'stop' }
+      ]),
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '回答' }]
+    });
+
+    const result = await loop.run();
+
+    expect(result.finishReason).toBe('stop');
+    expect(result.messages.at(-1)?.content).toBe('完成');
+  });
+
   it('forces a tool call after the reasoning budget is exceeded', async () => {
     const { bus, events } = createCollector();
     const provider = new MockProvider([

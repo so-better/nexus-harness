@@ -24,6 +24,7 @@ describe('agent system prompt', () => {
     expect(prompt).toContain('open_url');
     expect(prompt).toContain('Build：');
     expect(prompt).toContain('图片/视频直接嵌入');
+    expect(prompt).toContain('iframe');
     expect(prompt).toContain('save_file');
     expect(prompt).toContain('reasoning 只写计划');
     expect(prompt).toContain('禁止完整代码块');

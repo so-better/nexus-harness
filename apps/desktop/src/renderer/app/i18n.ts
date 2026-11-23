@@ -490,9 +490,11 @@ const zhCN = {
   'settings.effortMax': '最高',
   'settings.modelReasoningPassback': '回传思考',
   'settings.modelExtraParams': '模型额外参数（JSON）',
-  'settings.modelExtraParamsHint': '这里的 JSON 会覆盖模型默认配置；留空则使用默认配置。',
+  'settings.modelExtraParamsHint':
+    '这里的 JSON 会覆盖模型默认配置；不能填写 thinking / reasoning_effort，请使用上方开关和强度。',
   'settings.extraParamsPlaceholder': '{\n  "thinking": { "type": "enabled" }\n}',
   'settings.modelExtraParamsInvalid': '模型额外参数必须是 JSON 对象',
+  'settings.modelExtraParamsManaged': 'thinking / reasoning_effort 请使用上方开关和思考强度配置',
   'settings.defaultModel': '默认',
   'settings.fetchModels': '获取模型',
   'settings.addModel': '添加模型',
@@ -1072,9 +1074,11 @@ const enUS: Record<MessageKey, string> = {
   'settings.modelReasoningPassback': 'Pass back reasoning',
   'settings.modelExtraParams': 'Model extra params (JSON)',
   'settings.modelExtraParamsHint':
-    'This JSON overrides the model default configuration; leave it empty to use defaults.',
+    'This JSON overrides model defaults. Do not set thinking or reasoning_effort here; use the switches above.',
   'settings.extraParamsPlaceholder': '{\n  "thinking": { "type": "enabled" }\n}',
   'settings.modelExtraParamsInvalid': 'Model extra params must be a JSON object',
+  'settings.modelExtraParamsManaged':
+    'Use the thinking switch and effort selector instead of thinking / reasoning_effort',
   'settings.defaultModel': 'Default',
   'settings.fetchModels': 'Fetch models',
   'settings.addModel': 'Add model',

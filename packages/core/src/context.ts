@@ -9,7 +9,7 @@ import type { UsageSummary } from '@nexus/shared';
  * 默认上下文窗口与输出预留，Provider 未显式配置时使用。
  */
 export const DEFAULT_CONTEXT_WINDOW = 128_000;
-export const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
+export const DEFAULT_MAX_OUTPUT_TOKENS = 16384;
 
 /**
  * 预算计算参数；安全余量按窗口比例计算，并保底 512 token。

@@ -771,6 +771,9 @@ export const buildModelExtraParams = (
 ): Record<string, unknown> | undefined => {
   const extra = { ...model.extraParams };
   if (protocol !== 'anthropic') {
+    // thinking/reasoning_effort 由页面开关接管，忽略旧 JSON 中的同名值
+    delete extra['thinking'];
+    delete extra['reasoning_effort'];
     if (model.thinkingMode && model.thinkingMode !== 'default') {
       extra['thinking'] = { type: model.thinkingMode };
     }
