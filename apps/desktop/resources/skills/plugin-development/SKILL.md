@@ -16,7 +16,7 @@ metadata:
       usage,
       用户插件
     ]
-  version: 1.3.14
+  version: 1.3.16
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -160,7 +160,7 @@ ctx.usage.getStats(query): Promise<UsageStats>
 
 ## 启动动画
 
-声明 `startup` 贡献点并申请 `ui.startup`。宿主在应用启动时提供全屏隔离容器，插件负责绘制动画；mount 的第三个参数是 `finish`，动画完成后必须调用它结束。宿主不设置固定结束时长，时长完全由插件控制；必须声明 `countdownMs`，仅用于跳过按钮展示剩余秒数。用户点击遮罩、按 Esc 或点击“跳过”按钮仍可结束。用户在外观设置里选择启动动画，选择持久化；没有选择时不显示遮罩。多个插件可以同时提供动画，但启动时只播放用户选中的一个；插件被禁用或删除后选择自动清除。启动动画必须使用 `--nh-*` 语义色，自动适配深浅主题；不要硬编码背景色或文字色。内置参考：`nexus.startup-intro`（淡入）与 `nexus.startup-pulse`（脉冲）。
+声明 `startup` 贡献点并申请 `ui.startup`。宿主在应用启动时提供全屏隔离容器，插件负责绘制动画；mount 的第三个参数是 `finish`，动画完成后必须调用它结束。宿主不设置固定结束时长，时长完全由插件控制；必须声明 `countdownMs`，仅用于跳过按钮展示剩余秒数。用户点击遮罩、按 Esc 或点击“跳过”按钮仍可结束。用户在外观设置里选择启动动画，选择持久化；没有选择时不显示遮罩。多个插件可以同时提供动画，但启动时只播放用户选中的一个；插件被禁用或删除后选择自动清除。启动动画必须使用 `--nh-*` 语义色，自动适配深浅主题；不要硬编码背景色或文字色。内置参考：`nexus.startup-intro`（淡入）、`nexus.startup-pulse`（脉冲）与 `nexus.startup-orbit`（轨道）。
 
 ```json
 {

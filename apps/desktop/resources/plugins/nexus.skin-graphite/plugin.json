@@ -1,0 +1,20 @@
+{
+  "id": "nexus.skin-graphite",
+  "name": "石墨",
+  "version": "1.1.0",
+  "description": "明显的石墨纸质感、细颗粒、淡网格与缓慢扫光，适合长时间阅读和编码。",
+  "engines": {
+    "nexus": ">=0.0.1 <0.1.0"
+  },
+  "renderer": "dist/renderer.mjs",
+  "activationEvents": [],
+  "permissions": ["ui.skin"],
+  "contributes": {
+    "skins": [
+      {
+        "id": "graphite",
+        "title": "石墨"
+      }
+    ]
+  }
+}

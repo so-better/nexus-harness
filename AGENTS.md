@@ -1012,7 +1012,7 @@ interface SlotContext {
 - 视图入口由插件自己提供，宿主不在扩展弹窗自动列出。
 - 正确处理启用、禁用、热重载。
 
-内置启动动画插件 `apps/desktop/resources/plugins/nexus.startup-intro`（淡入）与 `apps/desktop/resources/plugins/nexus.startup-pulse`（脉冲）是启动动画参考实现，演示 `ctx.startup.register`、语义色绘制、减少动效偏好与 `finish`；两者默认启用但不默认选中，用户主动选择后下次启动播放。
+内置启动动画插件 `apps/desktop/resources/plugins/nexus.startup-intro`（淡入）、`nexus.startup-pulse`（脉冲）与 `nexus.startup-orbit`（轨道）是启动动画参考实现，演示 `ctx.startup.register`、语义色绘制、减少动效偏好与 `finish`；三者默认启用但不默认选中，用户主动选择后下次启动播放。
 
 内置皮肤插件（`apps/desktop/resources/plugins/nexus.skin-*`）是全局皮肤参考实现，演示插件代码用语义色绘制背景；皮肤只声明贡献点，具体视觉完全由插件 renderer 决定：
 
@@ -1020,6 +1020,7 @@ interface SlotContext {
 - `nexus.skin-blueprint`：工程网格与跟随指针的十字准星。
 - `nexus.skin-canopy`：等高线、柔和色雾与轻微呼吸感。
 - `nexus.skin-riso`：双色错位网点与斜向印刷纹理。
+- `nexus.skin-graphite`：低对比石墨纸、细颗粒与缓慢扫光，适合长时间工作。
 
 ```json
 {
