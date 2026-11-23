@@ -986,6 +986,7 @@ ${assistant.slice(0, 3_000)}`;
       let generatedImageCount = 0;
 
       const mode = input.mode ?? 'build';
+      const activatedSkills = new Set<string>();
       const extraParams = buildModelExtraParams(modelConfig, providerConfig.protocol);
       let toolset =
         input.rootPaths.length > 0 ? await createFileToolset(input.rootPaths) : undefined;
@@ -1095,6 +1096,19 @@ ${assistant.slice(0, 3_000)}`;
             ...(this.mcp ? { mcp: this.mcp } : {}),
             runId
           });
+        }
+        if (
+          (call.name === 'plugin_create' || call.name === 'plugin_update') &&
+          !activatedSkills.has('plugin-development')
+        ) {
+          return {
+            ok: false,
+            output: '',
+            error: {
+              code: 'PLUGIN_DEVELOPMENT_SKILL_REQUIRED',
+              message: '创建或修改插件前必须先调用 read_skill 读取 plugin-development Skill'
+            }
+          };
         }
         if (call.name.startsWith('plugin_')) {
           return executePluginTool(call.name, call.arguments);
@@ -1225,6 +1239,7 @@ ${assistant.slice(0, 3_000)}`;
               error: { code: 'SKILL_NOT_FOUND', message: `Skill 不存在：${name}` }
             };
           }
+          activatedSkills.add(skill.id);
           eventBus.publish(
             createNexusEvent({
               sessionId: input.sessionId,

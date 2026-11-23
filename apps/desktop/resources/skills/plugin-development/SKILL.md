@@ -16,7 +16,7 @@ metadata:
       usage,
       用户插件
     ]
-  version: 1.3.16
+  version: 1.3.18
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -35,6 +35,14 @@ metadata:
 - 插件依赖必须自行打包进插件目录，不能依赖 `@nexus/*` 或宿主安装目录中的模块。
 - 不开放 `workspace:write`、插件注册工具、`menus`/`themes`/`exporters`/`onboarding` 贡献点和网络权限；插件不注册 Agent 工具，外部工具统一通过 MCP 接入。未声明的能力会被宿主拒绝。
 - 内置插件只读，不能直接修改；用户插件才可以修改。需要定制内置插件时，先复制成新的用户插件。
+
+## 新插件开发原则
+
+- 新插件默认按本 Skill 从 manifest、入口和贡献点设计，不复制内置插件。
+- 内置插件只作为 API、贡献点和实现方式的参考，不是默认模板。
+- 只有用户明确要求“基于 / 定制某个内置插件”时，才使用 `plugin_create` 的 `fromPluginId`。
+- 不要因为内置插件存在就默认说“参考内置插件 xxx”；先根据需求选择贡献点和权限。
+- 宿主会拒绝未读取本 Skill 的 `plugin_create` / `plugin_update`；先 `read_skill`，再创建或修改。
 
 ## 工作流程
 

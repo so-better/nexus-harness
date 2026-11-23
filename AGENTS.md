@@ -1049,6 +1049,7 @@ export function activate(ctx) {
 - 安装：扩展页提供“导入插件文件夹”，选择包含 `plugin.json` 的目录，校验 manifest 与入口后复制到 `<userData>/plugins/<id>`；也可手动放置目录。不需要 `npm install`，也不需要用户执行构建命令。
 - 宿主启动或目录变化时自动发现；导入后默认禁用，在扩展页确认权限并启用后激活。
 - 调试：渲染进程插件使用 DevTools；主进程日志写入 `<userData>/logs`；目录变更触发热重载。
+- AI 开发新插件前先读取 `plugin-development` Skill；未读取时宿主拒绝 `plugin_create` / `plugin_update`。新插件按 Skill 契约设计，不默认复制内置插件，只有用户明确要求定制内置插件时才使用 `fromPluginId`。
 - 分发：压缩插件目录，用户解压到 `<userData>/plugins` 即可；在线市场与自动下载后续再设计。
 
 ### 4.6 持久化与事件 Schema

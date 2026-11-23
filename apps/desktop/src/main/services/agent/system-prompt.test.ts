@@ -21,6 +21,8 @@ describe('agent system prompt', () => {
     expect(prompt).toContain('不编造事实');
     expect(prompt).toContain('只用用户/工具 URL');
     expect(prompt).toContain('文件：修改');
+    expect(prompt).toContain('plugin-development');
+    expect(prompt).toContain('search_skills');
     expect(prompt).toContain('open_url');
     expect(prompt).toContain('Build：');
     expect(prompt).toContain('图片/视频直接嵌入');

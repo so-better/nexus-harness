@@ -80,7 +80,7 @@ export const pluginToolDefinitions: AgentToolDefinition[] = [
   tool('plugin_list', '列出已发现插件的来源、启用状态和错误。', {}, [], false),
   tool(
     'plugin_read',
-    '读取已安装插件的 plugin.json 或指定文件；用于开发用户插件，不依赖工作区授权。',
+    '读取已安装插件的 plugin.json 或指定文件，用作插件契约与实现参考；不默认复制内置插件，不依赖工作区授权。',
     {
       id: { type: 'string' },
       path: { type: 'string' }
@@ -118,7 +118,7 @@ export const pluginToolDefinitions: AgentToolDefinition[] = [
   ),
   tool(
     'plugin_create',
-    '创建或覆盖用户插件目录；files 必须包含 plugin.json，也可从现有插件复制；依赖需自行打包，受路径和大小限制。',
+    '创建或覆盖用户插件目录；新插件按 plugin-development Skill 设计，files 必须包含 plugin.json；只有用户明确要求复制或定制现有插件时才使用 fromPluginId；依赖需自行打包，受路径和大小限制。',
     {
       id: { type: 'string' },
       files: { type: 'object', additionalProperties: { type: 'string' } },

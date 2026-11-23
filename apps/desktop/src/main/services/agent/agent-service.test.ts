@@ -18,6 +18,7 @@ import { createDatabase } from '../storage/database';
 import { AgentService, buildModelExtraParams, createAgentProvider } from './agent-service';
 import { AttachmentService } from '../attachments/attachment-service';
 import { MemoryService } from '../memory/memory-service';
+import type { SkillService } from '../skills/skill-service';
 
 describe('AgentService', () => {
   let root = '';
@@ -297,6 +298,83 @@ describe('AgentService', () => {
       'mcp_refresh',
       'mcp_test'
     ]);
+  });
+
+  it('requires plugin-development before creating a plugin', async () => {
+    let step = 0;
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
+      async *stream() {
+        step += 1;
+        const call =
+          step === 1
+            ? {
+                id: 'plugin-create-1',
+                name: 'plugin_create',
+                arguments: { id: 'test.plugin', files: { 'plugin.json': '{}' } }
+              }
+            : step === 2
+              ? {
+                  id: 'skill-read-1',
+                  name: 'read_skill',
+                  arguments: { name: 'plugin-development' }
+                }
+              : step === 3
+                ? {
+                    id: 'plugin-create-2',
+                    name: 'plugin_create',
+                    arguments: { id: 'test.plugin', files: { 'plugin.json': '{}' } }
+                  }
+                : undefined;
+        if (!call) {
+          yield { type: 'text-delta', text: '完成' };
+          yield { type: 'finish', reason: 'stop' };
+          return;
+        }
+        yield { type: 'tool-call-start', id: call.id, name: call.name };
+        yield {
+          type: 'tool-call-delta',
+          id: call.id,
+          argumentsDelta: JSON.stringify(call.arguments)
+        };
+        yield { type: 'tool-call-end', toolCall: call };
+        yield { type: 'finish', reason: 'tool_calls' };
+      }
+    };
+    const skills = {
+      read: async (name: string) => ({ id: name, content: '插件开发说明' })
+    } as unknown as SkillService;
+    const service = new AgentService({ createProvider: () => provider, skills });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+    const events: NexusEvent[] = [];
+
+    await service.run(
+      {
+        sessionId: 'plugin-skill-test',
+        prompt: '写一个插件',
+        rootPaths: [],
+        providerId: providerConfig.id,
+        modelId: 'mock-model'
+      },
+      providerConfig,
+      { onEvent: (event) => events.push(event), autoApprove: () => true }
+    );
+
+    const failures = events
+      .filter((event) => event.type === 'tool.failed')
+      .map((event) => (event.payload as { error?: { code?: string } }).error?.code);
+    expect(failures[0]).toBe('PLUGIN_DEVELOPMENT_SKILL_REQUIRED');
+    expect(events.some((event) => event.type === 'skill.activated')).toBe(true);
+    expect(failures[1]).toBe('PLUGIN_HOST_UNAVAILABLE');
   });
 
   it('injects active global memory into the system prompt', async () => {
