@@ -382,7 +382,9 @@ describe('AgentLoop', () => {
     expect(executeTool).toHaveBeenCalledTimes(1);
     expect(
       result.messages.some(
-        (message) => message.role === 'system' && message.content.includes('save_file')
+        (message) =>
+          (message.role === 'system' && message.content.includes('thinking')) ||
+          message.content.includes('思考')
       )
     ).toBe(true);
     expect(events.some((event) => event.type === 'run.failed')).toBe(false);

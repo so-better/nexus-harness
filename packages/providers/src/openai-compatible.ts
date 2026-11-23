@@ -3,6 +3,7 @@
  */
 
 import type { UsageSummary } from '@nexus/shared';
+import { sanitizeProviderParams } from '@nexus/shared';
 import type {
   ChatMessage,
   ChatProvider,
@@ -165,7 +166,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
         stream_options: { include_usage: true },
         ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
         ...(request.maxTokens === undefined ? {} : { max_tokens: request.maxTokens }),
-        ...request.extraParams
+        ...sanitizeProviderParams(request.extraParams)
       }),
       ...(request.signal ? { signal: request.signal } : {})
     });

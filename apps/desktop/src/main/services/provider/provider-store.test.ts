@@ -53,6 +53,8 @@ describe('ProviderStore', () => {
     const saved = await save();
 
     expect(saved.apiKey).toBe('secret');
+    expect(saved.reasoningPassback).toBe(true);
+    expect(saved.extraParams).toEqual({ thinking: { type: 'enabled' } });
     const raw = await readFile(join(directory, 'providers.json'), 'utf8');
     expect(raw).toContain('"apiKey": "secret"');
 
@@ -73,6 +75,85 @@ describe('ProviderStore', () => {
     expect(saved.apiKey).toBe('');
     const full = await store.get(saved.id);
     expect(full).toMatchObject({ protocol: 'ollama', apiKey: '' });
+  });
+
+  it('persists generic reasoning params and passback capability', async () => {
+    const saved = await save({
+      reasoningPassback: true,
+      extraParams: { thinking: { type: 'enabled' }, custom: 1 }
+    });
+
+    expect(saved.reasoningPassback).toBe(true);
+    expect(saved.extraParams).toEqual({ thinking: { type: 'enabled' }, custom: 1 });
+    const full = await store.get(saved.id);
+    expect(full?.extraParams).toEqual({ thinking: { type: 'enabled' }, custom: 1 });
+    expect(full?.reasoningPassback).toBe(true);
+  });
+
+  it('uses protocol-specific default thinking params', async () => {
+    const openai = await save();
+    expect(openai.extraParams).toEqual({ thinking: { type: 'enabled' } });
+
+    const anthropic = await save({
+      protocol: 'anthropic',
+      name: 'Anthropic',
+      models: [model('claude-test')],
+      defaultModelId: 'claude-test'
+    });
+    expect(anthropic.extraParams).toBeUndefined();
+    expect(anthropic.reasoningPassback).toBe(false);
+
+    const ollama = await save({
+      protocol: 'ollama',
+      name: 'Ollama',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      models: [model('llama-test')],
+      defaultModelId: 'llama-test'
+    });
+    expect(ollama.extraParams).toBeUndefined();
+    expect(ollama.reasoningPassback).toBe(true);
+  });
+
+  it('rejects reserved and sensitive extra params', async () => {
+    await expect(save({ extraParams: { model: 'override' } })).rejects.toThrow('保留字段');
+    await expect(save({ extraParams: { api_key: 'secret' } })).rejects.toThrow('敏感字段');
+  });
+
+  it('migrates legacy model thinking fields to provider params', async () => {
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      join(directory, 'providers.json'),
+      JSON.stringify({
+        version: 1,
+        providers: [
+          {
+            id: 'legacy-thinking',
+            name: 'Legacy',
+            baseUrl: 'https://example.com/v1',
+            enabled: true,
+            apiKey: 'secret',
+            models: [
+              {
+                ...model('deepseek-flash'),
+                thinkingMode: 'disabled',
+                reasoningEffort: 'high'
+              }
+            ],
+            defaultModelId: 'deepseek-flash'
+          }
+        ]
+      })
+    );
+
+    const providers = await store.list();
+    expect(providers[0]).toMatchObject({
+      reasoningPassback: true,
+      extraParams: {
+        thinking: { type: 'disabled' },
+        reasoning_effort: 'high'
+      }
+    });
+    expect(providers[0]?.models[0]).not.toHaveProperty('thinkingMode');
   });
 
   it('stores custom headers locally and keeps them out of public configs', async () => {

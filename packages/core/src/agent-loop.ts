@@ -56,7 +56,7 @@ export interface AgentLoopOptions {
   runId?: string;
   maxSteps?: number;
   maxTokens?: number;
-  /** reasoning 字符预算；超过后强制工具调用，避免用思考内容起草整份文件 */
+  /** reasoning 字符预算；超过后中断本步并触发一次纠正 */
   reasoningBudgetChars?: number;
   extraParams?: Record<string, unknown>;
   prepareContext?: ContextPreparer;
@@ -81,7 +81,7 @@ export interface AgentLoopResult {
 const DEFAULT_MAX_STEPS = 10;
 const DEFAULT_REASONING_BUDGET_CHARS = 4_000;
 const REASONING_CORRECTION_PROMPT =
-  '你刚才在 reasoning 中起草了文件内容并触及预算。停止在思考里写完整代码/文件，立即调用 save_file/save_*（独立文件无需工作区）或对应工具，把内容放入工具参数；保持代码紧凑，必要时拆分文件。';
+  '你刚才在 reasoning 中起草了完整实现并触及预算。停止在思考中展开完整代码或文件内容；根据任务需要继续：需要工具时调用合适的工具，不需要工具时直接给出结果或执行下一步。';
 
 /**
  * 执行单次 Run；工具失败会作为 tool 消息回填，让模型自行调整。

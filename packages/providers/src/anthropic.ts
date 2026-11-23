@@ -3,6 +3,7 @@
  */
 
 import type { UsageSummary } from '@nexus/shared';
+import { sanitizeProviderParams } from '@nexus/shared';
 import type {
   ChatMessage,
   ChatProvider,
@@ -169,7 +170,7 @@ export class AnthropicProvider implements ChatProvider {
         messages: converted.messages,
         ...(request.tools?.length ? { tools: request.tools.map(toAnthropicTool) } : {}),
         ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
-        ...request.extraParams
+        ...sanitizeProviderParams(request.extraParams)
       }),
       ...(request.signal ? { signal: request.signal } : {})
     });

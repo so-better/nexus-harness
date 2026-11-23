@@ -3,12 +3,13 @@
  * 推理块：流式时同时显示旋转图标与“思考中…”，结束后显示“思考过程”。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createApp } from 'vue';
+import { createApp, nextTick } from 'vue';
 import ReasoningBlock from './ReasoningBlock.vue';
 
 vi.mock('naive-ui', () => ({
   NButton: {
-    template: '<button type="button"><slot /></button>'
+    emits: ['click'],
+    template: `<button type="button" @click="$emit('click')"><slot /></button>`
   }
 }));
 
@@ -40,6 +41,25 @@ describe('ReasoningBlock', () => {
     expect(host.querySelector('.nh-reasoning__label')?.textContent.trim()).toBe('思考中…');
     expect(host.querySelector('.nh-reasoning__spin')).not.toBeNull();
     expect(host.querySelector('.mock-icon')?.getAttribute('data-name')).toBe('loader');
+    expect(host.querySelector('.nh-reasoning__body')?.getAttribute('style')).toContain(
+      'display: none'
+    );
+    app.unmount();
+  });
+
+  it('expands only after the user clicks the header', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ReasoningBlock, { text: '只有点击才展开', streaming: false });
+    app.mount(host);
+
+    const button = host.querySelector('button');
+    expect(button).not.toBeNull();
+    button?.click();
+    await nextTick();
+    expect(host.querySelector('.nh-reasoning__body')?.getAttribute('style') ?? '').not.toContain(
+      'display: none'
+    );
     app.unmount();
   });
 

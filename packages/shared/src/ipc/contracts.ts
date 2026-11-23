@@ -70,10 +70,7 @@ export const providerModelSchema = z
     endpoint: z.string().url().optional(),
     contextWindow: z.number().int().min(4_096).max(2_000_000),
     maxOutputTokens: z.number().int().min(256).max(131_072),
-    /** OpenAI 兼容/DeepSeek 的思考模式；default 表示沿用服务商默认 */
-    thinkingMode: z.enum(['default', 'enabled', 'disabled']).optional(),
-    /** DeepSeek/OpenAI 的思考强度 */
-    reasoningEffort: z.enum(['default', 'low', 'high', 'max']).optional()
+    reasoningPassback: z.boolean().optional()
   })
   .refine((value) => value.maxOutputTokens < value.contextWindow, {
     message: 'maxOutputTokens 必须小于 contextWindow',
@@ -92,6 +89,7 @@ export const providerSettingsSchema = z
     apiKey: z.string().min(1).optional(),
     headers: z.record(z.string(), z.string()).optional(),
     extraParams: z.record(z.string(), z.unknown()).optional(),
+    reasoningPassback: z.boolean().optional(),
     enabled: z.boolean().optional(),
     models: z.array(providerModelSchema).min(1),
     defaultModelId: z.string().min(1)
@@ -112,15 +110,16 @@ export const providerPublicSchema = z.object({
   apiKey: z.string(),
   enabled: z.boolean(),
   models: z.array(providerModelSchema).min(1),
-  defaultModelId: z.string().min(1)
+  defaultModelId: z.string().min(1),
+  extraParams: z.record(z.string(), z.unknown()).optional(),
+  reasoningPassback: z.boolean().optional()
 });
 
 /**
- * 主进程内部使用的完整 Provider 配置；headers/extraParams 视为敏感字段。
+ * 主进程内部使用的完整 Provider 配置；headers 视为敏感字段，extraParams 只允许非敏感请求参数。
  */
 export const agentProviderConfigSchema = providerPublicSchema.extend({
-  headers: z.record(z.string(), z.string()).optional(),
-  extraParams: z.record(z.string(), z.unknown()).optional()
+  headers: z.record(z.string(), z.string()).optional()
 });
 
 export const providerRemoveResultSchema = z.object({ id: z.string().min(1) });

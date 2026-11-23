@@ -175,6 +175,39 @@ describe('OpenAICompatibleProvider', () => {
     });
   });
 
+  it('does not allow extra params to override protocol fields', async () => {
+    let sentBody: Record<string, unknown> | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      sentBody = JSON.parse(String(init?.body));
+      return new Response(streamBody([{ choices: [{ delta: { content: 'ok' } }] }]), {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      });
+    };
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: 'https://example.com/v1',
+      apiKey: 'secret',
+      fetchImpl
+    });
+    for await (const _event of provider.stream({
+      model: 'safe-model',
+      messages: [{ role: 'user', content: 'hi' }],
+      extraParams: {
+        model: 'overridden-model',
+        messages: [],
+        api_key: 'secret',
+        thinking: { type: 'enabled' }
+      }
+    })) {
+      // consume stream
+    }
+
+    expect(sentBody?.['model']).toBe('safe-model');
+    expect(sentBody?.['messages'] as Array<unknown>).toHaveLength(1);
+    expect(sentBody?.['thinking']).toEqual({ type: 'enabled' });
+    expect(sentBody).not.toHaveProperty('api_key');
+  });
+
   it('maps HTTP failures to provider errors', async () => {
     const fetchImpl: typeof fetch = async () =>
       new Response('unauthorized', { status: 401, headers: { 'content-type': 'text/plain' } });

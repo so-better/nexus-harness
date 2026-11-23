@@ -24,24 +24,18 @@
  * 推理段：每次出现独立成块，可折叠，参与消息时间线排序。
  */
 
-import { ref, watch } from 'vue';
+import { ref } from 'vue';
 import { NButton } from 'naive-ui';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
 import MarkdownSegments from '../render/MarkdownSegments.vue';
 
-const props = withDefaults(defineProps<{ text: string; streaming?: boolean }>(), {
+withDefaults(defineProps<{ text: string; streaming?: boolean }>(), {
   streaming: false
 });
 
-// 每个推理块独立维护展开状态：流式时自动展开，结束后自动折叠
-const open = ref(props.streaming);
-watch(
-  () => props.streaming,
-  (streaming) => {
-    open.value = streaming;
-  }
-);
+// 每个推理块默认折叠，只有用户主动点击才展开
+const open = ref(false);
 </script>
 
 <style scoped lang="less">
