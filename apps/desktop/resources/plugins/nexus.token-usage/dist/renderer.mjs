@@ -101,15 +101,15 @@ const injectTriggerStyles = (element) => {
       background: linear-gradient(135deg, color-mix(in srgb, var(--nh-color-accent) 13%, var(--nh-color-bg-elevated)), color-mix(in srgb, var(--nh-color-accent) 4%, var(--nh-color-bg-elevated)));
       box-shadow: 0 1px 0 var(--nh-highlight), 0 2px 10px color-mix(in srgb, var(--nh-color-accent) 8%, transparent);
       color: var(--nh-color-text-secondary); font-family: var(--nh-font-mono); font-size: 10px; font-weight: 500; line-height: 1.2;
-      cursor: pointer; transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+      cursor: pointer; transition: border-color 160ms ease, background 160ms ease, color 160ms ease, box-shadow 160ms ease;
     }
     .nh-token-usage__trigger:hover {
       border-color: color-mix(in srgb, var(--nh-color-accent) 58%, var(--nh-border-subtle));
       background: linear-gradient(135deg, color-mix(in srgb, var(--nh-color-accent) 22%, var(--nh-color-bg-elevated)), color-mix(in srgb, var(--nh-color-accent) 8%, var(--nh-color-bg-elevated)));
       box-shadow: 0 1px 0 var(--nh-highlight), 0 4px 14px color-mix(in srgb, var(--nh-color-accent) 14%, transparent);
-      color: var(--nh-color-text-primary); transform: translateY(-1px);
+      color: var(--nh-color-text-primary);
     }
-    .nh-token-usage__trigger:active { transform: translateY(0); box-shadow: 0 1px 0 var(--nh-highlight); }
+    .nh-token-usage__trigger:active { box-shadow: 0 1px 0 var(--nh-highlight); }
     .nh-token-usage__trigger:focus-visible { outline: 2px solid var(--nh-color-accent); outline-offset: 2px; }
     .nh-token-usage__trigger--session { margin-right: 4px; }
     .nh-token-usage__trigger:not(.nh-token-usage__trigger--session) { margin-top: 6px; padding: 2px 7px 2px 5px; border-color: transparent; background: transparent; box-shadow: none; color: var(--nh-color-text-secondary); }
@@ -475,15 +475,14 @@ const injectStyles = (element) => {
       font-size: 10px;
       line-height: 1.2;
       cursor: pointer;
-      transition: border-color 160ms ease, background 160ms ease, color 160ms ease, transform 160ms ease;
+      transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
     }
     .nh-token-usage__trigger:hover {
       border-color: color-mix(in srgb, var(--nh-color-accent) 48%, var(--nh-border-subtle));
       background: color-mix(in srgb, var(--nh-color-accent) 11%, var(--nh-color-bg-elevated));
       color: var(--nh-color-text-primary);
-      transform: translateY(-1px);
     }
-    .nh-token-usage__trigger:active { transform: translateY(0); }
+    .nh-token-usage__trigger:active {}
     .nh-token-usage__trigger:focus-visible { outline: 2px solid var(--nh-color-accent); outline-offset: 2px; }
     .nh-token-usage__trigger--session { margin-right: 4px; }
     .nh-token-usage__trigger:not(.nh-token-usage__trigger--session) { margin-top: 6px; }
