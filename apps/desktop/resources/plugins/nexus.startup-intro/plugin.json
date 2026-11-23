@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Nexus 启动时的简洁淡入动画，使用语义色与系统减少动效偏好。",
   "engines": {
-    "nexus": "^0.1.0"
+    "nexus": ">=0.0.1 <0.1.0"
   },
   "renderer": "dist/renderer.mjs",
   "activationEvents": [],

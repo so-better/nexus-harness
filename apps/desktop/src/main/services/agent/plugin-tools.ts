@@ -365,14 +365,15 @@ export const executePluginTool = async (
     const parsed = importSchema.safeParse(input);
     if (!parsed.success) return failure('PLUGIN_INVALID_INPUT', '插件路径不合法');
     try {
-      const inspected = await inspectPluginDirectory(parsed.data.sourceDir);
+      const inspected = await inspectPluginDirectory(parsed.data.sourceDir, host.getHostVersion());
       const existing = host.list().find((plugin) => plugin.id === inspected.id);
       if (existing?.source === 'builtin') {
         return failure('PLUGIN_BUILTIN_PROTECTED', '不能导入与内置插件同名的目录');
       }
       const manifest = await importPluginDirectory({
         sourceDir: parsed.data.sourceDir,
-        pluginsDir
+        pluginsDir,
+        hostVersion: host.getHostVersion()
       });
       return success({ manifest, plugins: await host.reload() });
     } catch (error) {

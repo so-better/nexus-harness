@@ -16,7 +16,7 @@ metadata:
       usage,
       用户插件
     ]
-  version: 1.3.2
+  version: 1.3.10
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -33,7 +33,7 @@ metadata:
 - `renderer` 运行在渲染进程：只能使用 DOM、`ctx` 和插件自带依赖；不能访问 Node、Electron、`window.nexus`。
 - `main` 运行在主进程：等同受信本地代码，能力更强，但必须显式启用并经过用户审批。
 - 插件依赖必须自行打包进插件目录，不能依赖 `@nexus/*` 或宿主安装目录中的模块。
-- 不开放 `workspace:write`、插件注册工具和网络权限；未声明的能力会被宿主拒绝。
+- 不开放 `workspace:write`、插件注册工具、`menus`/`themes`/`exporters`/`onboarding` 贡献点和网络权限；插件不注册 Agent 工具，外部工具统一通过 MCP 接入。未声明的能力会被宿主拒绝。
 - 内置插件只读，不能直接修改；用户插件才可以修改。需要定制内置插件时，先复制成新的用户插件。
 
 ## 工作流程
@@ -65,6 +65,7 @@ metadata:
 ```
 
 - 目录名必须与 manifest.id 一致，且 id 使用反向域名，例如 `your.scope.plugin`。
+- `engines.nexus` 必须声明兼容的宿主版本范围；宿主加载时校验，不兼容插件会被禁用并显示错误，且不能通过启用开关恢复；修复 manifest 或升级宿主后重新扫描。
 - 入口路径必须位于插件目录内。
 - 渲染入口通过 `nexus-plugin://` 加载；主进程入口使用 CommonJS。
 - 导入或创建后插件默认未启用；用户确认权限后启用。
@@ -77,7 +78,7 @@ metadata:
   "name": "Hello",
   "version": "1.0.0",
   "description": "说明插件做什么，以及用户为什么会启用它。",
-  "engines": { "nexus": "^0.1.0" },
+  "engines": { "nexus": ">=0.0.1 <0.1.0" },
   "renderer": "dist/renderer.mjs",
   "activationEvents": ["onSlot:hello.footer"],
   "permissions": ["ui.slot"],
@@ -114,6 +115,7 @@ export function deactivate() {
 - 视图/命令贡献：命令调用、`ctx.views.open` 或扩展页打开时。
 - 皮肤贡献：用户选择该皮肤时。
 - 启动动画贡献：应用启动并发现插件时。
+- `activationEvents` 约束 renderer 入口；main 入口随插件启用加载。
 
 ## 权限
 
@@ -277,7 +279,7 @@ interface MainPluginContext {
   "id": "your.scope.hello",
   "name": "Hello",
   "version": "1.0.0",
-  "engines": { "nexus": "^0.1.0" },
+  "engines": { "nexus": ">=0.0.1 <0.1.0" },
   "renderer": "dist/renderer.mjs",
   "activationEvents": ["onSlot:hello.footer"],
   "permissions": ["ui.slot"],

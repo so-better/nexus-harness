@@ -5,7 +5,8 @@
 import { readdir, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { watch, type FSWatcher } from 'node:fs';
-import { Notification } from 'electron';
+import { Notification, app } from 'electron';
+import { satisfies } from 'semver';
 import type { DatabaseSync } from 'node:sqlite';
 import type { NexusEvent } from '@shared/events';
 import {
@@ -45,6 +46,7 @@ interface PluginRecord {
   directory: string;
   source: 'builtin' | 'user';
   enabled: boolean;
+  loadable: boolean;
   error?: string | undefined;
   mainModule?: { deactivate?: () => void | Promise<void> } | undefined;
   disposables: Array<() => void>;
@@ -54,6 +56,7 @@ export interface PluginHostOptions {
   db: DatabaseSync;
   directory: string;
   builtinIds?: ReadonlySet<string>;
+  hostVersion?: string;
 }
 
 export interface MainPluginContext {
@@ -103,8 +106,18 @@ export class PluginHost {
   private readonly eventListeners = new Map<string, Set<(payload: unknown) => void>>();
   private watcher: FSWatcher | undefined;
   private reloadTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly hostVersion: string;
 
-  constructor(private readonly options: PluginHostOptions) {}
+  constructor(private readonly options: PluginHostOptions) {
+    this.hostVersion = options.hostVersion ?? app.getVersion();
+  }
+
+  /**
+   * 返回当前用于插件兼容性校验的宿主版本。
+   */
+  getHostVersion(): string {
+    return this.hostVersion;
+  }
 
   async scan(): Promise<PluginPublic[]> {
     for (const record of this.records.values()) await this.deactivate(record);
@@ -118,6 +131,11 @@ export class PluginHost {
         const raw = JSON.parse(await readFile(join(directory, 'plugin.json'), 'utf8')) as unknown;
         const manifest = pluginManifestSchema.parse(raw);
         if (manifest.id !== entry.name) throw new Error('插件 id 与目录名不一致');
+        if (!satisfies(this.hostVersion, manifest.engines.nexus, { includePrerelease: true })) {
+          throw new Error(
+            `插件要求 Nexus ${manifest.engines.nexus}，当前宿主版本 ${this.hostVersion}`
+          );
+        }
         const mainPath = await resolveEntry(directory, manifest.main);
         if (manifest.main && !mainPath) throw new Error('主进程入口不存在或越界');
         const row = this.options.db
@@ -135,6 +153,7 @@ export class PluginHost {
           directory,
           source,
           enabled,
+          loadable: true,
           ...(row?.error ? { error: row.error } : {}),
           disposables: []
         };
@@ -170,6 +189,7 @@ export class PluginHost {
           directory,
           source: 'user',
           enabled: false,
+          loadable: false,
           error: message,
           disposables: []
         });
@@ -211,6 +231,8 @@ export class PluginHost {
   async setEnabled(id: string, enabled: boolean): Promise<PluginPublic[]> {
     const record = this.records.get(id);
     if (!record) return this.list();
+    // manifest/版本校验失败后只剩占位记录，不能通过启用开关恢复成可运行状态
+    if (enabled && !record.loadable) return this.list();
     if (!enabled) await this.deactivate(record);
     record.enabled = enabled;
     if (enabled) record.error = undefined;

@@ -37,7 +37,8 @@ describe('PluginHost', () => {
     host = new PluginHost({
       db,
       directory: pluginsDir,
-      builtinIds: new Set(['nexus.builtin'])
+      builtinIds: new Set(['nexus.builtin']),
+      hostVersion: '0.1.0'
     });
   });
 
@@ -64,6 +65,29 @@ describe('PluginHost', () => {
     expect(host.getStorage('nexus.builtin', 'foo')).toBeUndefined();
     host.deleteStorage('nexus.user', 'foo');
     expect(host.getStorage('nexus.user', 'foo')).toBeUndefined();
+  });
+
+  it('disables plugins that are incompatible with the host version', async () => {
+    await writeFile(
+      join(pluginsDir, 'nexus.user', 'plugin.json'),
+      JSON.stringify({
+        id: 'nexus.user',
+        name: 'nexus.user',
+        version: '1.0.0',
+        engines: { nexus: '^0.2.0' },
+        permissions: [],
+        contributes: {}
+      })
+    );
+
+    const plugins = await host.scan();
+    const plugin = plugins.find((item) => item.id === 'nexus.user');
+    expect(plugin?.enabled).toBe(false);
+    expect(plugin?.error).toContain('当前宿主版本 0.1.0');
+
+    const enabled = await host.setEnabled('nexus.user', true);
+    expect(enabled.find((item) => item.id === 'nexus.user')?.enabled).toBe(false);
+    expect(enabled.find((item) => item.id === 'nexus.user')?.error).toContain('当前宿主版本');
   });
 
   it('validates and persists declared settings', async () => {

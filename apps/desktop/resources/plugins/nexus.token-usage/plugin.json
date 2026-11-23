@@ -4,20 +4,11 @@
   "version": "1.6.2",
   "description": "在会话标题栏和每条 AI 消息尾部显示 token 用量，并提供会话/全局用量看板。",
   "engines": {
-    "nexus": "^0.1.0"
+    "nexus": ">=0.0.1 <0.1.0"
   },
   "renderer": "dist/renderer.mjs",
-  "activationEvents": [
-    "onSlot:usage.inline",
-    "onSlot:usage.session",
-    "onView:usage.dashboard"
-  ],
-  "permissions": [
-    "ui.slot",
-    "ui.panel",
-    "usage:read",
-    "events:usage.recorded"
-  ],
+  "activationEvents": ["onSlot:usage.inline", "onSlot:usage.session", "onView:usage.dashboard"],
+  "permissions": ["ui.slot", "ui.panel", "usage:read", "events:usage.recorded"],
   "contributes": {
     "messageSlots": [
       {

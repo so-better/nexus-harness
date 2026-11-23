@@ -380,7 +380,7 @@ modules/chat/
 
 - **Tool（工具）**：原子、可审批的动作单元，输入输出由 zod 定义，在主进程执行，如读写文件、执行命令、网络请求、MCP 调用。工具回答“能做什么”。
 - **Skill（技能）**：声明式任务包，包含说明、资源与可选脚本，告诉 Agent“某类任务该怎么做”。技能不直接获得进程权限，只能通过工具行动。
-- **Plugin（插件）**：运行时扩展，通过贡献点添加 UI、命令、事件订阅与设置；注册工具的能力留到后续。插件负责“集成与产品化扩展”。
+- **Plugin（插件）**：运行时扩展，通过贡献点添加 UI、命令、事件订阅与设置；插件不注册 Agent 工具，外部工具统一通过 MCP 接入。插件负责“集成与产品化扩展”。
 
 MCP Server 不是独立能力层，而是工具来源：配置位于 `<userData>/mcp`，启动后把工具注册进 Tool 层。AI 可通过 `mcp_list`、`mcp_read`、`mcp_save`、`mcp_update`、`mcp_refresh`、`mcp_test` 管理 MCP；MCP 配置属于应用级数据，不受工作区 RootGrant 限制；读取时隐藏 `env` 与敏感 `headers` 值，保存和测试时恢复原有掩码字段，写操作需要审批。
 
@@ -852,7 +852,7 @@ metadata:
   "id": "nexus.token-usage",
   "name": "Token 用量",
   "version": "1.0.0",
-  "engines": { "nexus": "^0.1.0" },
+  "engines": { "nexus": ">=0.0.1 <0.1.0" },
   "main": "dist/main.cjs",
   "renderer": "dist/renderer.mjs",
   "activationEvents": ["onView:usage.panel", "onSlot:usage.inline", "onEvent:usage.recorded"],
@@ -870,7 +870,7 @@ metadata:
 ```
 
 - `id` 必须全局唯一。
-- `engines.nexus` 声明兼容的宿主版本范围。
+- `engines.nexus` 声明兼容的宿主版本范围；宿主加载插件时校验，不兼容的插件禁用并显示错误，且不能通过启用开关恢复；修复 manifest 或升级宿主后重新扫描。
 - `activationEvents` 必须按需激活，禁止无条件在启动时加载所有插件。
 - 权限必须最小化；未声明的能力调用会被宿主拒绝并记录日志。
 
@@ -882,12 +882,12 @@ metadata:
 | `messageSlots` | 会话流、输入区、工具调用与审批等插槽 |
 | `statusBar` | 状态栏条目 |
 | `commands` | 命令面板与快捷键绑定 |
-| `menus` | 上下文菜单、工具栏 |
+| `menus` | 不开放；使用标准插槽和 `commands` 提供操作入口 |
 | `settings` | 插件设置项 |
 | `skins` | 全局皮肤：插件代码绘制的背景、遮罩与强调色 |
 | `startup` | 启动动画：插件代码绘制的全屏启动过渡 |
-| `tools` | 向 Agent 注册工具（不开放） |
-| `themes` | 后续开放，需单独评审 |
+| `tools` | 向 Agent 注册工具：不开放，外部工具统一通过 MCP 接入 |
+| `themes` | 不开放；使用 skins 与语义 token |
 
 标准插槽：
 
@@ -987,7 +987,7 @@ interface SlotContext {
 ```
 
 - 无效 manifest 或入口缺失时，在扩展页展示错误并跳过，不影响宿主启动。
-- 激活事件支持 `onView:<id>`、`onSlot:<slotId>`、`onCommand:<id>` 与 `onEvent:<event>`；启动动画贡献在应用启动时激活，消息插槽首次渲染时激活对应插件。
+- 激活事件支持 `onView:<id>`、`onSlot:<slotId>`、`onCommand:<id>` 与 `onEvent:<event>`，约束 renderer 入口；main 入口仍随插件启用加载。启动动画贡献在应用启动时激活，消息插槽首次渲染时激活对应插件。
 - 激活失败必须捕获并记录，自动禁用该插件，不得影响宿主启动。
 - 插件回调抛出的异常由宿主包裹捕获，转为通知与日志。
 - 目录文件变更做防抖处理，先 `deactivate()` 旧实例，再加载新实例。
@@ -1396,7 +1396,7 @@ interface AskUserAnswer {
 插件主题：
 
 - 插件 UI 只允许使用 `--nh-*` 语义变量，禁止写死颜色与字体。
-- 插件不得覆盖全局 token，只能读取；主题贡献点开放后需单独评审。
+- 插件不得覆盖全局 token，只能读取；`themes` 贡献点不开放。
 
 ### 5.3 动效与质感
 
@@ -1846,7 +1846,7 @@ CHANGELOG.md         # 版本变更记录
 | 发布 | 签名 + 自动更新 | stable / beta 双通道 |
 | 网络工具 | 仅内置媒体搜索 | Pexels API Key 本地配置；其他网络能力后续通过 MCP 或 Skill 扩展 |
 | MCP 接入时机 | M3 | 先支持本地 stdio Server |
-| 高风险插件权限 | 需单独评审 | `workspace:write`、`tools:register`、`network` 默认关闭 |
+| 高风险插件权限 | 已定 | `workspace:write`、`network` 不开放；工作区写入走 Agent 工具与审批，外部网络统一通过 MCP |
 | 自动更新渠道 | M5 | stable / beta 双通道 |
 | 遥测与崩溃报告 | 默认关闭 | 仅显式 opt-in |
 | 国际化范围 | `zh-CN` 优先 | 结构预留 `en-US` |
@@ -1995,7 +1995,7 @@ CHANGELOG.md         # 版本变更记录
 | `usage:read` | 只读查询本地用量统计 | 开放 |
 | `workspace:read` | 只读访问工作区文件 | 开放 |
 | `workspace:write` | 写入工作区文件 | 不开放 |
-| `tools:register` | 向 Agent 注册工具 | 不开放 |
+| `tools:register` | 向 Agent 注册工具 | 不开放；外部工具使用 MCP |
 | `network` | 发起网络请求 | 不开放 |
 
 ### 附录 C：文档索引

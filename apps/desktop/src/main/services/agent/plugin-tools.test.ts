@@ -43,7 +43,13 @@ describe('plugin tools', () => {
   const reload = vi.fn(async () => [plugin]);
   const setEnabled = vi.fn(async () => [plugin]);
   const uninstall = vi.fn(async () => []);
-  const host = { list, reload, setEnabled, uninstall } as unknown as PluginHost;
+  const host = {
+    list,
+    reload,
+    setEnabled,
+    uninstall,
+    getHostVersion: () => '0.1.0'
+  } as unknown as PluginHost;
 
   beforeEach(async () => {
     pluginsDir = await mkdtemp(join(tmpdir(), 'nexus-plugin-tools-'));

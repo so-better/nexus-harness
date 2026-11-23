@@ -39,11 +39,6 @@ export const useAppCommands = (options: AppCommandOptions) => {
   const recentCommands = new Map<string, number>();
 
   const openCommandPalette = async (): Promise<void> => {
-    try {
-      await options.pluginRuntime.activateForExtensions();
-    } catch (reason) {
-      options.showError(reason instanceof Error ? reason.message : t('commands.failed'));
-    }
     commandPaletteOpen.value = true;
   };
 
@@ -72,7 +67,9 @@ export const useAppCommands = (options: AppCommandOptions) => {
         return;
       }
       if (id.startsWith('plugin:')) {
-        const command = options.pluginRuntime.commands.get(id.slice('plugin:'.length));
+        const commandId = id.slice('plugin:'.length);
+        await options.pluginRuntime.activateForCommand(commandId);
+        const command = options.pluginRuntime.commands.get(commandId);
         await command?.handler();
         return;
       }
@@ -163,7 +160,7 @@ export const useAppCommands = (options: AppCommandOptions) => {
         source: t('commands.sessions'),
         icon: 'message' as const
       })),
-      ...Array.from(options.pluginRuntime.commands.values()).map((command) => ({
+      ...options.pluginRuntime.availableCommands.map((command) => ({
         id: `plugin:${command.id}`,
         title: command.title,
         ...(command.shortcut ? { shortcut: command.shortcut } : {}),

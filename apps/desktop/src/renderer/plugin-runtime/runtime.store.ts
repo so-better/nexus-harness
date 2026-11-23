@@ -89,6 +89,13 @@ export interface PluginCommand {
   handler: () => void | Promise<void>;
 }
 
+export interface PluginCommandDescriptor {
+  pluginId: string;
+  id: string;
+  title: string;
+  shortcut?: string;
+}
+
 export interface PluginView {
   pluginId: string;
   id: string;
@@ -240,6 +247,18 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     const implementation = skinMounts.value.get(`${skin.pluginId}:${skin.id}`);
     return implementation ? { ...skin, ...implementation } : null;
   });
+  const availableCommands = computed<PluginCommandDescriptor[]>(() =>
+    plugins.value.flatMap((plugin) =>
+      plugin.enabled
+        ? plugin.contributes.commands.map((command) => ({
+            pluginId: plugin.id,
+            id: command.id,
+            title: command.title,
+            ...(command.shortcut ? { shortcut: command.shortcut } : {})
+          }))
+        : []
+    )
+  );
   const startupAnimations = computed<PluginStartup[]>(() =>
     plugins.value.flatMap((plugin) =>
       plugin.enabled && plugin.rendererUrl && hasPermission(plugin, 'ui.startup')
@@ -627,6 +646,28 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     if (plugin) await activatePlugin(plugin);
   };
 
+  const activateForView = async (viewId: string): Promise<void> => {
+    for (const plugin of plugins.value) {
+      if (
+        plugin.activationEvents.includes(`onView:${viewId}`) ||
+        plugin.contributes.views.some((item) => item.id === viewId)
+      ) {
+        await activatePlugin(plugin);
+      }
+    }
+  };
+
+  const activateForCommand = async (commandId: string): Promise<void> => {
+    for (const plugin of plugins.value) {
+      if (
+        plugin.activationEvents.includes(`onCommand:${commandId}`) ||
+        plugin.contributes.commands.some((item) => item.id === commandId)
+      ) {
+        await activatePlugin(plugin);
+      }
+    }
+  };
+
   const activateForSlot = async (location: PluginSlotLocation): Promise<void> => {
     for (const plugin of plugins.value) {
       if (plugin.contributes.messageSlots.some((item) => item.location === location)) {
@@ -873,6 +914,7 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     selectedSkin,
     activeSkin,
     activeSkinMount,
+    availableCommands,
     startupAnimations,
     selectedStartup,
     activeStartup,
@@ -886,7 +928,7 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     openView: async (id: string) => {
       let view = views.value.get(id);
       if (!view) {
-        await activateForExtensions();
+        await activateForView(id);
         view = views.value.get(id);
       }
       if (!view) throw new Error(`未声明的视图：${id}`);
@@ -905,6 +947,8 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     activateForExtensions,
     activateForSkins,
     activateForStartup,
+    activateForView,
+    activateForCommand,
     activateForSlot,
     setEnabled,
     importFromDirectory,

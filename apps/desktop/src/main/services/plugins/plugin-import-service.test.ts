@@ -48,6 +48,10 @@ describe('plugin import', () => {
     ).resolves.toContain('activate');
   });
 
+  it('rejects a plugin incompatible with the host version', async () => {
+    await expect(inspectPluginDirectory(source, '0.0.1')).rejects.toThrow('当前宿主版本 0.0.1');
+  });
+
   it('rejects a missing renderer entry', async () => {
     await rm(join(source, 'dist', 'renderer.mjs'));
     await expect(inspectPluginDirectory(source)).rejects.toThrow('插件入口文件不存在');

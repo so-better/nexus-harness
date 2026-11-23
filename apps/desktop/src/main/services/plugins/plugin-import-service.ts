@@ -4,11 +4,13 @@
 
 import { cp, mkdir, mkdtemp, readFile, realpath, rename, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { satisfies } from 'semver';
 import { pluginManifestSchema, type PluginManifest } from '@shared/plugin';
 
 export interface ImportPluginOptions {
   sourceDir: string;
   pluginsDir: string;
+  hostVersion?: string;
 }
 
 /**
@@ -37,7 +39,10 @@ const ensureEntry = async (source: string, entry: string | undefined): Promise<v
 /**
  * 检查目录是否是有效插件，并校验声明的入口。
  */
-export const inspectPluginDirectory = async (sourceDir: string): Promise<PluginManifest> => {
+export const inspectPluginDirectory = async (
+  sourceDir: string,
+  hostVersion?: string
+): Promise<PluginManifest> => {
   const info = await stat(sourceDir).catch(() => undefined);
   if (!info?.isDirectory()) throw new PluginImportError('请选择一个有效的插件文件夹');
 
@@ -60,6 +65,14 @@ export const inspectPluginDirectory = async (sourceDir: string): Promise<PluginM
     ];
     throw new PluginImportError(`plugin.json 缺少或错误的字段：${fields.join('、')}`);
   }
+  if (
+    hostVersion &&
+    !satisfies(hostVersion, parsed.data.engines.nexus, { includePrerelease: true })
+  ) {
+    throw new PluginImportError(
+      `插件要求 Nexus ${parsed.data.engines.nexus}，当前宿主版本 ${hostVersion}`
+    );
+  }
   await ensureEntry(sourceDir, parsed.data.main);
   await ensureEntry(sourceDir, parsed.data.renderer);
   return parsed.data;
@@ -71,7 +84,7 @@ export const inspectPluginDirectory = async (sourceDir: string): Promise<PluginM
 export const importPluginDirectory = async (
   options: ImportPluginOptions
 ): Promise<PluginManifest> => {
-  const manifest = await inspectPluginDirectory(options.sourceDir);
+  const manifest = await inspectPluginDirectory(options.sourceDir, options.hostVersion);
   await mkdir(options.pluginsDir, { recursive: true });
   const source = await realpath(options.sourceDir);
   const target = join(options.pluginsDir, manifest.id);

@@ -210,6 +210,18 @@ describe('plugin runtime skin selection', () => {
     );
   });
 
+  it('lists plugin commands before activation and activates them on demand', async () => {
+    const runtime = usePluginRuntimeStore();
+    await runtime.init();
+    expect(runtime.availableCommands).toContainEqual(
+      expect.objectContaining({ id: 'usage.check', pluginId: plugin.id })
+    );
+    expect(runtime.commands.has('usage.check')).toBe(false);
+
+    await runtime.activateForCommand('usage.check');
+    expect(runtime.commands.has('usage.check')).toBe(true);
+  });
+
   it('exposes usage stats through an authorized plugin command', async () => {
     const runtime = usePluginRuntimeStore();
     await runtime.init();

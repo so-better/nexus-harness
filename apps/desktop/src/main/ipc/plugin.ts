@@ -72,7 +72,8 @@ export const registerPluginIpc = (): void => {
         try {
           await importPluginDirectory({
             sourceDir,
-            pluginsDir: getAppDataPaths().plugins
+            pluginsDir: getAppDataPaths().plugins,
+            hostVersion: host.getHostVersion()
           });
           imported += 1;
         } catch (error) {
