@@ -1,0 +1,21 @@
+{
+  "id": "nexus.startup-pulse",
+  "name": "脉冲",
+  "version": "1.1.0",
+  "description": "Nexus 启动时的强烈冲击波脉冲动画，使用语义色与系统减少动效偏好。",
+  "engines": {
+    "nexus": ">=0.0.1 <0.1.0"
+  },
+  "renderer": "dist/renderer.mjs",
+  "activationEvents": [],
+  "permissions": ["ui.startup"],
+  "contributes": {
+    "startup": [
+      {
+        "id": "pulse",
+        "title": "脉冲",
+        "countdownMs": 2800
+      }
+    ]
+  }
+}

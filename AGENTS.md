@@ -1012,7 +1012,7 @@ interface SlotContext {
 - 视图入口由插件自己提供，宿主不在扩展弹窗自动列出。
 - 正确处理启用、禁用、热重载。
 
-内置启动动画插件 `apps/desktop/resources/plugins/nexus.startup-intro` 是启动动画参考实现，演示 `ctx.startup.register`、语义色绘制、减少动效偏好与 `finish`；它默认启用但不默认选中，用户主动选择后下次启动播放。
+内置启动动画插件 `apps/desktop/resources/plugins/nexus.startup-intro`（淡入）与 `apps/desktop/resources/plugins/nexus.startup-pulse`（脉冲）是启动动画参考实现，演示 `ctx.startup.register`、语义色绘制、减少动效偏好与 `finish`；两者默认启用但不默认选中，用户主动选择后下次启动播放。
 
 内置皮肤插件（`apps/desktop/resources/plugins/nexus.skin-*`）是全局皮肤参考实现，演示插件代码用语义色绘制背景；皮肤只声明贡献点，具体视觉完全由插件 renderer 决定：
 
