@@ -791,15 +791,14 @@ export const createAgentProvider: ProviderFactory = (config) => {
     ...(config.headers ? { headers: config.headers } : {})
   };
 
+  const reasoningPassback = (modelId: string): boolean => {
+    const model = config.models.find((item) => item.id === modelId);
+    return model ? model.reasoningPassback !== false : false;
+  };
+
   if (config.protocol === 'anthropic') return new AnthropicProvider(shared);
-  if (config.protocol === 'ollama') return new OllamaProvider(shared);
-  return new OpenAICompatibleProvider({
-    ...shared,
-    reasoningPassback: (modelId) => {
-      const model = config.models.find((item) => item.id === modelId);
-      return model ? model.reasoningPassback !== false : false;
-    }
-  });
+  if (config.protocol === 'ollama') return new OllamaProvider({ ...shared, reasoningPassback });
+  return new OpenAICompatibleProvider({ ...shared, reasoningPassback });
 };
 
 export class AgentService {

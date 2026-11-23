@@ -14,7 +14,7 @@ import {
 import type { NexusEvent } from '@shared/events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDatabase } from '../storage/database';
-import { AgentService, buildModelExtraParams } from './agent-service';
+import { AgentService, buildModelExtraParams, createAgentProvider } from './agent-service';
 import { AttachmentService } from '../attachments/attachment-service';
 import { MemoryService } from '../memory/memory-service';
 
@@ -28,6 +28,88 @@ describe('AgentService', () => {
 
   afterEach(async () => {
     await rm(root, { recursive: true, force: true });
+  });
+
+  it('passes assistant reasoning back for Ollama', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('data: [DONE]\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      })
+    );
+    try {
+      const provider = createAgentProvider({
+        id: 'ollama',
+        protocol: 'ollama',
+        name: 'Ollama',
+        baseUrl: 'http://localhost:11434',
+        apiKey: '',
+        enabled: true,
+        models: [
+          {
+            id: 'llama',
+            contextWindow: 8192,
+            maxOutputTokens: 2048,
+            reasoningPassback: true
+          }
+        ],
+        defaultModelId: 'llama'
+      });
+      for await (const _event of provider.stream({
+        model: 'llama',
+        messages: [{ role: 'assistant', content: '', reasoning: '先检查工具结果' }]
+      })) {
+        // 消费流以触发请求
+      }
+      const init = fetchMock.mock.calls[0]?.[1];
+      const body = JSON.parse(String(init?.body)) as {
+        messages: Array<{ reasoning_content?: string }>;
+      };
+      expect(body.messages[0]?.reasoning_content).toBe('先检查工具结果');
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('does not pass assistant reasoning back for Ollama when disabled', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('data: [DONE]\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      })
+    );
+    try {
+      const provider = createAgentProvider({
+        id: 'ollama',
+        protocol: 'ollama',
+        name: 'Ollama',
+        baseUrl: 'http://localhost:11434',
+        apiKey: '',
+        enabled: true,
+        models: [
+          {
+            id: 'llama',
+            contextWindow: 8192,
+            maxOutputTokens: 2048,
+            reasoningPassback: false
+          }
+        ],
+        defaultModelId: 'llama'
+      });
+      for await (const _event of provider.stream({
+        model: 'llama',
+        messages: [{ role: 'assistant', content: '', reasoning: '不应回传' }]
+      })) {
+        // 消费流以触发请求
+      }
+      const init = fetchMock.mock.calls[0]?.[1];
+      const body = JSON.parse(String(init?.body)) as {
+        messages: Array<{ reasoning_content?: string }>;
+      };
+      expect(body.messages[0]).not.toHaveProperty('reasoning_content');
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   it('merges model-level extra and thinking params', () => {
