@@ -27,6 +27,7 @@ describe('agent system prompt', () => {
     expect(prompt).toContain('iframe');
     expect(prompt).toContain('save_file');
     expect(prompt).toContain('reasoning 只写计划');
+    expect(prompt).toContain('ask_user 选择');
     expect(prompt).toContain('禁止完整代码块');
     expect(prompt).not.toContain('无工作区');
   });

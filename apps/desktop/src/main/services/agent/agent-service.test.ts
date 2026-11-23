@@ -12,6 +12,7 @@ import {
   type ProviderRequest
 } from '@nexus/providers';
 import type { NexusEvent } from '@shared/events';
+import type { AskQuestion } from '@shared/ask-user';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDatabase } from '../storage/database';
 import { AgentService, buildModelExtraParams, createAgentProvider } from './agent-service';
@@ -944,6 +945,104 @@ describe('AgentService', () => {
         .all('session-1') as Array<{ name: string; mime: string }>;
       expect(files).toEqual([{ name: 'report.md', mime: 'text/markdown' }]);
       expect(events.some((event) => event.type === 'file.created')).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('asks the user to choose an image model when multiple are enabled', async () => {
+    const db = createDatabase(join(root, 'image-selection.db'));
+    let step = 0;
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
+      async *stream() {
+        if (step++ > 0) {
+          yield { type: 'text-delta', text: '已取消生图' };
+          yield { type: 'finish', reason: 'stop' };
+          return;
+        }
+        const toolCall = {
+          id: 'image-1',
+          name: 'generate_image',
+          arguments: { prompt: '一只猫' }
+        };
+        yield { type: 'tool-call-start', id: toolCall.id, name: toolCall.name };
+        yield {
+          type: 'tool-call-delta',
+          id: toolCall.id,
+          argumentsDelta: JSON.stringify(toolCall.arguments)
+        };
+        yield { type: 'tool-call-end', toolCall };
+        yield { type: 'finish', reason: 'tool_calls' };
+      }
+    };
+    const service = new AgentService({
+      createProvider: () => provider,
+      database: db,
+      fileBaseDir: join(root, 'files'),
+      imageSettings: async () => ({
+        configs: [
+          {
+            id: 'image-a',
+            name: 'Image A',
+            model: 'model-a',
+            enabled: true,
+            template: { url: 'https://example.com/a', body: {} }
+          },
+          {
+            id: 'image-b',
+            name: 'Image B',
+            model: 'model-b',
+            enabled: true,
+            template: { url: 'https://example.com/b', body: {} }
+          }
+        ]
+      })
+    });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+    const asked: AskQuestion[] = [];
+    const events: NexusEvent[] = [];
+
+    try {
+      await service.run(
+        {
+          sessionId: 'image-selection',
+          prompt: '生成一只猫',
+          rootPaths: [],
+          providerId: providerConfig.id,
+          modelId: 'mock-model'
+        },
+        providerConfig,
+        {
+          onEvent: (event) => events.push(event),
+          autoApprove: () => true,
+          askUser: async (_requestId, questions) => {
+            asked.push(...questions);
+            return undefined;
+          }
+        }
+      );
+
+      expect(asked).toHaveLength(1);
+      expect(asked[0]?.options?.map((option) => option.id)).toEqual(['image-a', 'image-b']);
+      expect(events.some((event) => event.type === 'ask_user.requested')).toBe(true);
+      expect(
+        events.some(
+          (event) =>
+            event.type === 'tool.failed' &&
+            (event.payload as { error?: { code?: string } }).error?.code ===
+              'IMAGE_MODEL_SELECTION_CANCELLED'
+        )
+      ).toBe(true);
     } finally {
       db.close();
     }

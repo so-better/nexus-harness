@@ -53,7 +53,7 @@ import { AttachmentService } from '../attachments/attachment-service';
 import { CheckpointService } from '../checkpoint/checkpoint-service';
 import type { SkillService } from '../skills/skill-service';
 import type { McpService } from '../mcp/mcp-service';
-import type { ImageSettings } from '@shared/image';
+import type { ImageConfig, ImageSettings } from '@shared/image';
 import type { SearchSettings } from '@shared/search';
 import {
   AgentContextService,
@@ -444,7 +444,11 @@ const generateImageToolDefinition: AgentToolDefinition = {
       prompt: { type: 'string' },
       count: { type: 'number', description: '1-4，默认 1' },
       size: { type: 'string', description: '例如 1024x1024' },
-      model: { type: 'string', description: '可选生图模型名称或模型 ID' },
+      model: {
+        type: 'string',
+        description:
+          '用户选择的生图模型名称或模型 ID；有多个启用模型且用户未指定时，先调用 ask_user 让用户选择'
+      },
       images: { type: 'array', items: { type: 'string' }, description: '可选参考图 URL' }
     },
     required: ['prompt']
@@ -1003,6 +1007,81 @@ ${assistant.slice(0, 3_000)}`;
       let checkpointRoot = toolset ? await toolset.resolvePath('.') : undefined;
       let workspaceDenied = false;
 
+      interface ImageModelSelection {
+        config?: ImageConfig;
+        error?: { code: string; message: string };
+      }
+
+      /**
+       * 多个生图模型时用 ask_user 让用户选择；未回答或无法询问时阻止生成。
+       */
+      const requestImageModel = async (call: { id?: string }): Promise<ImageModelSelection> => {
+        if (!hooks.askUser) {
+          return {
+            error: {
+              code: 'IMAGE_MODEL_SELECTION_UNAVAILABLE',
+              message: '当前无法询问用户选择生图模型'
+            }
+          };
+        }
+        const question: AskQuestion = {
+          id: 'image-model',
+          question: '使用哪个生图模型？',
+          options: imageConfigs.slice(0, 9).map((config) => ({
+            id: config.id,
+            label: `${config.name}（${config.model}）`,
+            description: `模型 ID：${config.id}`
+          })),
+          allowOther: imageConfigs.length > 9,
+          required: true
+        };
+        const requestId = randomUUID();
+        eventBus.publish(
+          createNexusEvent({
+            sessionId: input.sessionId,
+            runId,
+            seq: 1,
+            type: 'ask_user.requested',
+            payload: {
+              requestId,
+              questions: [question],
+              ...(call.id ? { toolCallId: call.id } : {})
+            }
+          })
+        );
+        const answers = await hooks.askUser(requestId, [question]);
+        eventBus.publish(
+          createNexusEvent({
+            sessionId: input.sessionId,
+            runId,
+            seq: 1,
+            type: 'ask_user.resolved',
+            payload: { requestId, answers: answers ?? [], cancelled: !answers }
+          })
+        );
+        if (!answers) {
+          return {
+            error: { code: 'IMAGE_MODEL_SELECTION_CANCELLED', message: '用户未选择生图模型' }
+          };
+        }
+        const answer = answers.find((item) => item.questionId === question.id);
+        const selectedId = answer?.selectedOptionIds?.[0];
+        const text = answer?.text?.trim();
+        const config = imageConfigs.find(
+          (item) =>
+            item.id === selectedId ||
+            (text !== undefined && (item.id === text || item.name === text || item.model === text))
+        );
+        return config
+          ? { config }
+          : {
+              error: {
+                code: 'IMAGE_MODEL_SELECTION_INVALID',
+                message: '用户选择的生图模型无效'
+              }
+            };
+      };
+
       const executeTool = async (call: { id?: string; name: string; arguments: unknown }) => {
         if (call.name === 'theme_get' || call.name === 'theme_update') {
           return executeThemeTool(call.name, call.arguments);
@@ -1495,21 +1574,47 @@ ${assistant.slice(0, 3_000)}`;
               };
             }
             const requestedModel = typeof args.model === 'string' ? args.model.trim() : '';
-            const imageConfig = requestedModel
-              ? imageConfigs.find(
-                  (config) =>
-                    config.id === requestedModel ||
-                    config.name === requestedModel ||
-                    config.model === requestedModel
-                )
-              : imageConfigs[0];
+            let imageConfig: ImageConfig | undefined;
+            if (requestedModel) {
+              imageConfig = imageConfigs.find(
+                (config) =>
+                  config.id === requestedModel ||
+                  config.name === requestedModel ||
+                  config.model === requestedModel
+              );
+              if (!imageConfig) {
+                return {
+                  ok: false,
+                  output: '',
+                  error: {
+                    code: 'IMAGE_MODEL_NOT_FOUND',
+                    message: `未找到指定的图像模型：${requestedModel}`
+                  }
+                };
+              }
+            } else if (imageConfigs.length > 1) {
+              const selected = await requestImageModel(call);
+              if (!selected.config) {
+                return {
+                  ok: false,
+                  output: '',
+                  error: selected.error ?? {
+                    code: 'IMAGE_MODEL_SELECTION_REQUIRED',
+                    message: '请选择生图模型'
+                  }
+                };
+              }
+              imageConfig = selected.config;
+            } else {
+              imageConfig = imageConfigs[0];
+            }
             if (!imageConfig) {
               return {
                 ok: false,
                 output: '',
                 error: {
                   code: 'IMAGE_MODEL_NOT_FOUND',
-                  message: `未找到指定的图像模型：${requestedModel}`
+                  message: '未找到可用的图像模型'
                 }
               };
             }
@@ -1901,10 +2006,12 @@ ${assistant.slice(0, 3_000)}`;
       }
 
       const mcpTools = this.mcp && mode !== 'plan' ? await this.mcp.listTools(hooks.signal) : [];
-      const imageNames = imageConfigs.map((config) => `${config.name}（${config.model}）`);
+      const imageNames = imageConfigs.map(
+        (config) => `${config.name}（${config.model}，id: ${config.id}）`
+      );
       const imageToolDefinition: AgentToolDefinition = {
         ...generateImageToolDefinition,
-        description: `${generateImageToolDefinition.description} 可用生图模型：${imageNames.join('、')}。可用 model 参数指定模型名称或模型 ID；未指定时使用第一个启用的配置。`
+        description: `${generateImageToolDefinition.description} 可用生图模型：${imageNames.join('、')}。有多个启用模型且用户未指定模型时，必须先调用 ask_user，把启用模型作为选项让用户选择；用户选择后再调用本工具，并在 model 参数中传入所选模型名称、模型 ID 或模型名。只有一个启用模型时可直接使用。`
       };
       const allToolDefinitions = [
         ...(toolset?.definitions ?? fileToolDefinitions),

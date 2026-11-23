@@ -36,6 +36,8 @@ const NO_WORKSPACE_BUILD_PROMPT =
 const NO_WORKSPACE_PLAN_PROMPT =
   '无工作区：Plan 只读，不能写文件或执行命令；请用户选择工作区或切换到 Build；确需读取本地路径时让用户给出绝对路径，不假设 Desktop。';
 
+const IMAGE_RULES = '图像：多个生图模型未指定时，ask_user 选择。';
+
 const ARTIFACT_RULES =
   '产物：明确要求保存/下载文件时直接调用 save_file/save_* 或 write_file；只要求预览页面时输出 iframe，不调用文件工具；reasoning 只写计划与验证，禁止完整代码块或整份文件；长内容分段写入或拆文件，完成后说明文件与验证结果。';
 
@@ -63,7 +65,7 @@ export const buildAgentSystemPrompt = (input: {
     LINK_RULES,
     ...(input.mode === 'build' ? [BROWSER_RULES] : []),
     FILE_RULES,
-    ...(input.mode === 'build' ? [ARTIFACT_RULES] : []),
+    ...(input.mode === 'build' ? [ARTIFACT_RULES, IMAGE_RULES] : []),
     modeSystemPrompt(input.mode),
     MEDIA_MARKDOWN_PROMPT,
     ...(input.mode === 'build' ? [PREVIEW_RULES] : []),

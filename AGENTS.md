@@ -719,7 +719,7 @@ interface ProviderCapabilities {
 
 #### 图像生成
 
-- 文本模型通过 `generate_image` 工具调用独立配置的图像模型；用户也可以显式发起。
+- 文本模型通过 `generate_image` 工具调用独立配置的图像模型；用户也可以显式发起。配置多个启用图像模型且用户未指定模型时，Agent 必须先通过 `ask_user` 让用户选择，再调用 `generate_image`；宿主在缺少 `model` 时会兜底发起 `ask_user`，用户未选择则不生成。只有一个启用模型时可直接使用。
 - 对话模型不支持工具调用时，用户仍可通过显式命令发起图像生成。
 - 参数包含 prompt、size、count、referenceFileIds（图生图）与 seed；返回 fileId 列表、尺寸与用量。请求体与结果字段由独立图像配置决定。
 - 结果写入 `<userData>/files`，会话流以图片卡片展示并支持另存为。
