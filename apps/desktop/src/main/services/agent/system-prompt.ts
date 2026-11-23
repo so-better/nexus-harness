@@ -27,8 +27,14 @@ const FILE_RULES = '文件：修改前核对来源；数据不全先说明；保
 const MEDIA_MARKDOWN_PROMPT =
   '图片/视频直接嵌入（图片 Markdown、视频 <video>），禁止裸链接或表格。';
 
-const NO_WORKSPACE_PROMPT =
-  '无工作区：本地文件/命令需用户给出的绝对路径；按需请求目录授权，不假设 Desktop。';
+const NO_WORKSPACE_BUILD_PROMPT =
+  '无工作区：独立文件/页面直接用 save_file/save_* 生成到输出目录，不要先调 list_dir 或因缺少工作区停下；确需读取/执行本地路径时请用户选择工作区或给出绝对路径，不假设 Desktop。';
+
+const NO_WORKSPACE_PLAN_PROMPT =
+  '无工作区：Plan 只读，不能写文件或执行命令；请用户选择工作区或切换到 Build；确需读取本地路径时让用户给出绝对路径，不假设 Desktop。';
+
+const ARTIFACT_RULES =
+  '产物：生成文件或长代码时直接调用 save_file/save_* 或 write_file，在工具参数中写内容；reasoning 只写计划与验证，禁止完整代码块或整份文件；长内容分段写入或拆文件，完成后说明文件与验证结果。';
 
 /**
  * 模式约束：Plan 只读，Build 按权限执行。
@@ -54,9 +60,12 @@ export const buildAgentSystemPrompt = (input: {
     LINK_RULES,
     ...(input.mode === 'build' ? [BROWSER_RULES] : []),
     FILE_RULES,
+    ...(input.mode === 'build' ? [ARTIFACT_RULES] : []),
     modeSystemPrompt(input.mode),
     MEDIA_MARKDOWN_PROMPT,
-    ...(input.hasWorkspace ? [] : [NO_WORKSPACE_PROMPT]),
+    ...(input.hasWorkspace
+      ? []
+      : [input.mode === 'build' ? NO_WORKSPACE_BUILD_PROMPT : NO_WORKSPACE_PLAN_PROMPT]),
     ...(input.memory ? [input.memory] : [])
   ].join('\n\n');
 

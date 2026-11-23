@@ -56,6 +56,8 @@ export interface AgentLoopOptions {
   runId?: string;
   maxSteps?: number;
   maxTokens?: number;
+  /** reasoning 字符预算；超过后强制工具调用，避免用思考内容起草整份文件 */
+  reasoningBudgetChars?: number;
   extraParams?: Record<string, unknown>;
   prepareContext?: ContextPreparer;
   permissionGateway?: PermissionGateway;
@@ -77,6 +79,9 @@ export interface AgentLoopResult {
 }
 
 const DEFAULT_MAX_STEPS = 10;
+const DEFAULT_REASONING_BUDGET_CHARS = 4_000;
+const REASONING_CORRECTION_PROMPT =
+  '你刚才在 reasoning 中起草了文件内容并触及预算。停止在思考里写完整代码/文件，立即调用 save_file/save_*（独立文件无需工作区）或对应工具，把内容放入工具参数；保持代码紧凑，必要时拆分文件。';
 
 /**
  * 执行单次 Run；工具失败会作为 tool 消息回填，让模型自行调整。
@@ -115,6 +120,7 @@ export class AgentLoop {
   async run(): Promise<AgentLoopResult> {
     const startedAt = Date.now();
     const maxSteps = this.options.maxSteps ?? DEFAULT_MAX_STEPS;
+    let reasoningRetries = 0;
 
     this.emit('run.started', { model: this.options.model });
 
@@ -156,6 +162,25 @@ export class AgentLoop {
         throw new Error(`${result.error.code}: ${result.error.message}`);
       }
 
+      if (result.reasoningLimit) {
+        if (reasoningRetries < 1) {
+          reasoningRetries += 1;
+          this.messages.push({ role: 'system', content: REASONING_CORRECTION_PROMPT });
+          continue;
+        }
+        const failure = {
+          code: 'AGENT_REASONING_LIMIT',
+          message: '模型持续在思考中起草文件，未调用工具。请明确要求直接生成文件，或更换模型。'
+        };
+        this.emit('run.failed', { error: failure });
+        return {
+          messages: this.messages,
+          steps: step,
+          toolCalls: this.toolCallCount,
+          finishReason: 'failed'
+        };
+      }
+
       this.toolCallCount += result.toolCalls.length;
 
       if (result.text || result.reasoning || result.toolCalls.length) {
@@ -175,6 +200,27 @@ export class AgentLoop {
       }
 
       if (result.toolCalls.length === 0) {
+        const failure =
+          result.finishReason === 'length'
+            ? {
+                code: 'AGENT_OUTPUT_LIMIT',
+                message: '模型输出达到上限，任务未完成。请缩小任务范围，或要求使用工具分段生成。'
+              }
+            : !result.text.trim()
+              ? {
+                  code: 'AGENT_EMPTY_RESPONSE',
+                  message: '模型未生成有效回复。请重试，或明确要求使用工具/给出更具体目标。'
+                }
+              : undefined;
+        if (failure) {
+          this.emit('run.failed', { error: failure });
+          return {
+            messages: this.messages,
+            steps: step,
+            toolCalls: this.toolCallCount,
+            finishReason: 'failed'
+          };
+        }
         this.emit('run.completed', { durationMs: Date.now() - startedAt });
         return {
           messages: this.messages,
@@ -287,6 +333,7 @@ export class AgentLoop {
     reasoning: string;
     toolCalls: ProviderToolCall[];
     finishReason: string;
+    reasoningLimit?: boolean;
     error?: { code: string; message: string };
   }> {
     const request: ProviderRequest = {
@@ -301,6 +348,7 @@ export class AgentLoop {
     let text = '';
     let reasoning = '';
     let finishReason = 'stop';
+    let reasoningLimit = false;
     let error: { code: string; message: string } | undefined;
     const toolCalls: ProviderToolCall[] = [];
     let deltaBuffer = '';
@@ -330,7 +378,7 @@ export class AgentLoop {
     };
 
     try {
-      for await (const event of this.options.provider.stream(request)) {
+      streamLoop: for await (const event of this.options.provider.stream(request)) {
         switch (event.type) {
           case 'reasoning-delta':
             reasoning += event.text;
@@ -386,6 +434,18 @@ export class AgentLoop {
         }
 
         if (error) break;
+
+        // 只在还没有正文和工具调用时触发；留给最终回答和工具参数足够预算
+        if (
+          !reasoningLimit &&
+          !text.trim() &&
+          toolCalls.length === 0 &&
+          reasoning.length > (this.options.reasoningBudgetChars ?? DEFAULT_REASONING_BUDGET_CHARS)
+        ) {
+          reasoningLimit = true;
+          finishReason = 'reasoning_limit';
+          break streamLoop;
+        }
       }
     } catch (streamError) {
       error = {
@@ -396,7 +456,14 @@ export class AgentLoop {
 
     flushReasoning();
     flushDelta();
-    return { text, reasoning, toolCalls, finishReason, ...(error ? { error } : {}) };
+    return {
+      text,
+      reasoning,
+      toolCalls,
+      finishReason,
+      ...(reasoningLimit ? { reasoningLimit: true } : {}),
+      ...(error ? { error } : {})
+    };
   }
 
   /**

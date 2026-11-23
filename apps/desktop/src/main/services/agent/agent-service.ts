@@ -1559,7 +1559,7 @@ ${assistant.slice(0, 3_000)}`;
               output: '',
               error: {
                 code: 'TOOL_WORKSPACE_REQUIRED',
-                message: 'Plan 模式不触发目录授权，请先在会话头选择工作区'
+                message: 'Plan 模式不触发目录授权，请先在会话头选择工作区，或切换到 Build。'
               }
             };
           }
@@ -1586,7 +1586,8 @@ ${assistant.slice(0, 3_000)}`;
               output: '',
               error: {
                 code: 'TOOL_WORKSPACE_REQUIRED',
-                message: '未选择工作区，无法执行本地文件或命令操作'
+                message:
+                  '未选择工作区，无法执行本地文件或命令操作。请让用户选择工作区；独立文件可直接使用 save_file 保存到输出目录。'
               }
             };
           }

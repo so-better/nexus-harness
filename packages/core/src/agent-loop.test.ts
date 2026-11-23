@@ -352,6 +352,107 @@ describe('AgentLoop', () => {
     expect(events.some((event) => event.type === 'run.failed')).toBe(true);
   });
 
+  it('forces a tool call after the reasoning budget is exceeded', async () => {
+    const { bus, events } = createCollector();
+    const provider = new MockProvider([
+      { reasoning: 'x'.repeat(5_000), finishReason: 'stop' },
+      {
+        toolCalls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'a.txt' } }],
+        finishReason: 'tool_calls'
+      },
+      { text: '读取完成', finishReason: 'stop' }
+    ]);
+    const executeTool = vi.fn().mockResolvedValue({ ok: true, output: 'hello' });
+    const loop = new AgentLoop({
+      provider,
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '读取 a.txt' }],
+      tools: [readTool],
+      permissionGateway: new PermissionGateway(['read']),
+      executeTool,
+      reasoningBudgetChars: 100,
+      eventBus: bus
+    });
+
+    const result = await loop.run();
+
+    expect(result.finishReason).toBe('stop');
+    expect(executeTool).toHaveBeenCalledTimes(1);
+    expect(
+      result.messages.some(
+        (message) => message.role === 'system' && message.content.includes('save_file')
+      )
+    ).toBe(true);
+    expect(events.some((event) => event.type === 'run.failed')).toBe(false);
+  });
+
+  it('fails when the model keeps drafting in reasoning after one correction', async () => {
+    const { bus, events } = createCollector();
+    const loop = new AgentLoop({
+      provider: new MockProvider([
+        { reasoning: 'x'.repeat(5_000), finishReason: 'stop' },
+        { reasoning: 'y'.repeat(5_000), finishReason: 'stop' }
+      ]),
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '生成页面' }],
+      reasoningBudgetChars: 100,
+      eventBus: bus
+    });
+
+    const result = await loop.run();
+
+    expect(result.finishReason).toBe('failed');
+    const failure = events.find((event) => event.type === 'run.failed');
+    expect(failure?.payload).toMatchObject({
+      error: { code: 'AGENT_REASONING_LIMIT' }
+    });
+    expect(events.some((event) => event.type === 'run.completed')).toBe(false);
+  });
+
+  it('fails instead of silently ending when the model only emits reasoning', async () => {
+    const { bus, events } = createCollector();
+    const loop = new AgentLoop({
+      provider: new MockProvider([
+        { reasoning: '我需要在思考里写完整实现，但现在没有输出。', finishReason: 'stop' }
+      ]),
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '生成一个页面' }],
+      eventBus: bus
+    });
+
+    const result = await loop.run();
+
+    expect(result.finishReason).toBe('failed');
+    const failure = events.find((event) => event.type === 'run.failed');
+    expect(failure?.payload).toMatchObject({
+      error: { code: 'AGENT_EMPTY_RESPONSE', message: expect.stringContaining('未生成有效回复') }
+    });
+    expect(events.some((event) => event.type === 'run.completed')).toBe(false);
+  });
+
+  it('fails when output is truncated even if partial text exists', async () => {
+    const { bus, events } = createCollector();
+    const loop = new AgentLoop({
+      provider: new MockProvider([{ text: '还没写完', finishReason: 'length' }]),
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '写一个长页面' }],
+      eventBus: bus
+    });
+
+    const result = await loop.run();
+
+    expect(result.finishReason).toBe('failed');
+    const failure = events.find((event) => event.type === 'run.failed');
+    expect(failure?.payload).toMatchObject({
+      error: { code: 'AGENT_OUTPUT_LIMIT', message: expect.stringContaining('输出达到上限') }
+    });
+    expect(events.some((event) => event.type === 'run.completed')).toBe(false);
+  });
+
   it('stops at max steps', async () => {
     const { bus, events } = createCollector();
     const provider = new MockProvider([
