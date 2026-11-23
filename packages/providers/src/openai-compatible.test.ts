@@ -79,6 +79,68 @@ describe('OpenAICompatibleProvider', () => {
     expect(sentBody.tools[0].function.name).toBe('read_file');
   });
 
+  it('passes assistant reasoning_content back when the provider requires it', async () => {
+    let sentBody: Record<string, unknown> | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      sentBody = JSON.parse(String(init?.body));
+      return new Response(streamBody([{ choices: [{ delta: { content: 'ok' } }] }]), {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      });
+    };
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: 'https://api.deepseek.com',
+      apiKey: 'secret',
+      reasoningPassback: true,
+      fetchImpl
+    });
+    for await (const _event of provider.stream({
+      model: 'deepseek-flash',
+      messages: [
+        {
+          role: 'assistant',
+          content: '',
+          reasoning: '先检查工具结果',
+          toolCalls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'a.txt' } }]
+        },
+        { role: 'tool', toolCallId: 'call-1', content: 'hello' }
+      ]
+    })) {
+      // consume stream
+    }
+
+    const messages = sentBody?.['messages'] as Array<Record<string, unknown>>;
+    expect(messages[0]).toMatchObject({
+      role: 'assistant',
+      reasoning_content: '先检查工具结果'
+    });
+  });
+
+  it('does not send reasoning_content when the provider does not require it', async () => {
+    let sentBody: Record<string, unknown> | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      sentBody = JSON.parse(String(init?.body));
+      return new Response(streamBody([{ choices: [{ delta: { content: 'ok' } }] }]), {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      });
+    };
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: 'https://example.com/v1',
+      apiKey: 'secret',
+      fetchImpl
+    });
+    for await (const _event of provider.stream({
+      model: 'mock-model',
+      messages: [{ role: 'assistant', content: '', reasoning: '思考' }]
+    })) {
+      // consume stream
+    }
+
+    const messages = sentBody?.['messages'] as Array<Record<string, unknown>>;
+    expect(messages[0]).not.toHaveProperty('reasoning_content');
+  });
+
   it('sends image content as data-url parts', async () => {
     let sentBody: Record<string, unknown> | undefined;
     const fetchImpl: typeof fetch = async (_input, init) => {

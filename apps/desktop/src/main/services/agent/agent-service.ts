@@ -31,6 +31,7 @@ import {
 import type { PptDeck } from '@nexus/toolkit';
 import { detectDangerousCommand, isSensitivePath } from '@nexus/runtime-utils';
 import { appendFileReferences, imageMimeForName } from '@shared/files';
+import { supportsDeepSeekThinking } from '@shared/provider-reasoning';
 import {
   createExcelBuffer,
   createPdfBuffer,
@@ -65,7 +66,8 @@ import type {
   AgentProviderConfig,
   AgentRunInput,
   AgentRunResult,
-  GeneralSettingsState
+  GeneralSettingsState,
+  ProviderModel
 } from '@shared/ipc/contracts';
 import { askUserInputSchema, type AskQuestion, type AskUserAnswer } from '@shared/ask-user';
 import { executeThemeTool, themeToolDefinitions } from './theme-tools';
@@ -761,6 +763,31 @@ const loadAttachmentContext = async (
   return { attachments, images, items, textBytes };
 };
 
+/**
+ * 判断是否需要回传 reasoning_content；DeepSeek thinking 模式必须保留。
+ */
+export const shouldPassBackReasoning = (baseUrl: string, modelId: string): boolean =>
+  supportsDeepSeekThinking(baseUrl, modelId);
+
+/**
+ * 把模型级思考配置合并进请求参数；仅对 OpenAI 兼容协议生效。
+ */
+export const buildModelExtraParams = (
+  config: Pick<AgentProviderConfig, 'protocol' | 'extraParams' | 'baseUrl'>,
+  model: Pick<ProviderModel, 'id' | 'thinkingMode' | 'reasoningEffort'>
+): Record<string, unknown> | undefined => {
+  const extra = { ...config.extraParams };
+  if (config.protocol === 'openai' && supportsDeepSeekThinking(config.baseUrl, model.id)) {
+    if (model.thinkingMode && model.thinkingMode !== 'default') {
+      extra['thinking'] = { type: model.thinkingMode };
+    }
+    if (model.reasoningEffort && model.reasoningEffort !== 'default') {
+      extra['reasoning_effort'] = model.reasoningEffort;
+    }
+  }
+  return Object.keys(extra).length ? extra : undefined;
+};
+
 export const createAgentProvider: ProviderFactory = (config) => {
   const shared = {
     baseUrl: config.baseUrl,
@@ -770,7 +797,10 @@ export const createAgentProvider: ProviderFactory = (config) => {
 
   if (config.protocol === 'anthropic') return new AnthropicProvider(shared);
   if (config.protocol === 'ollama') return new OllamaProvider(shared);
-  return new OpenAICompatibleProvider(shared);
+  return new OpenAICompatibleProvider({
+    ...shared,
+    reasoningPassback: (model) => shouldPassBackReasoning(config.baseUrl, model)
+  });
 };
 
 export class AgentService {
@@ -954,6 +984,7 @@ ${assistant.slice(0, 3_000)}`;
       let generatedImageCount = 0;
 
       const mode = input.mode ?? 'build';
+      const extraParams = buildModelExtraParams(providerConfig, modelConfig);
       let toolset =
         input.rootPaths.length > 0 ? await createFileToolset(input.rootPaths) : undefined;
       const provider = this.createProvider(providerConfig);
@@ -968,7 +999,7 @@ ${assistant.slice(0, 3_000)}`;
         artifacts,
         sessionId: input.sessionId,
         runId,
-        ...(providerConfig.extraParams ? { extraParams: providerConfig.extraParams } : {}),
+        ...(extraParams ? { extraParams } : {}),
         ...(hooks.signal ? { signal: hooks.signal } : {})
       });
       let checkpointRoot = toolset ? await toolset.resolvePath('.') : undefined;
@@ -1986,7 +2017,7 @@ ${assistant.slice(0, 3_000)}`;
         ...(hooks.approveTool ? { approveTool: hooks.approveTool } : {}),
         ...(hooks.autoApprove ? { autoApprove: hooks.autoApprove } : {}),
         eventBus,
-        ...(providerConfig.extraParams ? { extraParams: providerConfig.extraParams } : {}),
+        ...(extraParams ? { extraParams } : {}),
         ...(hooks.signal ? { signal: hooks.signal } : {}),
         maxTokens: modelConfig.maxOutputTokens,
         ...(input.maxSteps === undefined ? {} : { maxSteps: input.maxSteps })

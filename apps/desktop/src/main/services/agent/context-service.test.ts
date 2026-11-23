@@ -95,6 +95,30 @@ describe('AgentContextService', () => {
     expect(result.messages[1]?.content).toContain('摘要');
   });
 
+  it('keeps reasoning on retained assistant tool-call messages', async () => {
+    const provider = new MockProvider([{ text: '摘要内容' }]);
+    const service = createService(provider);
+    const messages: ChatMessage[] = [
+      user('最初目标'),
+      ...Array.from({ length: 7 }, (_, index) => assistant(`${index}`.repeat(1_000))),
+      user('最新问题'),
+      {
+        role: 'assistant',
+        content: '',
+        reasoning: '工具调用前的思考必须保留',
+        toolCalls: [{ id: 'call-keep', name: 'read_file', arguments: { path: 'a.txt' } }]
+      },
+      { role: 'tool', toolCallId: 'call-keep', content: 'result' }
+    ];
+
+    const result = await service.prepare(messages);
+    const retained = result.messages.find((message) =>
+      message.toolCalls?.some((call) => call.id === 'call-keep')
+    );
+
+    expect(retained?.reasoning).toBe('工具调用前的思考必须保留');
+  });
+
   it('keeps the latest user message out of the summary', async () => {
     const provider = new MockProvider([{ text: '摘要内容' }]);
     const service = createService(provider);

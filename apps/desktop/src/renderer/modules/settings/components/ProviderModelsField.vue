@@ -84,6 +84,26 @@
                 "
               />
             </label>
+            <template v-if="showsThinking(model.id)">
+              <label class="nh-model-row__field">
+                <span>{{ t('settings.thinkingMode') }}</span>
+                <NSelect
+                  size="small"
+                  :value="model.thinkingMode ?? 'default'"
+                  :options="thinkingOptions"
+                  @update:value="(value: string) => updateModel(model.id, 'thinkingMode', value)"
+                />
+              </label>
+              <label class="nh-model-row__field">
+                <span>{{ t('settings.reasoningEffort') }}</span>
+                <NSelect
+                  size="small"
+                  :value="model.reasoningEffort ?? 'default'"
+                  :options="effortOptions"
+                  @update:value="(value: string) => updateModel(model.id, 'reasoningEffort', value)"
+                />
+              </label>
+            </template>
           </div>
         </div>
       </div>
@@ -137,9 +157,10 @@
  */
 
 import { computed, ref, watch } from 'vue';
-import { NButton, NCheckbox, NFormItem, NInput, NInputNumber, NRadio } from 'naive-ui';
+import { NButton, NCheckbox, NFormItem, NInput, NInputNumber, NRadio, NSelect } from 'naive-ui';
 import type { ProviderModel } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
+import { supportsDeepSeekThinking } from '@shared/provider-reasoning';
 import AppIcon from '@/components/AppIcon.vue';
 
 const props = defineProps<{
@@ -147,6 +168,8 @@ const props = defineProps<{
   availableModels: string[];
   defaultModelId: string;
   testing: boolean;
+  protocol: 'openai' | 'anthropic' | 'ollama';
+  baseUrl: string;
 }>();
 
 const emit = defineEmits<{
@@ -169,6 +192,22 @@ const rows = computed<ProviderModel[]>(() => {
       }
   );
 });
+
+const showsThinking = (modelId: string): boolean =>
+  props.protocol === 'openai' && supportsDeepSeekThinking(props.baseUrl, modelId);
+
+const thinkingOptions = computed(() => [
+  { label: t('settings.thinkingDefault'), value: 'default' },
+  { label: t('settings.thinkingEnabled'), value: 'enabled' },
+  { label: t('settings.thinkingDisabled'), value: 'disabled' }
+]);
+
+const effortOptions = computed(() => [
+  { label: t('settings.effortDefault'), value: 'default' },
+  { label: t('settings.effortLow'), value: 'low' },
+  { label: t('settings.effortHigh'), value: 'high' },
+  { label: t('settings.effortMax'), value: 'max' }
+]);
 
 const manualModelId = ref('');
 const manualError = ref('');
@@ -249,7 +288,7 @@ const toggleAll = (checked: boolean): void => {
  */
 const updateModel = (
   id: string,
-  key: 'contextWindow' | 'maxOutputTokens',
+  key: 'contextWindow' | 'maxOutputTokens' | 'thinkingMode' | 'reasoningEffort',
   value: number | string | null
 ): void => {
   if (value === null) return;

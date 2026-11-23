@@ -84,6 +84,8 @@
               :available-models="availableModels"
               :default-model-id="providerForm.defaultModelId"
               :testing="testing"
+              :protocol="providerForm.protocol"
+              :base-url="providerForm.baseUrl"
               @update:models="(value) => (providerForm.models = value)"
               @update:default-model-id="(value) => (providerForm.defaultModelId = value)"
               @test="testConnection"

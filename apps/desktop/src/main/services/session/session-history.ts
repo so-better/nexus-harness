@@ -108,7 +108,8 @@ export class SessionHistoryService {
         } else {
           const assistant: ChatMessage = {
             role: 'assistant',
-            content: payload.content
+            content: payload.content,
+            ...(payload.reasoning?.trim() ? { reasoning: payload.reasoning } : {})
           };
           messages.push(assistant);
           lastAssistant = assistant;

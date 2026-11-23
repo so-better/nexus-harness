@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => unknown>(),
   sent: [] as Array<{ channel: string; payload: unknown }>,
+  events: [] as Array<Record<string, unknown>>,
   mode: 'complete' as 'complete' | 'wait'
 }));
 
@@ -51,10 +52,12 @@ vi.mock('../services/session/session-service', () => ({
 vi.mock('../services/session/event-store', () => ({
   EventStore: class {
     list() {
-      return [];
+      return state.events;
     }
     append(event: Record<string, unknown>) {
-      return { ...event, seq: 1 };
+      const stored = { ...event, seq: state.events.length + 1 };
+      state.events.push(stored);
+      return stored;
     }
   }
 }));
@@ -148,6 +151,7 @@ describe('agent IPC', () => {
   beforeEach(() => {
     state.handlers.clear();
     state.sent = [];
+    state.events = [];
     state.mode = 'complete';
     registerAgentIpc();
   });
@@ -166,6 +170,59 @@ describe('agent IPC', () => {
       IPC_CHANNELS.agentEvent
     ]);
     expect((state.sent[1]?.payload as { type?: string }).type).toBe('run.completed');
+  });
+
+  it('supersedes the whole branch after the source user when regenerating', async () => {
+    state.events = [
+      {
+        id: 'event-user',
+        sessionId: 'session-1',
+        seq: 1,
+        type: 'message.completed',
+        version: 1,
+        ts: 1,
+        payload: { messageId: 'user-1', role: 'user', content: 'hello' }
+      },
+      {
+        id: 'event-aborted',
+        sessionId: 'session-1',
+        runId: 'old-run',
+        seq: 2,
+        type: 'message.reasoning.delta',
+        version: 1,
+        ts: 2,
+        payload: { messageId: 'aborted-reasoning', text: 'old reasoning' }
+      },
+      {
+        id: 'event-assistant',
+        sessionId: 'session-1',
+        runId: 'old-run',
+        seq: 3,
+        type: 'message.completed',
+        version: 1,
+        ts: 3,
+        payload: { messageId: 'assistant-old', role: 'assistant', content: 'old answer' }
+      }
+    ];
+    const sender = createSender();
+    const handler = state.handlers.get(IPC_CHANNELS.agentRun);
+    if (!handler) throw new Error('agent:run handler not registered');
+
+    const result = (await handler(
+      { sender },
+      { ...input, prompt: 'retry', regenerateMessageId: 'assistant-old' }
+    )) as { ok: boolean };
+    expect(result.ok).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const superseded = state.sent
+      .filter(
+        (item) =>
+          item.channel === IPC_CHANNELS.agentEvent &&
+          (item.payload as { type?: string }).type === 'message.superseded'
+      )
+      .map((item) => (item.payload as { payload: { messageId: string } }).payload.messageId);
+    expect(new Set(superseded)).toEqual(new Set(['aborted-reasoning', 'assistant-old']));
   });
 
   it('resolves approvals only for the owning window', async () => {

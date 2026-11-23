@@ -14,7 +14,7 @@ import {
 import type { NexusEvent } from '@shared/events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDatabase } from '../storage/database';
-import { AgentService } from './agent-service';
+import { AgentService, buildModelExtraParams, shouldPassBackReasoning } from './agent-service';
 import { AttachmentService } from '../attachments/attachment-service';
 import { MemoryService } from '../memory/memory-service';
 
@@ -28,6 +28,31 @@ describe('AgentService', () => {
 
   afterEach(async () => {
     await rm(root, { recursive: true, force: true });
+  });
+
+  it('maps model thinking settings to OpenAI-compatible request params', () => {
+    expect(
+      buildModelExtraParams(
+        { protocol: 'openai', baseUrl: 'https://api.deepseek.com', extraParams: { custom: true } },
+        { id: 'deepseek-flash', thinkingMode: 'disabled', reasoningEffort: 'high' }
+      )
+    ).toEqual({
+      custom: true,
+      thinking: { type: 'disabled' },
+      reasoning_effort: 'high'
+    });
+    expect(
+      buildModelExtraParams(
+        { protocol: 'anthropic', baseUrl: 'https://api.deepseek.com' },
+        { id: 'deepseek-flash', thinkingMode: 'enabled', reasoningEffort: 'max' }
+      )
+    ).toBeUndefined();
+  });
+
+  it('enables reasoning passback for DeepSeek endpoints and models', () => {
+    expect(shouldPassBackReasoning('https://api.deepseek.com', 'deepseek-flash')).toBe(true);
+    expect(shouldPassBackReasoning('https://proxy.example.com', 'deepseek-flash')).toBe(true);
+    expect(shouldPassBackReasoning('https://proxy.example.com', 'gpt-4.1')).toBe(false);
   });
 
   it('prepends session history and persists the current user message', async () => {

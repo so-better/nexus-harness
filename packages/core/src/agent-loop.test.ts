@@ -32,6 +32,7 @@ const eventTypes = [
   'run.cancelled',
   'message.delta',
   'message.completed',
+  'message.superseded',
   'tool.requested',
   'tool.completed',
   'tool.failed',
@@ -385,6 +386,12 @@ describe('AgentLoop', () => {
       )
     ).toBe(true);
     expect(events.some((event) => event.type === 'run.failed')).toBe(false);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'message.superseded',
+        payload: { messageId: expect.any(String), reason: 'reasoning_limit' }
+      })
+    );
   });
 
   it('fails when the model keeps drafting in reasoning after one correction', async () => {

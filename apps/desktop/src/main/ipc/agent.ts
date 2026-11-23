@@ -35,6 +35,7 @@ import { generateSessionTitle } from '../services/session/session-title';
 import { getPluginHost } from '../services/plugins/plugin-host-instance';
 import { notifyAgentEvent } from '../services/notifications/notification-service';
 import { SessionHistoryService } from '../services/session/session-history';
+import { collectSupersededMessageIds } from '../services/session/branch-supersede';
 import { AttachmentService } from '../services/attachments/attachment-service';
 import { loadImageSettings } from '../services/settings/image-settings';
 import { loadSearchSettings } from '../services/settings/search-settings';
@@ -247,25 +248,25 @@ export const registerAgentIpc = (): void => {
             );
           }
 
-          const superseded = new Set<string>();
-          const branchEvents = allEvents.slice(isErrorRetry ? boundary + 1 : boundary);
-          for (const item of branchEvents) {
-            if (item.type === 'message.completed') {
-              superseded.add((item.payload as { messageId: string }).messageId);
-            }
-          }
+          let supersedeStart = boundary;
           if (isErrorRetry) {
-            // 失败 Run 可能只有流式增量或工具卡片，没有 message.completed
-            for (const item of branchEvents) {
-              if (item.type === 'message.delta') {
-                superseded.add((item.payload as { messageId: string }).messageId);
-              } else if (item.type === 'tool.requested' || item.type === 'file.created') {
-                superseded.add(`assistant-${item.id}`);
+            supersedeStart = boundary + 1;
+          } else if (parsed.data.regenerateMessageId && !parsed.data.editMessageId) {
+            // 重新生成必须清理源用户消息之后的整个分支，包括此前被中断的 reasoning 尝试
+            for (let index = boundary - 1; index >= 0; index -= 1) {
+              const item = allEvents[index];
+              if (
+                item?.type === 'message.completed' &&
+                (item.payload as { role?: string }).role === 'user'
+              ) {
+                supersedeStart = index + 1;
+                break;
               }
             }
-            if (parsed.data.regenerateMessageId) {
-              superseded.add(parsed.data.regenerateMessageId);
-            }
+          }
+          const superseded = collectSupersededMessageIds(allEvents.slice(supersedeStart));
+          if (isErrorRetry && parsed.data.regenerateMessageId) {
+            superseded.add(parsed.data.regenerateMessageId);
           }
           for (const messageId of superseded) {
             const stored = events.append(

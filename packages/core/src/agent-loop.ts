@@ -165,6 +165,11 @@ export class AgentLoop {
       if (result.reasoningLimit) {
         if (reasoningRetries < 1) {
           reasoningRetries += 1;
+          // 被中断的尝试只有 reasoning 增量，必须标记掉，避免重试后出现两个思考块
+          this.emit('message.superseded', {
+            messageId: assistantMessageId,
+            reason: 'reasoning_limit'
+          });
           this.messages.push({ role: 'system', content: REASONING_CORRECTION_PROMPT });
           continue;
         }

@@ -561,6 +561,24 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
     });
   }
 
+  // 兼容旧记录：中断的 reasoning 尝试没有 completed/superseded，不能让它在历史里残留
+  for (const message of messages) {
+    if (
+      message.role !== 'assistant' ||
+      message.superseded ||
+      message.hidden ||
+      !message.reasoning?.trim() ||
+      message.content.trim() ||
+      message.toolCalls.length ||
+      message.files?.length ||
+      message.references?.length ||
+      message.attachments?.length
+    ) {
+      continue;
+    }
+    if (!running || message !== lastAssistant) message.hidden = true;
+  }
+
   mergeAssistantRuns(messages, askUsers);
 
   return {

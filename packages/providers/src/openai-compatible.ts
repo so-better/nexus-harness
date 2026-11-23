@@ -18,6 +18,8 @@ export interface OpenAICompatibleConfig {
   apiKey: string;
   headers?: Record<string, string>;
   capabilities?: Partial<ProviderCapabilities>;
+  /** DeepSeek thinking 模式要求 assistant 的 reasoning_content 随请求回传 */
+  reasoningPassback?: boolean | ((model: string) => boolean);
   fetchImpl?: typeof fetch;
 }
 
@@ -38,17 +40,19 @@ const DEFAULT_CAPABILITIES: ProviderCapabilities = {
 /**
  * 把内部消息转换为 OpenAI chat/completions 消息。
  */
-const toOpenAIMessage = (message: ChatMessage): Record<string, unknown> => {
+const toOpenAIMessage = (
+  message: ChatMessage,
+  reasoningPassback: boolean
+): Record<string, unknown> => {
+  let result: Record<string, unknown>;
   if (message.role === 'tool') {
-    return {
+    result = {
       role: 'tool',
       tool_call_id: message.toolCallId ?? '',
       content: message.content
     };
-  }
-
-  if (message.images?.length) {
-    return {
+  } else if (message.images?.length) {
+    result = {
       role: message.role,
       content: [
         ...(message.content ? [{ type: 'text', text: message.content }] : []),
@@ -58,10 +62,8 @@ const toOpenAIMessage = (message: ChatMessage): Record<string, unknown> => {
         }))
       ]
     };
-  }
-
-  if (message.role === 'assistant' && message.toolCalls?.length) {
-    return {
+  } else if (message.role === 'assistant' && message.toolCalls?.length) {
+    result = {
       role: 'assistant',
       content: message.content || null,
       tool_calls: message.toolCalls.map((call) => ({
@@ -73,9 +75,14 @@ const toOpenAIMessage = (message: ChatMessage): Record<string, unknown> => {
         }
       }))
     };
+  } else {
+    result = { role: message.role, content: message.content };
   }
 
-  return { role: message.role, content: message.content };
+  if (reasoningPassback && message.role === 'assistant' && message.reasoning?.trim()) {
+    result['reasoning_content'] = message.reasoning;
+  }
+  return result;
 };
 
 /**
@@ -138,6 +145,11 @@ export class OpenAICompatibleProvider implements ChatProvider {
     const fetchImpl = this.config.fetchImpl ?? fetch;
     const url = `${this.config.baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
+    const reasoningPassback =
+      typeof this.config.reasoningPassback === 'function'
+        ? this.config.reasoningPassback(request.model)
+        : this.config.reasoningPassback === true;
+
     const response = await fetchImpl(url, {
       method: 'POST',
       headers: {
@@ -147,7 +159,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
       },
       body: JSON.stringify({
         model: request.model,
-        messages: request.messages.map(toOpenAIMessage),
+        messages: request.messages.map((message) => toOpenAIMessage(message, reasoningPassback)),
         ...(request.tools?.length ? { tools: request.tools.map(toOpenAITool) } : {}),
         stream: true,
         stream_options: { include_usage: true },

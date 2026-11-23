@@ -25,7 +25,12 @@ describe('SessionHistoryService', () => {
         runId: 'run-1',
         seq: 2,
         type: 'message.completed',
-        payload: { messageId: 'assistant-1', role: 'assistant', content: '' }
+        payload: {
+          messageId: 'assistant-1',
+          role: 'assistant',
+          content: '',
+          reasoning: '先读取工具结果'
+        }
       }),
       createNexusEvent({
         sessionId: 'session-1',
@@ -69,6 +74,7 @@ describe('SessionHistoryService', () => {
 
     expect(history).toHaveLength(4);
     expect(history[0]).toMatchObject({ role: 'user', content: '读取文件' });
+    expect(history[1]).toMatchObject({ reasoning: '先读取工具结果' });
     expect(history[1]?.toolCalls?.[0]).toMatchObject({
       id: 'call-1',
       name: 'read_file',

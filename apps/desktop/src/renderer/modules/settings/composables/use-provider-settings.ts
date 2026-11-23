@@ -133,7 +133,9 @@ export const useProviderSettings = (
       const models = providerForm.value.models.map((model) => ({
         id: model.id.trim(),
         contextWindow: model.contextWindow,
-        maxOutputTokens: model.maxOutputTokens
+        maxOutputTokens: model.maxOutputTokens,
+        thinkingMode: model.thinkingMode ?? 'default',
+        reasoningEffort: model.reasoningEffort ?? 'default'
       }));
       const defaultModelId = models.some((model) => model.id === providerForm.value.defaultModelId)
         ? providerForm.value.defaultModelId
