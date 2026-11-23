@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDatabase } from '../storage/database';
 import { AgentService } from './agent-service';
 import { AttachmentService } from '../attachments/attachment-service';
+import { MemoryService } from '../memory/memory-service';
 
 describe('AgentService', () => {
   let root = '';
@@ -184,6 +185,142 @@ describe('AgentService', () => {
       'mcp_refresh',
       'mcp_test'
     ]);
+  });
+
+  it('injects active global memory into the system prompt', async () => {
+    const requests: ProviderRequest[] = [];
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: false, vision: false, reasoning: false },
+      async *stream(request) {
+        requests.push(request);
+        yield { type: 'text-delta', text: '收到' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const db = createDatabase(join(root, 'memory.db'));
+    new MemoryService(db).create({
+      title: '回答风格',
+      content: '偏好简洁中文回答。',
+      kind: 'preference'
+    });
+    const service = new AgentService({ createProvider: () => provider, database: db });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+
+    try {
+      await service.run(
+        {
+          sessionId: 'session-memory',
+          prompt: '帮我回答',
+          rootPaths: [],
+          providerId: providerConfig.id,
+          modelId: 'mock-model'
+        },
+        providerConfig
+      );
+    } finally {
+      db.close();
+    }
+
+    expect(requests[0]?.messages[0]?.content).toContain('<memory>');
+    expect(requests[0]?.messages[0]?.content).toContain('偏好简洁中文回答');
+  });
+
+  it('skips memory injection when retrieval is disabled', async () => {
+    const requests: ProviderRequest[] = [];
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: false, vision: false, reasoning: false },
+      async *stream(request) {
+        requests.push(request);
+        yield { type: 'text-delta', text: '收到' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const db = createDatabase(join(root, 'memory-retrieval.db'));
+    const memory = new MemoryService(db);
+    memory.create({ title: '回答风格', content: '偏好简洁中文回答。', kind: 'preference' });
+    memory.updateSettings({ autoCapture: true, retrieval: false });
+    const service = new AgentService({ createProvider: () => provider, database: db });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+
+    try {
+      await service.run(
+        {
+          sessionId: 'session-memory-retrieval',
+          prompt: '帮我回答',
+          rootPaths: [],
+          providerId: providerConfig.id,
+          modelId: 'mock-model'
+        },
+        providerConfig
+      );
+    } finally {
+      db.close();
+    }
+
+    expect(requests[0]?.messages[0]?.content).not.toContain('<memory>');
+  });
+
+  it('extracts proposed memories with the current model', async () => {
+    const db = createDatabase(join(root, 'memory-extract.db'));
+    const provider = new MockProvider([
+      { text: '好的，我会保持简洁。', finishReason: 'stop' },
+      {
+        text: '[{"title":"回答风格","content":"偏好简洁中文回答","kind":"preference"}]',
+        finishReason: 'stop'
+      }
+    ]);
+    const service = new AgentService({
+      createProvider: () => provider,
+      database: db,
+      memoryExtraction: true
+    });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+
+    try {
+      await service.run(
+        {
+          sessionId: 'session-memory-extract',
+          prompt: '以后请始终保持简洁中文回答。',
+          rootPaths: [],
+          providerId: providerConfig.id,
+          modelId: 'mock-model'
+        },
+        providerConfig
+      );
+      expect(new MemoryService(db).list()[0]).toMatchObject({
+        status: 'proposed',
+        content: '偏好简洁中文回答'
+      });
+    } finally {
+      db.close();
+    }
   });
 
   it('does not request directory authorization in Plan mode', async () => {

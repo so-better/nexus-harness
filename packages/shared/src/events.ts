@@ -210,6 +210,9 @@ export const eventPayloadSchemas = {
   'skill.activated': z.object({
     skillId: z.string(),
     trigger: z.enum(['search', 'explicit'])
+  }),
+  'memory.proposed': z.object({
+    candidateId: z.string()
   })
 } as const;
 

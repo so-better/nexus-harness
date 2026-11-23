@@ -27,6 +27,16 @@ describe('agent system prompt', () => {
     expect(prompt).not.toContain('无工作区');
   });
 
+  it('adds a global memory block when supplied', () => {
+    const prompt = buildAgentSystemPrompt({
+      mode: 'build',
+      hasWorkspace: true,
+      memory: '<memory>\n- [preference] 回答：简洁\n</memory>'
+    });
+    expect(prompt).toContain('<memory>');
+    expect(prompt).toContain('简洁');
+  });
+
   it('keeps every mode and workspace variant within the prompt budget', () => {
     for (const mode of ['plan', 'build'] as const) {
       for (const hasWorkspace of [true, false]) {

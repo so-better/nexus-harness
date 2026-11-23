@@ -121,6 +121,14 @@ const bridge: NexusBridge = {
   usage: {
     stats: (input) => ipcRenderer.invoke(IPC_CHANNELS.usageStats, input ?? {})
   },
+  memory: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.memoryList),
+    create: (input) => ipcRenderer.invoke(IPC_CHANNELS.memoryCreate, input),
+    update: (input) => ipcRenderer.invoke(IPC_CHANNELS.memoryUpdate, input),
+    remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.memoryDelete, { id }),
+    getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.memoryGetSettings),
+    setSettings: (settings) => ipcRenderer.invoke(IPC_CHANNELS.memorySetSettings, settings)
+  },
   cache: {
     getInfo: () => ipcRenderer.invoke(IPC_CHANNELS.cacheGetInfo),
     clear: (target) => ipcRenderer.invoke(IPC_CHANNELS.cacheClear, target)

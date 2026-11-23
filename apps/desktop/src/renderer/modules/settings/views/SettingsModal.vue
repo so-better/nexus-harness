@@ -23,6 +23,10 @@
         <GeneralSettings :version="version" />
       </NTabPane>
 
+      <NTabPane name="memory" :tab="t('settings.memory')">
+        <MemorySettings />
+      </NTabPane>
+
       <NTabPane name="appearance" :tab="t('settings.appearance')">
         <AppearanceSettings />
       </NTabPane>
@@ -52,6 +56,7 @@ import { t } from '@/app/i18n';
 import AppearanceSettings from './AppearanceSettings.vue';
 import CacheSettings from './CacheSettings.vue';
 import GeneralSettings from './GeneralSettings.vue';
+import MemorySettings from './MemorySettings.vue';
 import ProviderSettingsPanel from './ProviderSettingsPanel.vue';
 import TerminalSettingsPanel from './TerminalSettingsPanel.vue';
 import ImageSettingsPanel from './ImageSettingsPanel.vue';

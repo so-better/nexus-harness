@@ -20,6 +20,7 @@ import type { ImageSettings } from '../image';
 import type { SearchSettings } from '../search';
 import type { SkillDetail, SkillSummary } from '../skills';
 import type { UsageStats, UsageStatsInput } from '../usage';
+import type { MemoryCreateInput, MemoryItem, MemorySettings, MemoryUpdateInput } from '../memory';
 
 /**
  * 应用基础信息，用于确认渲染进程与主进程通道可用。
@@ -243,6 +244,14 @@ export interface NexusBridge {
   };
   usage: {
     stats: (input?: UsageStatsInput) => Promise<Result<UsageStats>>;
+  };
+  memory: {
+    list: () => Promise<Result<MemoryItem[]>>;
+    create: (input: MemoryCreateInput) => Promise<Result<MemoryItem>>;
+    update: (input: MemoryUpdateInput) => Promise<Result<MemoryItem>>;
+    remove: (id: string) => Promise<Result<{ removed: boolean }>>;
+    getSettings: () => Promise<Result<MemorySettings>>;
+    setSettings: (settings: MemorySettings) => Promise<Result<MemorySettings>>;
   };
   cache: {
     getInfo: () => Promise<Result<CacheInfo>>;

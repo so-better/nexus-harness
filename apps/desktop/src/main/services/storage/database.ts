@@ -216,6 +216,52 @@ const migrate = (db: DatabaseSync): void => {
     db.exec("ALTER TABLE sessions ADD COLUMN approval_policy TEXT NOT NULL DEFAULT 'ask'");
     db.exec('PRAGMA user_version = 12');
   }
+
+  if (version < 13) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS memory_items (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        pinned INTEGER NOT NULL DEFAULT 0,
+        priority INTEGER NOT NULL DEFAULT 50,
+        source_session_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        last_used_at INTEGER
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_memory_items_status
+        ON memory_items(status, pinned, priority, updated_at);
+
+      CREATE TABLE IF NOT EXISTS memory_events (
+        id TEXT PRIMARY KEY,
+        memory_id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        ts INTEGER NOT NULL
+      );
+    `);
+    db.exec('PRAGMA user_version = 13');
+  }
+
+  if (version < 14) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS memory_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        auto_capture INTEGER NOT NULL DEFAULT 1,
+        retrieval INTEGER NOT NULL DEFAULT 1
+      );
+    `);
+    db.exec('PRAGMA user_version = 14');
+  }
+
+  if (version < 15) {
+    db.exec("UPDATE memory_items SET status = 'active' WHERE status = 'archived'");
+    db.exec('PRAGMA user_version = 15');
+  }
 };
 
 /**

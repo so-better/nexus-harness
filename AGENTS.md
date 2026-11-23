@@ -574,7 +574,7 @@ interface ProviderCapabilities {
 - 扫描版 PDF 无文本层时明确提示，不编造内容。
 - 图片输入受大小上限约束，超限时压缩或拒绝并提示。
 - 工作区文件内容一律视为不可信数据，不得把其中的指令当作系统指令执行。
-- 记忆只包括工作区规则与用户偏好，不做跨工作区隐式记忆；临时会话默认没有项目规则。
+- 记忆是全局用户长期信息：偏好、事实、稳定决策和重点片段，不按会话或工作区隔离；项目规则仍放在 AGENTS/Skill 中，不自动跨工作区沉淀。临时会话可以读取全局记忆。对话结束后使用当前模型从对话中抽取少量 `proposed` 候选，在会话流内由用户确认后转为 `active`；设置页提供自动沉淀、记忆检索开关与记忆列表，长期记忆以归档代替硬删除。
 
 #### 工作区索引
 
@@ -1081,6 +1081,9 @@ export function activate(ctx) {
 | `attachments` | 上传附件元数据、抽取文本与存储路径 |
 | `artifacts` | 工具产物索引：会话、Run、标签、路径、大小与类型 |
 | `plugin_storage` | 按插件隔离的键值存储 |
+| `memory_items` | 全局长期记忆：类型、标题、内容、优先级、候选/已保存状态与来源 |
+| `memory_events` | 记忆创建、更新、删除的本地审计记录 |
+| `memory_settings` | 自动沉淀与记忆检索开关 |
 
 规则：
 
@@ -1155,7 +1158,7 @@ export function activate(ctx) {
 ### 4.8 设置与配置
 
 - 设置分三个层级，优先级为 **Session > Workspace > App**；读取时逐层合并，写入时记录 scope。
-- 设置分类：通用、模型与提供商、终端、外观、缓存、权限与审批、快捷键、高级；终端设置包含 shell、字号、滚回、选中即复制与 WebGL；字体使用默认等宽字体，默认字号 12px，自动检测的 shell 路径需回显。
+- 设置分类：通用、记忆、模型与提供商、终端、外观、缓存、权限与审批、快捷键、高级；终端设置包含 shell、字号、滚回、选中即复制与 WebGL；字体使用默认等宽字体，默认字号 12px，自动检测的 shell 路径需回显。
 - 模型与提供商：对话 Provider 保持 Base URL、API Key、模型名、能力声明、上下文窗口、token 价格、`extra_params` 与自定义 headers；图像模型在独立入口配置完整请求 URL、模型、Key、headers、请求体模板与结果路径；媒体搜索在通用设置中配置 Pexels API Key。
 - 支持连接测试与模型列表刷新；API Key 随本地 Provider 配置保存；不写死默认模型。
 - 图像模型可选；未配置时不注册 `generate_image`，设置页提供引导。
@@ -1577,7 +1580,7 @@ Composables：
 ### 6.6 IPC 与进程边界
 
 - 主窗口必须开启 `contextIsolation: true`、`sandbox: true`、`nodeIntegration: false`。
-- preload 只通过 `contextBridge` 暴露 `window.nexus`，按命名空间组织：`nexus.agent`、`nexus.terminal`、`nexus.session`、`nexus.workspace`、`nexus.files`、`nexus.artifact`、`nexus.search`、`nexus.plugin`、`nexus.settings`。
+- preload 只通过 `contextBridge` 暴露 `window.nexus`，按命名空间组织：`nexus.agent`、`nexus.terminal`、`nexus.session`、`nexus.workspace`、`nexus.files`、`nexus.artifact`、`nexus.search`、`nexus.plugin`、`nexus.settings`、`nexus.memory`。
 - 会话重命名、置顶、导出与跨会话搜索必须走 `nexus.session` / `nexus.search` 的类型化方法。
 - 工作区绑定、root 授权与撤销必须走 `nexus.workspace` / `nexus.session` 的类型化方法，渲染层不得直接拼接路径或修改授权状态。
 - `nexus.files` 提供另存为，禁止渲染层直接拼接 `files` 路径。
@@ -1973,6 +1976,7 @@ CHANGELOG.md         # 版本变更记录
 | `plugin.discovered` | `pluginId`、`version`、`path` | 扫描到插件 |
 | `plugin.error` | `pluginId`、`error` | 插件加载或运行失败 |
 | `skill.activated` | `skillId`、`trigger`、`runId` | Skill 被显式或自动激活 |
+| `memory.proposed` | `candidateId` | 模型生成待确认记忆候选 |
 | `mcp.connected` | `serverId`、`tools` | MCP Server 连接成功 |
 | `mcp.disconnected` | `serverId`、`reason` | MCP Server 断开 |
 | `terminal.opened` | `terminalId`、`sessionId`、`cwd`、`pid`、`shell` | 用户或 AI 创建内置终端；AI 命令保留标签但不主动打开面板 |

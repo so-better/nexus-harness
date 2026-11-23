@@ -41,7 +41,11 @@ const modeSystemPrompt = (mode: AgentMode): string =>
 /**
  * 组装稳定的系统提示；动态平台与时间不放在这里。
  */
-export const buildAgentSystemPrompt = (input: { mode: AgentMode; hasWorkspace: boolean }): string =>
+export const buildAgentSystemPrompt = (input: {
+  mode: AgentMode;
+  hasWorkspace: boolean;
+  memory?: string;
+}): string =>
   [
     AGENT_IDENTITY,
     META_RULES,
@@ -52,7 +56,8 @@ export const buildAgentSystemPrompt = (input: { mode: AgentMode; hasWorkspace: b
     FILE_RULES,
     modeSystemPrompt(input.mode),
     MEDIA_MARKDOWN_PROMPT,
-    ...(input.hasWorkspace ? [] : [NO_WORKSPACE_PROMPT])
+    ...(input.hasWorkspace ? [] : [NO_WORKSPACE_PROMPT]),
+    ...(input.memory ? [input.memory] : [])
   ].join('\n\n');
 
 const PLATFORM_NAMES: Record<string, string> = {

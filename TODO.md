@@ -13,7 +13,6 @@
 - [x] Skill 导入与刷新
 - [x] MCP 配置、刷新与测试
 
-
 ## 其他功能点
 
 - [x] Token用量插件优化：增加可视化看板
@@ -26,8 +25,9 @@
 
 ## 记忆、知识库与检索开发顺序
 
-- [ ] 1. 全局记忆 V1：`memory_items`、Memory Center、手动新增/编辑/删除、`/remember`、Run 注入
-- [ ] 2. 记忆候选与检索：Run 结束候选、用户确认、FTS5、`memory_search`、去重与冲突处理
+- [x] 1. 全局记忆 V1：`memory_items`、模型语义候选、用户确认保存、Run 注入、开关与列表
+- [x] 2a. 记忆候选与确认：Run 结束候选、会话内用户确认
+- [ ] 2b. 记忆检索与治理：FTS5、`memory_search`、去重与冲突处理
 - [ ] 3. 知识库 V1：来源管理、文本抽取、chunk、FTS5 检索、`search_knowledge`、引用
 - [ ] 4. Embedding 与向量：Embedding Provider、chunk embedding、增量重建、向量检索
 - [ ] 5. 混合 RAG：RRF、rerank、query rewrite、引用校验、上下文预算与评测

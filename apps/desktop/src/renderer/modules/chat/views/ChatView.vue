@@ -95,6 +95,7 @@
       />
 
       <div class="nh-chat__bottom">
+        <MemoryCandidates :running="visualRunning" />
         <div v-if="workspaceAuth || pendingApprovals.length" class="nh-chat__interruptions">
           <NButton
             v-if="workspaceAuth"
@@ -174,6 +175,7 @@ import { t } from '@/app/i18n';
 import { sessionStatusLabel, sessionStatusTagColor } from '@/app/session-status';
 import AppIcon from '@/components/AppIcon.vue';
 import ComposerBox from '../components/ComposerBox.vue';
+import MemoryCandidates from '../components/MemoryCandidates.vue';
 import MessageList from '../components/MessageList.vue';
 import SessionEmptyView from '../components/SessionEmptyView.vue';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';

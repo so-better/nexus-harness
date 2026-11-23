@@ -41,6 +41,7 @@ import {
   searchVideos
 } from '@nexus/toolkit';
 import { ArtifactService } from '../artifacts/artifact-service';
+import { MemoryService } from '../memory/memory-service';
 import { FileService } from '../files/file-service';
 import { AttachmentService } from '../attachments/attachment-service';
 import { CheckpointService } from '../checkpoint/checkpoint-service';
@@ -104,6 +105,7 @@ export interface AgentServiceOptions {
   imageSettings?: () => Promise<ImageSettings | null>;
   searchSettings?: () => Promise<SearchSettings | null>;
   generalSettings?: { onChange?: (state: GeneralSettingsState) => void };
+  memoryExtraction?: boolean;
 }
 
 export interface AgentRunHooks {
@@ -769,12 +771,14 @@ export class AgentService {
   private readonly fileBaseDir: string | undefined;
   private readonly attachmentBaseDir: string | undefined;
   private readonly database: DatabaseSync | undefined;
+  private readonly memory: MemoryService | undefined;
   private readonly skills: SkillService | undefined;
   private readonly mcp: McpService | undefined;
   private readonly imageSettings: (() => Promise<ImageSettings | null>) | undefined;
   private readonly searchSettings: (() => Promise<SearchSettings | null>) | undefined;
   private readonly generalSettings:
     { onChange?: (state: GeneralSettingsState) => void } | undefined;
+  private readonly memoryExtraction: boolean;
 
   constructor(options: AgentServiceOptions = {}) {
     this.createProvider = options.createProvider ?? createAgentProvider;
@@ -782,11 +786,100 @@ export class AgentService {
     this.fileBaseDir = options.fileBaseDir;
     this.attachmentBaseDir = options.attachmentBaseDir;
     this.database = options.database;
+    this.memory = options.database ? new MemoryService(options.database) : undefined;
     this.skills = options.skills;
     this.mcp = options.mcp;
     this.imageSettings = options.imageSettings;
     this.searchSettings = options.searchSettings;
     this.generalSettings = options.generalSettings;
+    this.memoryExtraction = options.memoryExtraction === true;
+  }
+
+  /**
+   * 用当前模型从对话中抽取少量长期记忆候选；失败不阻塞 Run。
+   */
+  private async extractMemoryCandidates(
+    provider: ChatProvider,
+    model: string,
+    input: AgentRunInput,
+    messages: ChatMessage[],
+    eventBus: EventBus,
+    runId: string,
+    signal?: AbortSignal
+  ): Promise<void> {
+    if (!this.memoryExtraction || !this.memory || !this.memory.settings().autoCapture) return;
+    const assistant = [...messages]
+      .reverse()
+      .find((message) => message.role === 'assistant' && message.content.trim())?.content;
+    if (!assistant) return;
+    const transcript = `用户：
+${input.prompt.slice(0, 3_500)}
+
+助手：
+${assistant.slice(0, 3_000)}`;
+    let output = '';
+    try {
+      for await (const event of provider.stream({
+        model,
+        temperature: 0,
+        maxTokens: 500,
+        ...(signal ? { signal } : {}),
+        messages: [
+          {
+            role: 'system',
+            content:
+              '你是 Nexus 的记忆提取器。只提取用户明确表达、跨会话长期有效的偏好、事实、决策或重点片段。不要提取临时任务、项目专属规则、推测、密钥或密码。最多输出 3 条，只输出 JSON 数组，每项格式为 {"title":"简短标题","content":"完整片段","kind":"preference|fact|decision|context"}；没有记忆时输出 []。'
+          },
+          { role: 'user', content: transcript }
+        ]
+      })) {
+        if (event.type === 'text-delta') output += event.text;
+        if (event.type === 'error') return;
+      }
+    } catch (error) {
+      console.warn('记忆候选抽取失败', error);
+      return;
+    }
+    const match = output.match(/\[[\s\S]*\]/);
+    if (!match) return;
+    let raw: unknown;
+    try {
+      raw = JSON.parse(match[0]);
+    } catch {
+      return;
+    }
+    if (!Array.isArray(raw)) return;
+    for (const item of raw.slice(0, 3)) {
+      if (!item || typeof item !== 'object') continue;
+      const record = item as Record<string, unknown>;
+      if (typeof record['content'] !== 'string') continue;
+      const content = record['content'].trim().slice(0, 4_000);
+      if (!content) continue;
+      const title =
+        typeof record['title'] === 'string' && record['title'].trim()
+          ? record['title'].trim().slice(0, 80)
+          : content.slice(0, 80);
+      const kind = ['preference', 'fact', 'decision', 'context'].includes(String(record['kind']))
+        ? (record['kind'] as 'preference' | 'fact' | 'decision' | 'context')
+        : 'context';
+      const candidate = this.memory.propose({
+        title,
+        content,
+        kind,
+        sourceSessionId: input.sessionId
+      });
+      if (candidate) {
+        eventBus.publish(
+          createNexusEvent({
+            sessionId: input.sessionId,
+            runId,
+            seq: 1,
+            type: 'memory.proposed',
+            payload: { candidateId: candidate.id }
+          })
+        );
+      }
+    }
   }
 
   /**
@@ -1638,11 +1731,15 @@ export class AgentService {
           };
         }
       };
+      const memoryContext =
+        this.memory?.settings().retrieval === false ? undefined : this.memory?.context();
+      if (memoryContext?.ids.length) this.memory?.touch(memoryContext.ids);
       const modeMessage: ChatMessage = {
         role: 'system',
         content: buildAgentSystemPrompt({
           mode,
-          hasWorkspace: input.rootPaths.length > 0
+          hasWorkspace: input.rootPaths.length > 0,
+          ...(memoryContext?.text ? { memory: memoryContext.text } : {})
         })
       };
       const shouldAddUserMessage = !input.regenerateMessageId;
@@ -1833,6 +1930,15 @@ export class AgentService {
       });
 
       const result = await loop.run();
+      await this.extractMemoryCandidates(
+        provider,
+        modelConfig.id,
+        input,
+        result.messages,
+        eventBus,
+        runId,
+        hooks.signal
+      );
 
       return {
         runId,

@@ -100,6 +100,7 @@ export const registerAgentIpc = (): void => {
     mcp: getMcpService(),
     imageSettings: loadImageSettings,
     searchSettings: loadSearchSettings,
+    memoryExtraction: true,
     generalSettings: {
       onChange: (state) => {
         for (const window of BrowserWindow.getAllWindows()) {
