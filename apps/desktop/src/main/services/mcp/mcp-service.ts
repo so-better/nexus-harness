@@ -4,7 +4,7 @@
 
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import {
@@ -16,6 +16,7 @@ import {
 import type { AgentToolDefinition } from '@nexus/core';
 import { assertPublicUrl } from '@nexus/runtime-utils';
 import { getAppDataPaths, getMcpWorkdirPath } from '../storage/paths';
+import { isUvCacheMiss, sanitizeMcpError } from './mcp-runtime';
 
 /**
  * 把 MCP 工具名转换为模型接口允许的 `[a-zA-Z0-9_-]`，并按需截断加哈希。
@@ -79,6 +80,7 @@ const toConfig = (id: string, server: McpServerConfig): McpConfig => ({
 });
 
 const CONNECT_TIMEOUT_MS = 10_000;
+const UVX_INSTALL_TIMEOUT_MS = 180_000;
 const CALL_TIMEOUT_MS = 60_000;
 const CONNECT_CONCURRENCY = 3;
 const CONNECT_RETRY_COOLDOWN_MS = 60_000;
@@ -90,6 +92,7 @@ const configKey = (config: McpConfig): string =>
     config.command,
     config.args,
     config.cwd,
+    config.startupTimeoutMs,
     config.env,
     config.url,
     config.headers
@@ -190,6 +193,7 @@ export class McpService {
   private readonly connected = new Map<string, ConnectedServer>();
   private readonly connectionKeys = new Map<string, string>();
   private readonly lastErrors = new Map<string, string>();
+  private readonly preparing = new Set<string>();
   private statusHydrated = false;
   private listToolsPromise: Promise<AgentToolDefinition[]> | undefined;
   private generation = 0;
@@ -281,6 +285,7 @@ export class McpService {
         enabled: config.enabled !== false,
         connected: this.connected.has(config.id),
         tools: this.connected.get(config.id)?.tools.length ?? 0,
+        ...(this.preparing.has(config.id) ? { preparing: true } : {}),
         ...(error ? { error } : {})
       };
     });
@@ -320,14 +325,128 @@ export class McpService {
     await this.clearPersistedStatus();
   }
 
+  /**
+   * 启动 stdio Server；uvx 先走离线缓存，缺失时自动在线准备依赖。
+   * 首次安装不能要求用户手动执行命令，因此给 uvx 单独的较长启动窗口。
+   */
+  private async connectStdio(config: McpConfig): Promise<Client> {
+    if (!config.command) throw new Error('缺少 command');
+    const defaultWorkdir = getMcpWorkdirPath(this.directory);
+    const workdir = config.cwd ? resolve(this.directory, config.cwd) : defaultWorkdir;
+    await mkdir(workdir, { recursive: true });
+
+    const env: Record<string, string> = {
+      PATH: process.env['PATH'] ?? '',
+      HOME: process.env['HOME'] ?? '',
+      USER: process.env['USER'] ?? '',
+      TMPDIR: process.env['TMPDIR'] ?? '',
+      SystemRoot: process.env['SystemRoot'] ?? '',
+      ...config.env
+    };
+    const isUvx = /^uvx(?:\.exe)?$/i.test(basename(config.command));
+    if (isUvx) {
+      const cache = join(this.directory, 'cache', 'uv');
+      await mkdir(cache, { recursive: true });
+      const customCache = env['UV_CACHE_DIR'];
+      const cachedEnv: Record<string, string> = { ...env, UV_CACHE_DIR: customCache ?? cache };
+      const failures: string[] = [];
+
+      /**
+       * 只在 uv 明确报告缓存未命中时继续下一级；其他错误直接返回，避免重复启动。
+       */
+      const attempt = async (
+        label: string,
+        attemptEnv: Record<string, string>,
+        timeoutMs: number
+      ): Promise<{ client?: Client; error?: string; cacheMiss?: boolean }> => {
+        try {
+          return { client: await this.openStdio(config, workdir, attemptEnv, timeoutMs) };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          failures.push(`${label}：${message}`);
+          return { error: message, cacheMiss: isUvCacheMiss(message) };
+        }
+      };
+
+      const offline = await attempt(
+        '应用缓存',
+        { ...cachedEnv, UV_OFFLINE: '1' },
+        CONNECT_TIMEOUT_MS
+      );
+      if (offline.client) return offline.client;
+      if (!offline.cacheMiss) throw new Error(offline.error, { cause: offline.error });
+
+      if (!customCache) {
+        const userCache = await attempt(
+          '本机 uv 缓存',
+          { ...env, UV_OFFLINE: '1' },
+          CONNECT_TIMEOUT_MS
+        );
+        if (userCache.client) return userCache.client;
+        if (!userCache.cacheMiss) throw new Error(userCache.error, { cause: userCache.error });
+      }
+
+      this.preparing.add(config.id);
+      try {
+        const online = await attempt(
+          '在线准备依赖',
+          cachedEnv,
+          config.startupTimeoutMs ?? UVX_INSTALL_TIMEOUT_MS
+        );
+        if (online.client) return online.client;
+        throw new Error(failures.join('；'));
+      } finally {
+        this.preparing.delete(config.id);
+      }
+    }
+
+    return this.openStdio(config, workdir, env, config.startupTimeoutMs ?? CONNECT_TIMEOUT_MS);
+  }
+
+  /**
+   * 创建一次 stdio 连接；stderr 保留在错误中，便于定位启动失败。
+   */
+  private async openStdio(
+    config: McpConfig,
+    workdir: string,
+    env: Record<string, string>,
+    timeoutMs: number
+  ): Promise<Client> {
+    const command = config.command;
+    if (!command) throw new Error('缺少 command');
+    const client = new Client({ name: 'nexus', version: '0.1.0' }, { capabilities: {} });
+    let stderr = '';
+    const transport = new StdioClientTransport({
+      command,
+      args: config.args,
+      cwd: workdir,
+      env,
+      stderr: 'pipe'
+    });
+    transport.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf8');
+      if (stderr.length > 4_000) stderr = stderr.slice(-4_000);
+    });
+    transport.stderr?.on('error', () => undefined);
+    try {
+      await withTimeout(client.connect(transport), `MCP ${config.id} 连接超时`, timeoutMs);
+      return client;
+    } catch (error) {
+      await client.close().catch(() => undefined);
+      const message = error instanceof Error ? error.message : String(error);
+      const detail = sanitizeMcpError(stderr.trim() ? `${message}: ${stderr.trim()}` : message);
+      throw new Error(detail, { cause: error });
+    }
+  }
+
   private async connect(
     config: McpConfig,
     throwOnError = false
   ): Promise<ConnectedServer | undefined> {
     let client: Client | undefined;
     try {
-      client = new Client({ name: 'nexus', version: '0.1.0' }, { capabilities: {} });
       if (config.transport === 'http' || config.transport === 'sse') {
+        client = new Client({ name: 'nexus', version: '0.1.0' }, { capabilities: {} });
         if (!config.url) throw new Error('缺少 URL');
         const url = await assertPublicUrl(config.url);
         if (config.transport === 'sse') {
@@ -345,28 +464,19 @@ export class McpService {
           await withTimeout(client.connect(transport), `MCP ${config.id} 连接超时`);
         }
       } else {
-        if (!config.command) throw new Error('缺少 command');
-        // MCP 子进程不能继承启动目录；默认固定到 userData，避免产物写入安装目录或根目录
-        const defaultWorkdir = getMcpWorkdirPath(this.directory);
-        const workdir = config.cwd ? resolve(this.directory, config.cwd) : defaultWorkdir;
-        await mkdir(workdir, { recursive: true });
-        const transport = new StdioClientTransport({
-          command: config.command,
-          args: config.args,
-          cwd: workdir,
-          env: {
-            PATH: process.env['PATH'] ?? '',
-            HOME: process.env['HOME'] ?? '',
-            USER: process.env['USER'] ?? '',
-            TMPDIR: process.env['TMPDIR'] ?? '',
-            SystemRoot: process.env['SystemRoot'] ?? '',
-            ...config.env
-          },
-          stderr: 'ignore'
-        });
-        await withTimeout(client.connect(transport), `MCP ${config.id} 连接超时`);
+        client = await this.connectStdio(config);
       }
-      const listed = await withTimeout(client.listTools(), `MCP ${config.id} 列举工具超时`);
+      const listTimeout =
+        config.startupTimeoutMs ??
+        (config.command && /^uvx(?:\.exe)?$/i.test(basename(config.command))
+          ? UVX_INSTALL_TIMEOUT_MS
+          : CONNECT_TIMEOUT_MS);
+      const listed = await withTimeout(
+        client.listTools(),
+        `MCP ${config.id} 列举工具超时`,
+        listTimeout
+      );
+      this.preparing.delete(config.id);
       this.lastErrors.delete(config.id);
       this.retryAt.delete(config.id);
       await this.persistStatus();
@@ -403,7 +513,11 @@ export class McpService {
       };
     } catch (error) {
       await client?.close().catch(() => undefined);
-      this.lastErrors.set(config.id, error instanceof Error ? error.message : String(error));
+      this.preparing.delete(config.id);
+      this.lastErrors.set(
+        config.id,
+        sanitizeMcpError(error instanceof Error ? error.message : String(error))
+      );
       this.retryAt.set(config.id, {
         key: configKey(config),
         until: Date.now() + CONNECT_RETRY_COOLDOWN_MS
@@ -766,6 +880,7 @@ export class McpService {
     this.connected.clear();
     this.connectionKeys.clear();
     this.lastErrors.clear();
+    this.preparing.clear();
     this.retryAt.clear();
   }
 }

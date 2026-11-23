@@ -649,6 +649,7 @@ interface ProviderCapabilities {
 #### MCP 工具接入
 
 - 启动时扫描 `<userData>/mcp/mcp.json`，校验 `mcpServers` 配置后在后台预热已启用 Server；配置保存或文件变化后重新预热，后续 Run 复用连接。
+- `uvx` Server 的依赖由宿主自动准备：先尝试应用缓存，再复用本机 uv 缓存，仍缺失时在线下载并使用较长启动窗口；不得要求用户手动执行安装命令，启动失败需保留脱敏后的 stderr 摘要，并在扩展页显示准备状态。
 - `stdio` Server 子进程的 `cwd` 固定为 `<userData>/mcp/workdir`，不得继承应用启动目录；MCP 自动产物统一落在该目录下。
 - 启动时从 `resources/mcp/mcp.json` 补齐 `userData/mcp` 中缺失的内置 Server；已存在的同名 Server 保持用户配置不变。内置模板默认 `enabled: true`，这是产品选择；Run 前可能启动 `npx`/`uvx` 等外部进程，首次使用可能下载依赖或失败，用户需在扩展页查看状态。已有配置的 `enabled` 不自动迁移。用户可通过 `enabled` 字段停用单个 Server，工具调用仍需审批。删除内置 Server 后下次启动会重新补齐，永久停用请设置 `enabled: false`。
 - Server 提供的工具以 `mcp_<serverId>_<toolName>` 命名注册，名称净化到 `[a-zA-Z0-9_-]{1,64}`，权限为 `execute`，始终审批。
@@ -682,7 +683,7 @@ interface ProviderCapabilities {
 ```
 
 - `id` 必须与目录名一致；`transport` 支持 `stdio` 与 `http`。
-- `stdio` 使用 `command` / `args` / `cwd` / `env`；`http` 使用 `url` / `headers`。`cwd` 可省略，默认 `<userData>/mcp/workdir`；相对路径以 `mcp.json` 所在目录为基准。
+- `stdio` 使用 `command` / `args` / `cwd` / `env` / `startupTimeoutMs`；`http` 使用 `url` / `headers`。`cwd` 可省略，默认 `<userData>/mcp/workdir`；相对路径以 `mcp.json` 所在目录为基准。`startupTimeoutMs` 可覆盖首次启动超时。
 - 配置保存后会立即重新预热；首次启用仍需用户在扩展页确认命令与环境变量。
 
 执行顺序固定为：
@@ -1057,6 +1058,7 @@ export function activate(ctx) {
 ├─ skills/<skill-id>/    # 技能目录，启动时扫描
 ├─ mcp/mcp.json         # 标准 MCP 配置，启动时扫描
 ├─ mcp/workdir/         # stdio MCP 子进程固定工作目录与自动产物
+├─ mcp/cache/uv/        # uvx/uv 依赖缓存，不随运行缓存清理
 ├─ settings/             # 启动设置（主题等，后续迁移到 settings 表）
 ├─ files/                # AI 输出文件与会话导出，按会话存放
 ├─ attachments/          # 用户上传附件与抽取内容，按会话存放

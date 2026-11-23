@@ -77,6 +77,76 @@ describe('McpService tool calls', () => {
     );
   });
 
+  it('prepares uvx dependencies automatically with offline-first fallback', async () => {
+    await writeFile(
+      join(root, 'mcp.json'),
+      JSON.stringify({
+        mcpServers: { demo: { command: 'uvx', args: ['--from', 'demo-package', 'demo'] } }
+      })
+    );
+    mocks.connect
+      .mockRejectedValueOnce(new Error('No solution found when resolving tool dependencies'))
+      .mockRejectedValueOnce(new Error('Because demo was not found in the cache'))
+      .mockResolvedValue(undefined);
+
+    await service.listTools();
+
+    expect(mocks.transport).toHaveBeenCalledTimes(3);
+    const appOffline = mocks.transport.mock.calls[0]?.[0] as { env: Record<string, string> };
+    const userOffline = mocks.transport.mock.calls[1]?.[0] as { env: Record<string, string> };
+    const online = mocks.transport.mock.calls[2]?.[0] as { env: Record<string, string> };
+    expect(appOffline.env['UV_OFFLINE']).toBe('1');
+    expect(appOffline.env['UV_CACHE_DIR']).toBe(join(root, 'cache', 'uv'));
+    expect(userOffline.env['UV_OFFLINE']).toBe('1');
+    expect(userOffline.env['UV_CACHE_DIR']).toBeUndefined();
+    expect(online.env['UV_OFFLINE']).toBeUndefined();
+    expect(online.env['UV_CACHE_DIR']).toBe(join(root, 'cache', 'uv'));
+  });
+
+  it('does not retry non-cache uvx failures', async () => {
+    await writeFile(
+      join(root, 'mcp.json'),
+      JSON.stringify({
+        mcpServers: { demo: { command: 'uvx', args: ['--from', 'demo-package', 'demo'] } }
+      })
+    );
+    mocks.connect.mockRejectedValue(new Error('spawn uvx ENOENT'));
+
+    await service.listTools();
+
+    expect(mocks.transport).toHaveBeenCalledTimes(1);
+  });
+
+  it('exposes preparing status while the online dependency step is running', async () => {
+    await writeFile(
+      join(root, 'mcp.json'),
+      JSON.stringify({
+        mcpServers: { demo: { command: 'uvx', args: ['--from', 'demo-package', 'demo'] } }
+      })
+    );
+    let finishOnline: (() => void) | undefined;
+    mocks.connect
+      .mockRejectedValueOnce(new Error('No solution found when resolving tool dependencies'))
+      .mockRejectedValueOnce(new Error('Because demo was not found in the cache'))
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finishOnline = resolve;
+          })
+      );
+
+    const running = service.listTools();
+    await vi.waitFor(() => expect(mocks.transport).toHaveBeenCalledTimes(3));
+    await expect(service.getStatus()).resolves.toContainEqual(
+      expect.objectContaining({ id: 'demo', preparing: true })
+    );
+
+    finishOnline?.();
+    await running;
+    const settled = await service.getStatus();
+    expect(settled.find((item) => item.id === 'demo')?.preparing).toBeUndefined();
+  });
+
   it('resolves a configured stdio cwd relative to the MCP directory', async () => {
     await writeFile(
       join(root, 'mcp.json'),

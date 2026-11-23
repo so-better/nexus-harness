@@ -12,6 +12,8 @@ export const mcpServerConfigSchema = z.object({
   args: z.array(z.string()).default([]),
   /** stdio 工作目录；相对路径以 mcp.json 所在目录为基准，缺省为 mcp/workdir */
   cwd: z.string().min(1).optional(),
+  /** 首次连接允许的最长启动时间；uvx 自动下载依赖时使用更长默认值 */
+  startupTimeoutMs: z.number().int().positive().max(600_000).optional(),
   env: z.record(z.string(), z.string()).default({}),
   url: z.string().url().optional(),
   headers: z.record(z.string(), z.string()).default({}),
@@ -47,5 +49,6 @@ export interface McpServerStatus {
   enabled: boolean;
   connected: boolean;
   tools: number;
+  preparing?: boolean;
   error?: string;
 }

@@ -112,7 +112,10 @@
         <div v-for="server in serverEntries" :key="server.id" class="nh-mcp__server">
           <span class="nh-mcp__dot" :class="{ 'nh-mcp__dot--on': server.enabled }" />
           <span class="nh-mcp__server-id">{{ server.id }}</span>
-          <NTooltip v-if="server.error" placement="top-end">
+          <span v-if="server.preparing" class="nh-mcp__server-preparing">
+            {{ t('mcp.preparing') }}
+          </span>
+          <NTooltip v-else-if="server.error" placement="top-end">
             <template #trigger>
               <span class="nh-mcp__server-error" tabindex="0">{{ server.error }}</span>
             </template>
@@ -182,6 +185,7 @@ const serverStatuses = ref<Record<string, McpServerStatus>>({});
 interface ServerEntry {
   id: string;
   enabled: boolean;
+  preparing?: boolean;
   error?: string;
 }
 
@@ -202,6 +206,7 @@ const serverEntries = computed<ServerEntry[]>(() => {
           value && typeof value === 'object' && 'enabled' in value
             ? (value as { enabled?: unknown }).enabled !== false
             : true,
+        ...(status?.preparing ? { preparing: true } : {}),
         ...(status?.error ? { error: status.error } : {})
       };
     });
@@ -403,6 +408,15 @@ onMounted(async () => {
 
 .nh-mcp__dot--on {
   background: var(--nh-color-success);
+}
+
+.nh-mcp__server-preparing {
+  overflow: hidden;
+  max-width: 120px;
+  color: var(--nh-color-warning);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nh-mcp__server-error {
