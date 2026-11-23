@@ -16,7 +16,7 @@ metadata:
       usage,
       用户插件
     ]
-  version: 1.3.18
+  version: 1.3.20
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -40,9 +40,9 @@ metadata:
 
 - 新插件默认按本 Skill 从 manifest、入口和贡献点设计，不复制内置插件。
 - 内置插件只作为 API、贡献点和实现方式的参考，不是默认模板。
-- 只有用户明确要求“基于 / 定制某个内置插件”时，才使用 `plugin_create` 的 `fromPluginId`。
+- 只有用户明确要求“基于 / 定制某个内置插件”时，才使用 `plugin_write` 的 `fromPluginId`。
 - 不要因为内置插件存在就默认说“参考内置插件 xxx”；先根据需求选择贡献点和权限。
-- 宿主会拒绝未读取本 Skill 的 `plugin_create` / `plugin_update`；先 `read_skill`，再创建或修改。
+- 宿主会拒绝未读取本 Skill 的 `plugin_write`；先 `read_skill`，再创建或修改。
 
 ## 工作流程
 
@@ -54,9 +54,9 @@ metadata:
 6. **本地构建**：使用项目已有构建命令；产物必须输出到 manifest 声明的入口路径。
 7. **导入/更新**：
    - 从本地目录导入：`plugin_import`，传绝对 `sourceDir`。
-   - 直接在用户插件目录开发：`plugin_create` 或 `plugin_update`。
+   - 直接在用户插件目录开发：`plugin_write`（files / assets / delete 一次提交）。
    - 删除用户插件：`plugin_delete`；内置插件只能停用。
-   - 内置插件定制：`plugin_create` 使用 `fromPluginId` 复制为新的用户插件 id，再 `plugin_update`。
+   - 内置插件定制：`plugin_write` 使用 `fromPluginId` 复制为新的用户插件 id，再继续用 `plugin_write` 修改。
 8. **刷新和启用**：`plugin_reload`，确认无错误后 `plugin_set_enabled`。
 9. **验证**：检查插件是否激活、UI 是否出现、权限是否最小、清理函数是否执行、错误是否显示在扩展页。
 10. **交付**：说明文件位置、启用方式、权限、验证结果和剩余风险。
@@ -194,6 +194,16 @@ export function activate(ctx) {
 }
 ```
 
+## 图片与二进制资源
+
+- `generate_image` 和 `save_file` 输出到 `<userData>/files`，不能直接写入插件目录。
+- 生成图片或输出文件后，在 `plugin_write.assets` 中提交：
+  - `id`：插件 id
+  - `fileId`：`generate_image` / `save_file` 返回的文件 id
+  - `path`：必须以 `assets/` 开头，例如 `assets/icon.png`
+- 只允许写入图片或字体资源（png/jpg/webp/gif/svg/ico/woff/woff2/ttf/otf），单文件 20MB 上限。
+- `plugin_write` 一次审批覆盖 files、assets 与 delete；内置插件只读。
+
 ## 常用插槽
 
 | location                                                  | 用途          |
@@ -243,9 +253,9 @@ interface MainPluginContext {
 
 1. 在用户工作区创建或修改插件源码；所有改动必须先让用户确认。
    - 不要尝试用 `read_file` / `write_file` 操作 `<userData>/plugins`，那会触发不必要的工作区授权。
-   - 已安装用户插件使用 `plugin_read` 读取，使用 `plugin_create` / `plugin_update` 修改。
+   - 已安装用户插件使用 `plugin_read` 读取，使用 `plugin_write` 修改。
 2. 执行项目已有构建命令，确保入口文件存在且路径正确。
-3. 使用 `plugin_import` 导入本地构建目录，或使用 `plugin_update` 更新用户插件。
+3. 使用 `plugin_import` 导入本地构建目录，或使用 `plugin_write` 更新用户插件。
 4. 使用 `plugin_reload` 刷新；检查 `plugin_list` 中的错误。
 5. 启用插件后验证 UI 和行为；渲染插件使用 DevTools，主进程问题查看 `<userData>/logs`。
 6. 修改后检查清理函数，避免重复注册、定时器泄漏和残留 DOM。
@@ -253,7 +263,7 @@ interface MainPluginContext {
 ## 内置插件定制
 
 1. 不修改内置插件目录或 `<userData>/plugins` 中的内置副本。
-2. 使用 `plugin_create`：
+2. 使用 `plugin_write`：
 
 ```json
 {
@@ -262,7 +272,7 @@ interface MainPluginContext {
 }
 ```
 
-3. 使用 `plugin_update` 修改新用户插件。
+3. 继续使用 `plugin_write` 修改新用户插件。
 4. `plugin_reload` 后启用。
 5. 原内置插件和应用更新不受影响。
 

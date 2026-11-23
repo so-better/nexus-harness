@@ -19,10 +19,13 @@ import type { PluginHost } from '../plugins/plugin-host';
 import { getPluginHost } from '../plugins/plugin-host-instance';
 import { importPluginDirectory, inspectPluginDirectory } from '../plugins/plugin-import-service';
 import { getAppDataPaths, getBuiltinPluginsDirectory } from '../storage/paths';
+import type { FileService } from '../files/file-service';
 
 export interface PluginToolOptions {
   host?: PluginHost;
   pluginsDir?: string;
+  fileService?: FileService;
+  sessionId?: string;
 }
 
 const listSchema = z.object({}).strict();
@@ -45,6 +48,28 @@ const updateSchema = z
   .refine((value) => Boolean(Object.keys(value.files ?? {}).length || value.delete?.length), {
     message: '至少需要 files 或 delete'
   });
+const pluginWriteSchema = z
+  .object({
+    id: z.string().regex(/^[a-z0-9]+(?:\.[a-z0-9-]+)+$/),
+    files: z.record(z.string(), z.string()).optional(),
+    assets: z
+      .array(z.object({ path: z.string().min(1), fileId: z.string().min(1) }).strict())
+      .optional(),
+    delete: z.array(z.string()).optional(),
+    fromPluginId: z.string().min(1).optional(),
+    overwrite: z.boolean().optional()
+  })
+  .strict()
+  .refine(
+    (value) =>
+      Boolean(
+        Object.keys(value.files ?? {}).length ||
+        value.assets?.length ||
+        value.delete?.length ||
+        value.fromPluginId
+      ),
+    { message: '至少需要 files、assets、delete 或 fromPluginId' }
+  );
 const createSchema = z
   .object({
     id: z.string().regex(/^[a-z0-9]+(?:\.[a-z0-9-]+)+$/),
@@ -117,24 +142,25 @@ export const pluginToolDefinitions: AgentToolDefinition[] = [
     true
   ),
   tool(
-    'plugin_create',
-    '创建或覆盖用户插件目录；新插件按 plugin-development Skill 设计，files 必须包含 plugin.json；只有用户明确要求复制或定制现有插件时才使用 fromPluginId；依赖需自行打包，受路径和大小限制。',
+    'plugin_write',
+    '统一创建或修改用户插件：files 写文本/代码，assets 从 save_file/generate_image 的 fileId 写入 assets/，delete 删除文件；按 plugin-development Skill 设计，不默认复制内置插件，只有用户明确要求复制或定制现有插件时才使用 fromPluginId；一次审批覆盖完整变更。',
     {
       id: { type: 'string' },
       files: { type: 'object', additionalProperties: { type: 'string' } },
+      assets: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            path: { type: 'string' },
+            fileId: { type: 'string' }
+          },
+          required: ['path', 'fileId']
+        }
+      },
+      delete: { type: 'array', items: { type: 'string' } },
       fromPluginId: { type: 'string' },
       overwrite: { type: 'boolean' }
-    },
-    ['id'],
-    true
-  ),
-  tool(
-    'plugin_update',
-    '局部修改用户插件文件或删除文件；依赖需自行打包；内置插件只读，修改后自动刷新。',
-    {
-      id: { type: 'string' },
-      files: { type: 'object', additionalProperties: { type: 'string' } },
-      delete: { type: 'array', items: { type: 'string' } }
     },
     ['id'],
     true
@@ -264,6 +290,167 @@ const writePluginFiles = async (
   }
 };
 
+const PLUGIN_ASSET_EXTENSIONS = new Set([
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+  '.gif',
+  '.svg',
+  '.ico',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.otf'
+]);
+
+interface PluginAssetPayload {
+  path: string;
+  content: Buffer;
+  mime: string;
+  bytes: number;
+}
+
+/**
+ * 读取并校验插件二进制资源；先完成全部读取，避免写到一半才发现文件无效。
+ */
+const readPluginAssets = async (
+  assets: Array<{ path: string; fileId: string }>,
+  options: PluginToolOptions
+): Promise<PluginAssetPayload[]> => {
+  if (!assets.length) return [];
+  if (!options.fileService || !options.sessionId) {
+    throw new Error('文件服务或会话不可用');
+  }
+  const payloads: PluginAssetPayload[] = [];
+  for (const asset of assets) {
+    if (!safePluginFile(asset.path) || !asset.path.startsWith('assets/')) {
+      throw new Error(`插件资源路径不合法：${asset.path}`);
+    }
+    const extension = asset.path.slice(asset.path.lastIndexOf('.')).toLowerCase();
+    if (!PLUGIN_ASSET_EXTENSIONS.has(extension)) {
+      throw new Error(`只允许写入图片或字体资源：${asset.path}`);
+    }
+    const file = await options.fileService.read(asset.fileId, options.sessionId, 20_000_000);
+    const content = Buffer.from(file.base64, 'base64');
+    if (content.byteLength > 20_000_000) throw new Error(`插件资源过大：${asset.path}`);
+    payloads.push({ path: asset.path, content, mime: file.mime, bytes: content.byteLength });
+  }
+  return payloads;
+};
+
+/**
+ * 以 staging 目录一次性写入插件源码和资源，成功后原子替换目标目录。
+ */
+const writePluginBundle = async (input: {
+  pluginsDir: string;
+  id: string;
+  files: Record<string, string>;
+  assets: PluginAssetPayload[];
+  deletePaths: string[];
+  overwrite: boolean;
+  fromPluginId?: string;
+  host: PluginHost;
+}): Promise<{ path: string; manifest: unknown; assets: PluginAssetPayload[] }> => {
+  const { pluginsDir, id, files, assets, deletePaths, overwrite, fromPluginId, host } = input;
+  const entries = Object.entries(files);
+  if (entries.length > MAX_FILES || deletePaths.length > MAX_FILES) {
+    throw new Error(`插件文件不能超过 ${MAX_FILES} 个`);
+  }
+  const existing = host.list().find((plugin) => plugin.id === id);
+  if (existing?.source === 'builtin') throw new Error('内置插件只读');
+  if (existing && fromPluginId) throw new Error('已有插件不能使用 fromPluginId');
+  if (!existing && deletePaths.length) throw new Error('新插件不能删除文件');
+  if (!existing && !fromPluginId && !files['plugin.json']) {
+    throw new Error('新插件 files 必须包含 plugin.json');
+  }
+  let totalBytes = 0;
+  for (const [file, content] of entries) {
+    if (!safePluginFile(file)) throw new Error(`插件路径不合法：${file}`);
+    if (content.includes('\0')) throw new Error(`插件文件包含空字符：${file}`);
+    totalBytes += Buffer.byteLength(content, 'utf8');
+    if (Buffer.byteLength(content, 'utf8') > MAX_FILE_BYTES) {
+      throw new Error(`插件文件过大：${file}`);
+    }
+  }
+  if (totalBytes > MAX_TOTAL_BYTES) throw new Error('插件总大小超过 5MB');
+  for (const file of deletePaths) {
+    if (!safePluginFile(file)) throw new Error(`插件路径不合法：${file}`);
+  }
+
+  await mkdir(pluginsDir, { recursive: true });
+  const target = join(pluginsDir, id);
+  const targetExists = await stat(target)
+    .then(() => true)
+    .catch(() => false);
+  if (!existing && !overwrite && targetExists) {
+    throw new Error('插件目录已存在；如需覆盖请传 overwrite: true');
+  }
+  if (existing && !targetExists) throw new Error('插件目录不存在');
+
+  const staging = await mkdtemp(join(pluginsDir, '.write-'));
+  try {
+    if (existing) {
+      await cp(target, staging, { recursive: true, force: true });
+    } else if (fromPluginId) {
+      const source = host.list().find((plugin) => plugin.id === fromPluginId);
+      if (!source) throw new Error('要复制的插件不存在');
+      let sourceDir = join(pluginsDir, fromPluginId);
+      try {
+        await stat(sourceDir);
+      } catch {
+        if (source.source !== 'builtin') throw new Error('要复制的插件目录不存在');
+        sourceDir = join(getBuiltinPluginsDirectory(), fromPluginId);
+        await stat(sourceDir);
+      }
+      await cp(sourceDir, staging, { recursive: true, force: true });
+      if (!files['plugin.json']) {
+        const manifestPath = join(staging, 'plugin.json');
+        const copied = JSON.parse(await readFile(manifestPath, 'utf8')) as Record<string, unknown>;
+        copied['id'] = id;
+        await writeFile(manifestPath, `${JSON.stringify(copied, null, 2)}\n`, 'utf8');
+      }
+    }
+
+    for (const [file, content] of entries) {
+      const targetFile = join(staging, file);
+      await mkdir(dirname(targetFile), { recursive: true });
+      await writeFile(targetFile, content, 'utf8');
+    }
+    for (const file of deletePaths) {
+      await rm(join(staging, file), { recursive: true, force: true });
+    }
+    for (const asset of assets) {
+      const targetFile = join(staging, asset.path);
+      await mkdir(dirname(targetFile), { recursive: true });
+      await writeFile(targetFile, asset.content);
+    }
+
+    const manifest = await inspectPluginDirectory(staging, host.getHostVersion());
+    if (manifest.id !== id) throw new Error('plugin.json 的 id 与目录 id 不一致');
+    const root = await realpath(staging);
+    const realPluginsDir = await realpath(pluginsDir);
+    if (!root.startsWith(`${realPluginsDir}/`)) throw new Error('插件目录越界');
+    const backup = join(pluginsDir, `.backup-${id}-${Date.now()}`);
+    if (targetExists) await rename(target, backup);
+    try {
+      await rename(staging, target);
+    } catch (error) {
+      if (targetExists) await rename(backup, target).catch(() => undefined);
+      throw error;
+    }
+    if (targetExists) {
+      await rm(backup, { recursive: true, force: true }).catch((error: unknown) => {
+        console.error(`插件旧版本清理失败：${id}`, error);
+      });
+    }
+    return { path: target, manifest, assets };
+  } catch (error) {
+    await rm(staging, { recursive: true, force: true }).catch(() => undefined);
+    throw error;
+  }
+};
+
 /**
  * 执行插件管理工具；创建/导入/启停后由调用方按需 reload。
  */
@@ -313,6 +500,36 @@ export const executePluginTool = async (
       }
     }
     return failure('PLUGIN_FILE_NOT_FOUND', '插件文件不存在');
+  }
+
+  if (name === 'plugin_write') {
+    const parsed = pluginWriteSchema.safeParse(input);
+    if (!parsed.success) return failure('PLUGIN_INVALID_INPUT', '插件写入参数不合法');
+    try {
+      const assets = await readPluginAssets(parsed.data.assets ?? [], options);
+      const written = await writePluginBundle({
+        pluginsDir,
+        id: parsed.data.id,
+        files: parsed.data.files ?? {},
+        assets,
+        deletePaths: parsed.data.delete ?? [],
+        overwrite: parsed.data.overwrite === true,
+        ...(parsed.data.fromPluginId ? { fromPluginId: parsed.data.fromPluginId } : {}),
+        host
+      });
+      return success({
+        id: parsed.data.id,
+        path: written.path,
+        manifest: written.manifest,
+        assets: written.assets.map(({ path, mime, bytes }) => ({ path, mime, bytes })),
+        plugins: await host.reload()
+      });
+    } catch (error) {
+      return failure(
+        'PLUGIN_WRITE_FAILED',
+        error instanceof Error ? error.message : '写入插件失败'
+      );
+    }
   }
 
   if (name === 'plugin_reload') {

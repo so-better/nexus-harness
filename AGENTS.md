@@ -135,7 +135,7 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 - 会话支持重命名、置顶、导出与跨会话搜索；搜索入口在侧栏与命令面板。
 - 输入区展示当前 Agent 模式，Plan / Build 切换只能由用户操作。
 - 设置与扩展以弹窗展示，不引入路由；视图切换由导航状态驱动。
-- 插件通过标准插槽注入会话流与输入区，全局背景以 skin 贡献，不改变宿主布局。AI 可通过 `plugin_list`、`plugin_read`、`plugin_create`、`plugin_update`、`plugin_delete`、`plugin_import`、`plugin_reload`、`plugin_set_enabled` 管理插件；`plugin_create` 可用 `fromPluginId` 把内置或用户插件复制成新的用户插件；`plugin_update` 只能修改用户插件，内置插件只读；创建/更新/导入/刷新/启停均需审批，插件主进程代码按受信本地代码处理。
+- 插件通过标准插槽注入会话流与输入区，全局背景以 skin 贡献，不改变宿主布局。AI 可通过 `plugin_list`、`plugin_read`、`plugin_write`、`plugin_delete`、`plugin_import`、`plugin_reload`、`plugin_set_enabled` 管理插件；`plugin_write` 统一处理 files 文本/代码、assets 二进制资源和 delete，可用 `fromPluginId` 把内置或用户插件复制成新的用户插件；内置插件只读；一次写入审批覆盖完整变更，插件主进程代码按受信本地代码处理。
 - Agent 提问以行内卡片展示，支持键盘选择、数字键、Enter 提交与 Esc 取消。
 - 用户消息可编辑重发；最后一条 AI 回复可重新生成；流式回复可随时停止。
 - 高频操作全部可键盘完成，`Cmd/Ctrl+K` 为统一入口。
@@ -638,7 +638,7 @@ interface ProviderCapabilities {
 | `mcp_list` / `mcp_read` | read | 否 |
 | `theme_get` / `skin_list` / `terminal_get_settings` / `terminal_list` / `terminal_read` / `terminal_wait` | read | 否 |
 | `cache_get_info` / `backup_status` / `general_settings_get` / `image_config_list` / `image_config_get` | read | 否 |
-| `plugin_create` / `plugin_update` / `plugin_import` / `plugin_delete` / `plugin_reload` / `plugin_set_enabled` | write | 是 |
+| `plugin_write` / `plugin_import` / `plugin_delete` / `plugin_reload` / `plugin_set_enabled` | write | 是 |
 | `skill_create` / `skill_update` / `skill_import` / `skill_delete` | write | 是 |
 | `mcp_save` / `mcp_update` / `mcp_refresh` / `mcp_test` | write | 是 |
 | `theme_update` / `skin_apply` / `terminal_update_settings` / `terminal_create` / `terminal_write` / `terminal_close` / `terminal_request_access` | write | 是 |
@@ -1049,7 +1049,7 @@ export function activate(ctx) {
 - 安装：扩展页提供“导入插件文件夹”，选择包含 `plugin.json` 的目录，校验 manifest 与入口后复制到 `<userData>/plugins/<id>`；也可手动放置目录。不需要 `npm install`，也不需要用户执行构建命令。
 - 宿主启动或目录变化时自动发现；导入后默认禁用，在扩展页确认权限并启用后激活。
 - 调试：渲染进程插件使用 DevTools；主进程日志写入 `<userData>/logs`；目录变更触发热重载。
-- AI 开发新插件前先读取 `plugin-development` Skill；未读取时宿主拒绝 `plugin_create` / `plugin_update`。新插件按 Skill 契约设计，不默认复制内置插件，只有用户明确要求定制内置插件时才使用 `fromPluginId`。
+- AI 开发新插件前先读取 `plugin-development` Skill；未读取时宿主拒绝 `plugin_write`。新插件按 Skill 契约设计，不默认复制内置插件，只有用户明确要求定制内置插件时才使用 `fromPluginId`。插件图片等二进制资源先用 `generate_image` / `save_file` 输出，再通过 `plugin_write.assets` 写入 `assets/`。
 - 分发：压缩插件目录，用户解压到 `<userData>/plugins` 即可；在线市场与自动下载后续再设计。
 
 ### 4.6 持久化与事件 Schema

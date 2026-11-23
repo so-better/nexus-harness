@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PluginPublic } from '@shared/plugin';
 import type { PluginHost } from '../plugins/plugin-host';
+import type { FileService } from '../files/file-service';
 import { executePluginTool } from './plugin-tools';
 
 const manifest = {
@@ -154,6 +155,34 @@ describe('plugin tools', () => {
     expect(copiedManifest.id).toBe('com.example.copy');
     expect(await readFile(join(pluginsDir, 'com.example.copy', 'renderer.mjs'), 'utf8')).toContain(
       'activate'
+    );
+  });
+
+  it('writes text files and binary assets through one plugin_write call', async () => {
+    const fileService = {
+      read: vi.fn(async () => ({
+        fileId: 'file-1',
+        name: 'icon.png',
+        mime: 'image/png',
+        bytes: 3,
+        base64: Buffer.from('png').toString('base64')
+      }))
+    } as unknown as FileService;
+    const options = { host, pluginsDir, fileService, sessionId: 'session-1' };
+    list.mockReturnValueOnce([]);
+
+    const written = await executePluginTool(
+      'plugin_write',
+      {
+        id: manifest.id,
+        files: { 'plugin.json': JSON.stringify(manifest) },
+        assets: [{ path: 'assets/icon.png', fileId: 'file-1' }]
+      },
+      options
+    );
+    expect(written.ok).toBe(true);
+    expect(await readFile(join(pluginsDir, manifest.id, 'assets', 'icon.png'))).toEqual(
+      Buffer.from('png')
     );
   });
 

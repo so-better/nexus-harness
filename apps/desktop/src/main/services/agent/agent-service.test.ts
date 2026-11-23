@@ -283,8 +283,7 @@ describe('AgentService', () => {
       'plugin_set_enabled',
       'plugin_delete',
       'plugin_import',
-      'plugin_create',
-      'plugin_update',
+      'plugin_write',
       'skill_list',
       'skill_refresh',
       'skill_import',
@@ -310,7 +309,7 @@ describe('AgentService', () => {
           step === 1
             ? {
                 id: 'plugin-create-1',
-                name: 'plugin_create',
+                name: 'plugin_write',
                 arguments: { id: 'test.plugin', files: { 'plugin.json': '{}' } }
               }
             : step === 2
@@ -322,7 +321,7 @@ describe('AgentService', () => {
               : step === 3
                 ? {
                     id: 'plugin-create-2',
-                    name: 'plugin_create',
+                    name: 'plugin_write',
                     arguments: { id: 'test.plugin', files: { 'plugin.json': '{}' } }
                   }
                 : undefined;

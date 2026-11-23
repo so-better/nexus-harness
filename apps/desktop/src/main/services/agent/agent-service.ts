@@ -1097,10 +1097,7 @@ ${assistant.slice(0, 3_000)}`;
             runId
           });
         }
-        if (
-          (call.name === 'plugin_create' || call.name === 'plugin_update') &&
-          !activatedSkills.has('plugin-development')
-        ) {
+        if (call.name === 'plugin_write' && !activatedSkills.has('plugin-development')) {
           return {
             ok: false,
             output: '',
@@ -1111,7 +1108,10 @@ ${assistant.slice(0, 3_000)}`;
           };
         }
         if (call.name.startsWith('plugin_')) {
-          return executePluginTool(call.name, call.arguments);
+          return executePluginTool(call.name, call.arguments, {
+            sessionId: input.sessionId,
+            ...(files ? { fileService: files } : {})
+          });
         }
         if (MCP_MANAGEMENT_TOOLS.has(call.name)) {
           return executeMcpTool(call.name, call.arguments, this.mcp ? { service: this.mcp } : {});
@@ -1681,6 +1681,7 @@ ${assistant.slice(0, 3_000)}`;
               ok: true,
               output: JSON.stringify({
                 images: saved.map((file) => ({
+                  fileId: file.id,
                   name: file.name,
                   mime: file.mime,
                   bytes: file.bytes
@@ -1961,6 +1962,7 @@ ${assistant.slice(0, 3_000)}`;
       if (explicitSkill && this.skills) {
         const skill = await this.skills.read(explicitSkill[1]!);
         if (skill) {
+          activatedSkills.add(skill.id);
           eventBus.publish(
             createNexusEvent({
               sessionId: input.sessionId,
