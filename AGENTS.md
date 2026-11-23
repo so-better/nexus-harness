@@ -564,7 +564,7 @@ interface ProviderCapabilities {
 
 规则：
 
-- 摘要由当前对话模型生成，写入 `context.compacted` 事件，记录压缩前后 token、策略与摘要引用。
+- 摘要由当前对话模型生成，写入 `context.compacted` 事件，记录压缩前后 token、策略、摘要引用与历史快照引用；后续 Run 从快照恢复，避免重复压缩。
 - 压缩失败时降级为硬截断并提示用户，不能阻塞任务。
 - 用户可手动执行 `/compact` 触发一次压缩。
 - 工具输出超过阈值时截断，并把完整内容落为 Artifact，事件中保留引用。
@@ -1978,7 +1978,7 @@ CHANGELOG.md         # 版本变更记录
 | `message.edited` | `messageId`、`content` | 用户编辑消息 |
 | `message.regenerated` | `messageId`、`sourceMessageId` | 重新生成回复 |
 | `message.superseded` | `messageId`、`reason` | 旧回复被编辑或重生成替代 |
-| `context.compacted` | `beforeTokens`、`afterTokens`、`strategy`、`summaryRef`、`artifactIds` | 上下文自动或手动压缩，含工具输出与摘要产物引用 |
+| `context.compacted` | `beforeTokens`、`afterTokens`、`strategy`、`summaryRef`、`snapshotRef`、`artifactIds` | 上下文自动或手动压缩，含工具输出、摘要与历史快照引用 |
 | `tool.requested` | `toolCallId`、`name`、`input` | 发起工具调用 |
 | `tool.completed` | `toolCallId`、`ok`、`output`、`artifactId`、`bytes` | 工具执行完成；长输出转为 Artifact 引用 |
 | `tool.failed` | `toolCallId`、`error` | 工具执行失败 |

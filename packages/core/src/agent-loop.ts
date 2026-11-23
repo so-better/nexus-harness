@@ -323,6 +323,7 @@ export class AgentLoop {
         afterTokens: prepared.afterTokens ?? 0,
         strategy: prepared.strategies?.join('+') || 'compacted',
         ...(prepared.summaryRef === undefined ? {} : { summaryRef: prepared.summaryRef }),
+        ...(prepared.snapshotRef === undefined ? {} : { snapshotRef: prepared.snapshotRef }),
         ...(prepared.artifactIds === undefined ? {} : { artifactIds: prepared.artifactIds })
       });
     }

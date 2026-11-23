@@ -155,6 +155,7 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
   let error: string | undefined;
   let pendingFailure: { event: NexusEvent; error: { code: string; message: string } } | undefined;
   const pendingUsage = new Map<string, ChatUsage>();
+  let compactionNoticeShown = false;
 
   const attachUsage = (messageId: string): void => {
     const usage = pendingUsage.get(messageId);
@@ -539,12 +540,22 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
 
     if (event.type === 'context.compacted') {
       const payload = event.payload as EventPayloadMap['context.compacted'];
-      messages.push(
-        systemMessage(
-          event,
-          `上下文压缩：${payload.beforeTokens} → ${payload.afterTokens} tokens（${payload.strategy}）`
-        )
+      const strategies = payload.strategy.split('+');
+      const meaningful = strategies.some(
+        (strategy) =>
+          strategy === 'summarized' ||
+          strategy === 'summary_failed' ||
+          strategy === 'hard_truncated'
       );
+      if (meaningful && !compactionNoticeShown) {
+        compactionNoticeShown = true;
+        messages.push(
+          systemMessage(
+            event,
+            `上下文压缩：${payload.beforeTokens} → ${payload.afterTokens} tokens（${payload.strategy}）`
+          )
+        );
+      }
     }
   }
 

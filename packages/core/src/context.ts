@@ -42,6 +42,7 @@ export interface ContextPreparation {
   afterTokens?: number;
   strategies?: string[];
   summaryRef?: string;
+  snapshotRef?: string;
   artifactIds?: string[];
   usage?: UsageSummary;
 }

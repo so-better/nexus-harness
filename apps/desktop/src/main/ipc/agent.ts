@@ -39,6 +39,7 @@ import { generateSessionTitle } from '../services/session/session-title';
 import { getPluginHost } from '../services/plugins/plugin-host-instance';
 import { notifyAgentEvent } from '../services/notifications/notification-service';
 import { SessionHistoryService } from '../services/session/session-history';
+import { ArtifactService } from '../services/artifacts/artifact-service';
 import { collectSupersededMessageIds } from '../services/session/branch-supersede';
 import { AttachmentService } from '../services/attachments/attachment-service';
 import { loadImageSettings } from '../services/settings/image-settings';
@@ -97,7 +98,7 @@ export const registerAgentIpc = (): void => {
   const events = new EventStore(db);
   const sessions = new SessionService(db, events);
   const runs = new RunStore(db);
-  const history = new SessionHistoryService(events);
+  const history = new SessionHistoryService(events, new ArtifactService(undefined, db));
   const attachments = new AttachmentService(db);
   const agentService = new AgentService({
     database: db,
@@ -157,7 +158,7 @@ export const registerAgentIpc = (): void => {
           return fail('AGENT_INVALID_INPUT', '不能同时编辑和重新生成');
         }
 
-        let runHistory = history.load(session.id);
+        let runHistory = await history.load(session.id);
         let branchMessageId = parsed.data.editMessageId ?? parsed.data.regenerateMessageId;
         let isErrorRetry = false;
         if (branchMessageId) {
@@ -288,7 +289,7 @@ export const registerAgentIpc = (): void => {
               event.sender.send(IPC_CHANNELS.agentEvent, stored);
             }
           }
-          runHistory = history.load(session.id, branchMessageId);
+          runHistory = await history.load(session.id, branchMessageId);
         }
 
         const shouldGenerateTitle = session.titleSource === 'auto' && session.title === '新会话';

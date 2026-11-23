@@ -6,6 +6,9 @@ import { lstat, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { CacheTarget } from '@shared/ipc/contracts';
 
+/** 上下文压缩快照是恢复历史所需数据，不参与普通缓存清理。 */
+const CONTEXT_SNAPSHOT_PREFIX = 'context-history-';
+
 export interface CacheDirectories {
   files: string;
   artifacts: string;
@@ -88,7 +91,10 @@ export const clearCache = async (
    * 清空目录内容但保留目录本身；MCP 子进程可能正以 workdir 为 cwd。
    * 拒绝跟随符号链接，避免清理落到用户目录之外。
    */
-  const clearContents = async (directory: string): Promise<void> => {
+  const clearContents = async (
+    directory: string,
+    preserve?: (name: string) => boolean
+  ): Promise<void> => {
     try {
       const info = await lstat(directory);
       if (info.isSymbolicLink() || !info.isDirectory()) {
@@ -101,7 +107,9 @@ export const clearCache = async (
     }
     const entries = await readdir(directory);
     await Promise.all(
-      entries.map((entry) => rm(join(directory, entry), { recursive: true, force: true }))
+      entries
+        .filter((entry) => !preserve?.(entry))
+        .map((entry) => rm(join(directory, entry), { recursive: true, force: true }))
     );
   };
 
@@ -111,6 +119,8 @@ export const clearCache = async (
     try {
       if (key === 'mcpWorkdir') {
         await clearContents(directory);
+      } else if (key === 'artifacts') {
+        await clearContents(directory, (name) => name.startsWith(CONTEXT_SNAPSHOT_PREFIX));
       } else {
         await rm(directory, { recursive: true, force: true });
         await mkdir(directory, { recursive: true });

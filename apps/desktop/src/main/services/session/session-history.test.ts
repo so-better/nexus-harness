@@ -8,11 +8,12 @@ import { join } from 'node:path';
 import { createNexusEvent } from '@nexus/core';
 import type { NexusEvent } from '@shared/events';
 import { describe, expect, it } from 'vitest';
+import type { ArtifactService } from '../artifacts/artifact-service';
 import type { EventStore } from './event-store';
 import { SessionHistoryService } from './session-history';
 
 describe('SessionHistoryService', () => {
-  it('rebuilds user, assistant, tool and approval messages', () => {
+  it('rebuilds user, assistant, tool and approval messages', async () => {
     const events = [
       createNexusEvent({
         sessionId: 'session-1',
@@ -70,7 +71,7 @@ describe('SessionHistoryService', () => {
     ] as NexusEvent[];
 
     const store = { list: () => events } as unknown as EventStore;
-    const history = new SessionHistoryService(store).load('session-1');
+    const history = await new SessionHistoryService(store).load('session-1');
 
     expect(history).toHaveLength(4);
     expect(history[0]).toMatchObject({ role: 'user', content: '读取文件' });
@@ -88,7 +89,101 @@ describe('SessionHistoryService', () => {
     expect(history[3]).toMatchObject({ role: 'assistant', content: '读取完成' });
   });
 
-  it('stops before a branch message and ignores superseded branches', () => {
+  it('reuses the latest compaction snapshot and appends newer events', async () => {
+    const events = [
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: { messageId: 'old', role: 'user', content: '旧历史' }
+      }),
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 2,
+        type: 'context.compacted',
+        payload: {
+          beforeTokens: 1000,
+          afterTokens: 100,
+          strategy: 'summarized',
+          snapshotRef: 'snapshot-1'
+        }
+      }),
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 3,
+        type: 'message.completed',
+        payload: { messageId: 'new', role: 'user', content: '新问题' }
+      })
+    ] as NexusEvent[];
+    const store = { list: () => events } as unknown as EventStore;
+    const artifacts = {
+      read: async () => ({
+        artifactId: 'snapshot-1',
+        label: 'context-history',
+        bytes: 1,
+        content: JSON.stringify([{ role: 'user', content: '压缩后的历史' }])
+      })
+    } as unknown as ArtifactService;
+
+    const history = await new SessionHistoryService(store, artifacts).load('session-1');
+
+    expect(history).toEqual([
+      { role: 'user', content: '压缩后的历史' },
+      { role: 'user', content: '新问题' }
+    ]);
+  });
+
+  it('does not reuse a snapshot invalidated by a later message edit', async () => {
+    const events = [
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: { messageId: 'old', role: 'user', content: '旧历史' }
+      }),
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 2,
+        type: 'context.compacted',
+        payload: {
+          beforeTokens: 1000,
+          afterTokens: 100,
+          strategy: 'summarized',
+          snapshotRef: 'snapshot-1'
+        }
+      }),
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 3,
+        type: 'message.edited',
+        payload: { messageId: 'old', content: '修改后的问题' }
+      }),
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 4,
+        type: 'message.completed',
+        payload: { messageId: 'new', role: 'user', content: '新问题' }
+      })
+    ] as NexusEvent[];
+    const store = { list: () => events } as unknown as EventStore;
+    const artifacts = {
+      read: async () => ({
+        artifactId: 'snapshot-1',
+        label: 'context-history',
+        bytes: 1,
+        content: JSON.stringify([{ role: 'user', content: '压缩后的历史' }])
+      })
+    } as unknown as ArtifactService;
+
+    const history = await new SessionHistoryService(store, artifacts).load('session-1');
+
+    expect(history).toEqual([
+      { role: 'user', content: '旧历史' },
+      { role: 'user', content: '新问题' }
+    ]);
+  });
+
+  it('stops before a branch message and ignores superseded branches', async () => {
     const events = [
       createNexusEvent({
         sessionId: 'session-1',
@@ -125,8 +220,8 @@ describe('SessionHistoryService', () => {
 
     const store = { list: () => events } as unknown as EventStore;
     const service = new SessionHistoryService(store);
-    expect(service.load('session-1')).toEqual([{ role: 'user', content: '新问题' }]);
-    expect(service.load('session-1', 'user-2')).toEqual([]);
+    expect(await service.load('session-1')).toEqual([{ role: 'user', content: '新问题' }]);
+    expect(await service.load('session-1', 'user-2')).toEqual([]);
   });
 
   it('rehydrates image references from user messages', async () => {
@@ -149,14 +244,14 @@ describe('SessionHistoryService', () => {
 
     try {
       const store = { list: () => events } as unknown as EventStore;
-      const history = new SessionHistoryService(store).load('session-1');
+      const history = await new SessionHistoryService(store).load('session-1');
       expect(history[0]?.images).toEqual([{ mimeType: 'image/png', data: 'AQID' }]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
 
-  it('adds a placeholder result for an interrupted tool call', () => {
+  it('adds a placeholder result for an interrupted tool call', async () => {
     const events = [
       createNexusEvent({
         sessionId: 'session-1',
@@ -181,7 +276,7 @@ describe('SessionHistoryService', () => {
     ] as NexusEvent[];
 
     const store = { list: () => events } as unknown as EventStore;
-    const history = new SessionHistoryService(store).load('session-1');
+    const history = await new SessionHistoryService(store).load('session-1');
 
     expect(history.at(-1)).toMatchObject({
       role: 'tool',
@@ -190,7 +285,7 @@ describe('SessionHistoryService', () => {
     expect(history.at(-1)?.content).toContain('TOOL_RESULT_MISSING');
   });
 
-  it('appends structured file references to replayed user messages', () => {
+  it('appends structured file references to replayed user messages', async () => {
     const events = [
       createNexusEvent({
         sessionId: 'session-1',
@@ -206,7 +301,7 @@ describe('SessionHistoryService', () => {
     ] as NexusEvent[];
 
     const store = { list: () => events } as unknown as EventStore;
-    const history = new SessionHistoryService(store).load('session-1');
+    const history = await new SessionHistoryService(store).load('session-1');
 
     expect(history[0]).toMatchObject({
       role: 'user',

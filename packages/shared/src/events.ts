@@ -205,6 +205,7 @@ export const eventPayloadSchemas = {
     afterTokens: z.number().nonnegative(),
     strategy: z.string(),
     summaryRef: z.string().optional(),
+    snapshotRef: z.string().optional(),
     artifactIds: z.array(z.string()).optional()
   }),
   'skill.activated': z.object({

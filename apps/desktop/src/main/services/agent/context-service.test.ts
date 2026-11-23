@@ -60,6 +60,7 @@ describe('AgentContextService', () => {
     const toolMessage = result.messages.at(-1);
 
     expect(result.compacted).toBe(true);
+    expect(result.snapshotRef).toBeTruthy();
     expect(result.artifactIds).toHaveLength(1);
     expect(toolMessage?.content).toContain('"truncated":true');
     expect(toolMessage?.content.length).toBeLessThan(2_000);
@@ -88,6 +89,7 @@ describe('AgentContextService', () => {
     expect(result.compacted).toBe(true);
     expect(result.strategies).toContain('summarized');
     expect(result.summaryRef).toBeTruthy();
+    expect(result.snapshotRef).toBeTruthy();
     expect(result.usage).toMatchObject({ inputTokens: 100, outputTokens: 20 });
     expect(result.messages[0]).toEqual(messages[0]);
     expect(result.messages[1]?.role).toBe('user');

@@ -417,6 +417,43 @@ describe('projectEvents', () => {
     expect(projection.running).toBe(false);
   });
 
+  it('shows only one meaningful compaction notice and hides tool-output truncation', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'context.compacted',
+        payload: { beforeTokens: 100, afterTokens: 80, strategy: 'tool_output_truncated' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'context.compacted',
+        payload: { beforeTokens: 120, afterTokens: 90, strategy: 'tool_output_truncated' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'context.compacted',
+        payload: { beforeTokens: 140, afterTokens: 60, strategy: 'summarized' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 4,
+        type: 'context.compacted',
+        payload: { beforeTokens: 160, afterTokens: 70, strategy: 'summarized' }
+      })
+    ]);
+
+    const notices = projection.messages.filter((message) => message.role === 'system');
+    expect(notices).toHaveLength(1);
+    expect(notices[0]?.content).toContain('上下文压缩');
+  });
+
   it('projects run failures as an assistant error bubble', () => {
     const projection = projectEvents([
       event({

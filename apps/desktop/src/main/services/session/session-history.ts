@@ -6,6 +6,7 @@ import { readFileSync, statSync } from 'node:fs';
 import type { ChatImage, ChatMessage, ProviderToolCall } from '@nexus/providers';
 import type { EventPayloadMap } from '@shared/events';
 import { appendFileReferences } from '@shared/files';
+import type { ArtifactService } from '../artifacts/artifact-service';
 import type { EventStore } from './event-store';
 
 const MAX_HISTORY_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -33,12 +34,15 @@ const loadHistoryImages = (
  * 把单会话事件转换为 ChatMessage；工具调用与结果按事件顺序配对。
  */
 export class SessionHistoryService {
-  constructor(private readonly events: EventStore) {}
+  constructor(
+    private readonly events: EventStore,
+    private readonly artifacts?: ArtifactService
+  ) {}
 
   /**
    * 重建历史消息；跳过运行控制事件与审批事件本身。
    */
-  load(sessionId: string, beforeMessageId?: string): ChatMessage[] {
+  async load(sessionId: string, beforeMessageId?: string): Promise<ChatMessage[]> {
     const messages: ChatMessage[] = [];
     const approvalToCall = new Map<string, string>();
     const approvalByCall = new Map<string, 'approved' | 'rejected'>();
@@ -70,15 +74,49 @@ export class SessionHistoryService {
         .filter((event) => event.type === 'message.superseded')
         .map((event) => (event.payload as EventPayloadMap['message.superseded']).messageId)
     );
-    let sourceEvents = allEvents;
+    let boundary = allEvents.length;
     if (beforeMessageId) {
-      const boundary = allEvents.findIndex(
+      const found = allEvents.findIndex(
         (event) =>
           event.type === 'message.completed' &&
           (event.payload as EventPayloadMap['message.completed']).messageId === beforeMessageId
       );
-      if (boundary >= 0) sourceEvents = allEvents.slice(0, boundary);
+      if (found >= 0) boundary = found;
     }
+
+    // 使用最近一次压缩快照，避免每次 Run 都从完整历史重新压缩。
+    let sourceStart = 0;
+    if (this.artifacts) {
+      for (let index = boundary - 1; index >= 0; index -= 1) {
+        const candidate = allEvents[index];
+        if (candidate?.type !== 'context.compacted') continue;
+        const snapshotRef = (candidate.payload as EventPayloadMap['context.compacted']).snapshotRef;
+        if (!snapshotRef) continue;
+        const editedAfterSnapshot = allEvents
+          .slice(index + 1, boundary)
+          .some(
+            (event) =>
+              event.type === 'message.edited' ||
+              event.type === 'message.regenerated' ||
+              event.type === 'message.superseded'
+          );
+        if (editedAfterSnapshot) break;
+        const stored = await this.artifacts.read(sessionId, snapshotRef);
+        if (!stored) break;
+        try {
+          const parsed: unknown = JSON.parse(stored.content);
+          if (!Array.isArray(parsed)) break;
+          messages.push(
+            ...(parsed as ChatMessage[]).filter((message) => message.role !== 'system')
+          );
+          sourceStart = index + 1;
+        } catch {
+          // 快照损坏时回退到完整事件历史
+        }
+        break;
+      }
+    }
+    const sourceEvents = allEvents.slice(sourceStart, boundary);
 
     for (const event of sourceEvents) {
       if (event.type === 'message.completed') {

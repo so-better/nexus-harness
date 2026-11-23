@@ -100,6 +100,7 @@ export class AgentContextService {
 
     let usage: UsageSummary | undefined;
     let summaryRef: string | undefined;
+    let snapshotRef: string | undefined;
     let summaryFailed = false;
     if (estimateMessagesTokens(working, tools) > this.budget.compactAt) {
       const canSummarize = this.splitForSummary(working) !== undefined;
@@ -133,6 +134,20 @@ export class AgentContextService {
       );
     }
 
+    if (strategies.length) {
+      try {
+        const snapshot = await this.options.artifacts.saveText(
+          this.options.sessionId,
+          'context-history',
+          JSON.stringify(working.filter((message) => message.role !== 'system')),
+          this.options.runId === undefined ? {} : { runId: this.options.runId }
+        );
+        snapshotRef = snapshot.artifactId;
+      } catch {
+        // 快照落盘失败时退回事件历史重建，不阻塞任务
+      }
+    }
+
     return {
       messages: working,
       compacted: strategies.length > 0,
@@ -140,6 +155,7 @@ export class AgentContextService {
       afterTokens,
       ...(strategies.length ? { strategies } : {}),
       ...(summaryRef === undefined ? {} : { summaryRef }),
+      ...(snapshotRef === undefined ? {} : { snapshotRef }),
       ...(artifactIds.length ? { artifactIds } : {}),
       ...(usage === undefined ? {} : { usage })
     };

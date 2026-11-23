@@ -57,6 +57,17 @@ describe('cache service', () => {
     await expect(readFile(join(directories.files, 'session-1', 'output.txt'))).rejects.toThrow();
   });
 
+  it('keeps context-history snapshots when clearing artifacts', async () => {
+    await writeFile(join(directories.artifacts, 'context-history-snapshot.txt'), 'snapshot');
+
+    await clearCache(directories, 'artifacts');
+
+    await expect(readFile(join(directories.artifacts, 'artifact.txt'))).rejects.toThrow();
+    await expect(
+      readFile(join(directories.artifacts, 'context-history-snapshot.txt'), 'utf8')
+    ).resolves.toBe('snapshot');
+  });
+
   it('clears MCP scratch files without deleting MCP config or workdir', async () => {
     const info = await clearCache(directories, 'mcp');
 
