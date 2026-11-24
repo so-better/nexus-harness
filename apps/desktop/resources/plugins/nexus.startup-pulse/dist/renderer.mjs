@@ -76,6 +76,7 @@ export function activate(ctx) {
     const orb = document.createElement('div');
     orb.style.cssText = [
       'position:relative',
+      'grid-area:1 / 1',
       'z-index:2',
       'width:clamp(72px, 10vw, 104px)',
       'height:clamp(72px, 10vw, 104px)',
@@ -91,6 +92,7 @@ export function activate(ctx) {
     core.textContent = 'Nexus';
     core.style.cssText = [
       'position:relative',
+      'grid-area:1 / 1',
       'z-index:3',
       'font:600 clamp(34px, 5vw, 56px)/1 var(--nh-font-sans)',
       'letter-spacing:-0.045em',
@@ -101,7 +103,15 @@ export function activate(ctx) {
       'will-change:opacity,filter,transform'
     ].join(';');
 
-    stage.append(flash, orb, core);
+    const lockup = document.createElement('div');
+    lockup.style.cssText = [
+      'position:relative',
+      'z-index:2',
+      'display:grid',
+      'place-items:center'
+    ].join(';');
+    lockup.append(orb, core);
+    stage.append(flash, lockup);
     root.appendChild(stage);
     element.appendChild(root);
 
