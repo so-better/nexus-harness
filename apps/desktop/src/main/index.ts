@@ -52,6 +52,11 @@ import { getPluginHost, setPluginHost } from './services/plugins/plugin-host-ins
 
 app.setName('Nexus');
 
+// Electron E2E 使用隔离 userData，避免影响真实用户数据
+if (process.env.NEXUS_E2E_USER_DATA) {
+  app.setPath('userData', process.env.NEXUS_E2E_USER_DATA);
+}
+
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'nexus-plugin',

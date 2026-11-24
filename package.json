@@ -19,7 +19,9 @@
     "postinstall": "pnpm --filter @nexus/desktop rebuild:native",
     "dist:mac": "pnpm --filter @nexus/desktop dist:mac",
     "dist:win": "pnpm --filter @nexus/desktop dist:win",
-    "dist": "pnpm --filter @nexus/desktop dist"
+    "dist": "pnpm --filter @nexus/desktop dist",
+    "test:e2e:app": "pnpm build && node apps/desktop/e2e/full-smoke.mjs",
+    "test:e2e": "pnpm test:e2e:app"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -40,6 +42,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-vue": "^10.12.1",
     "globals": "^17.14.0",
+    "playwright-core": "^1.65.1",
     "postcss-html": "^2.0.1",
     "postcss-less": "^7.1.1",
     "prettier": "^3.10.1",
