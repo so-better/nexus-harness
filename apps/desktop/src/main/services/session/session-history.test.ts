@@ -355,4 +355,37 @@ describe('SessionHistoryService', () => {
       content: '看这个\n\n@/workspace/a.ts'
     });
   });
+
+  it('prefers modelOutput for tool messages while keeping full output in events', async () => {
+    const events = [
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: { messageId: 'user-1', role: 'user', content: '读取文件' }
+      }),
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 2,
+        type: 'tool.requested',
+        payload: { toolCallId: 'call-1', name: 'run_command', input: { command: 'cat big.log' } }
+      }),
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 3,
+        type: 'tool.completed',
+        payload: {
+          toolCallId: 'call-1',
+          ok: true,
+          output: 'FULL OUTPUT',
+          modelOutput: '{"truncated":true,"preview":"..."}'
+        }
+      })
+    ] as NexusEvent[];
+
+    const store = { list: () => events } as unknown as EventStore;
+    const history = await new SessionHistoryService(store).load('session-1');
+    const toolMessage = history.find((message) => message.role === 'tool');
+    expect(toolMessage?.content).toBe('{"truncated":true,"preview":"..."}');
+  });
 });

@@ -773,7 +773,7 @@ interface ProviderCapabilities {
 - AI 的 `run_command` 在独立终端标签中执行并捕获输出，不主动打开面板、不启动外部终端程序；用户可打开面板查看，命令仍受审批、危险命令拦截、超时与输出上限约束。常驻服务可传 `detach: true`，立即返回 terminalId，不设置超时，退出后标签保留为已退出状态。AI 可通过 `terminal_read` / `terminal_wait` 读取当前会话内已授予 AI 访问权限的用户终端或 AI 终端输出，通过 `terminal_write` 写入文本或按键；用户终端需在面板中显式授予 AI 访问，或由 AI 调用 `terminal_request_access` 发起审批；写入与关闭需要审批，终端内容可能包含敏感信息；未授权时工具返回 `TERMINAL_ACCESS_DENIED` 并提示用户在终端标签右键授权。AI 的 `terminal_create` 和 `terminal_write` 只能使用已授权工作区目录，并受危险命令拦截约束。
 - 关闭正在运行的终端必须二次确认；命令内不允许自行追加 `&` 或 `nohup`。
 - 超时后终止整个进程树；Windows 使用 ConPTY，macOS/Linux 使用 PTY。
-- 输出超过上限时截断并标记；`run_command` 的超长输出落 artifact、只回预览（头部 + 尾部）与 terminalId，完整内容保留在终端并可经 `terminal_read` 获取；默认上限可配置，避免一次命令撑爆上下文。
+- 输出超过上限时截断处理，但不改变 UI 展示：`run_command` 的 `tool.completed.output` 仍是完整输出（前端无感），模型上下文改用 `modelOutput`（头部 + 尾部预览 + terminalId），完整内容保留在终端并可经 `terminal_read` 获取；默认上限可配置，避免一次命令撑爆上下文。
 - 打包后的 GUI 进程需要补齐 PATH，确保能找到 `node`、`npx`、`python` 等运行时。
 - 工作区文件写入前必须展示 diff，并创建逐文件检查点；写入 `files` 内部存储不触发工作区写审批。
 
@@ -2003,7 +2003,7 @@ CHANGELOG.md         # 版本变更记录
 | `message.superseded` | `messageId`、`reason` | 旧回复被编辑或重生成替代 |
 | `context.compacted` | `beforeTokens`、`afterTokens`、`strategy`、`summaryRef`、`snapshotRef`、`artifactIds` | 上下文自动或手动压缩，含工具输出、摘要与历史快照引用 |
 | `tool.requested` | `toolCallId`、`name`、`input` | 发起工具调用 |
-| `tool.completed` | `toolCallId`、`ok`、`output`、`artifactId`、`bytes` | 工具执行完成；长输出转为 Artifact 引用 |
+| `tool.completed` | `toolCallId`、`ok`、`output`、`modelOutput`、`artifactId`、`bytes` | 工具执行完成；`output` 供 UI，长输出时 `modelOutput` 为模型侧截断预览与 terminalId |
 | `tool.failed` | `toolCallId`、`error` | 工具执行失败 |
 | `approval.requested` | `approvalId`、`toolCallId`、`scope` | 请求审批 |
 | `approval.resolved` | `approvalId`、`decision` | 审批完成 |

@@ -176,17 +176,22 @@ describe('AgentService terminal integration', () => {
     );
 
     const completed = events.find((event) => event.type === 'tool.completed');
-    expect(completed?.payload).toMatchObject({
-      artifactId: expect.any(String),
-      bytes: expect.any(Number)
-    });
-    const output = JSON.parse((completed?.payload as { output: string }).output) as {
-      truncated: boolean;
-      terminalId: string;
-      preview: string;
+    const payload = completed?.payload as {
+      output?: string;
+      modelOutput?: string;
+      artifactId?: string;
+      bytes?: number;
     };
-    expect(output.truncated).toBe(true);
-    expect(output.terminalId).toBe('terminal-big');
-    expect(output.preview.length).toBeLessThanOrEqual(1_200);
+    // UI 仍拿到完整输出（无感），模型侧只拿截断预览
+    expect(payload.output).toBe('x'.repeat(5_000));
+    expect(payload.artifactId).toBeUndefined();
+    const modelOutput = JSON.parse(payload.modelOutput ?? '{}') as {
+      truncated?: boolean;
+      terminalId?: string;
+      preview?: string;
+    };
+    expect(modelOutput.truncated).toBe(true);
+    expect(modelOutput.terminalId).toBe('terminal-big');
+    expect((modelOutput.preview ?? '').length).toBeLessThanOrEqual(1_200);
   });
 });

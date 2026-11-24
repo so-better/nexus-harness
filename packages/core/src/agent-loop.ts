@@ -19,6 +19,8 @@ import { ContextLimitError, type ContextPreparer } from './context';
 export interface ToolExecutionResult {
   ok: boolean;
   output: string;
+  /** 仅用于模型上下文的内容；缺省时使用 output。用于后端截断而不影响 UI 展示 */
+  modelOutput?: string;
   artifactId?: string;
   bytes?: number;
   error?: { code: string; message: string };
@@ -264,6 +266,9 @@ export class AgentLoop {
             toolCallId: call.id,
             ok: true,
             output: toolResult.output,
+            ...(toolResult.modelOutput === undefined
+              ? {}
+              : { modelOutput: toolResult.modelOutput }),
             ...(toolResult.artifactId === undefined ? {} : { artifactId: toolResult.artifactId }),
             ...(toolResult.bytes === undefined ? {} : { bytes: toolResult.bytes })
           });
@@ -279,7 +284,9 @@ export class AgentLoop {
         this.messages.push({
           role: 'tool',
           toolCallId: call.id,
-          content: toolResult.ok ? toolResult.output : JSON.stringify(toolResult.error),
+          content: toolResult.ok
+            ? (toolResult.modelOutput ?? toolResult.output)
+            : JSON.stringify(toolResult.error),
           ...(approvalStatus === undefined ? {} : { approvalStatus })
         });
       }

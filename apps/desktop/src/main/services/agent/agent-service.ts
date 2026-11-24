@@ -1195,39 +1195,16 @@ ${assistant.slice(0, 3_000)}`;
       };
 
       /**
-       * run_command 输出封顶：超长时落 artifact，只回预览与 terminalId。
-       * 完整输出仍保留在终端，模型可用 terminal_read 取更多，避免大日志撑爆上下文。
+       * run_command 模型侧输出：超长时只回预览与 terminalId；UI 仍展示完整输出。
+       * 完整输出保留在终端，模型可用 terminal_read 取更多，避免大日志撑爆上下文。
        */
-      const capCommandOutput = async (
-        output: string,
-        terminalId: string
-      ): Promise<{ output: string; artifactId?: string; bytes?: number }> => {
-        if (output.length <= TOOL_OUTPUT_ARTIFACT_CHAR_LIMIT) return { output };
-        try {
-          const stored = await artifacts.saveText(input.sessionId, 'tool-run_command', output, {
-            runId
-          });
-          return {
-            output: JSON.stringify({
-              truncated: true,
-              terminalId,
-              artifactId: stored.artifactId,
-              bytes: stored.bytes,
-              preview: commandOutputPreview(output)
-            }),
-            artifactId: stored.artifactId,
-            bytes: stored.bytes
-          };
-        } catch {
-          return {
-            output: JSON.stringify({
-              truncated: true,
-              terminalId,
-              preview: commandOutputPreview(output),
-              note: '完整输出可在终端面板查看'
-            })
-          };
-        }
+      const buildCommandModelOutput = (output: string, terminalId: string): string | undefined => {
+        if (output.length <= TOOL_OUTPUT_ARTIFACT_CHAR_LIMIT) return undefined;
+        return JSON.stringify({
+          truncated: true,
+          terminalId,
+          preview: commandOutputPreview(output)
+        });
       };
 
       const executeTool = async (call: { id?: string; name: string; arguments: unknown }) => {
@@ -2085,12 +2062,11 @@ ${assistant.slice(0, 3_000)}`;
                 }
               };
             }
-            const capped = await capCommandOutput(result.output, task.terminal.id);
+            const modelOutput = buildCommandModelOutput(result.output, task.terminal.id);
             return {
               ok: true,
-              output: capped.output,
-              ...(capped.artifactId === undefined ? {} : { artifactId: capped.artifactId }),
-              ...(capped.bytes === undefined ? {} : { bytes: capped.bytes })
+              output: result.output,
+              ...(modelOutput === undefined ? {} : { modelOutput })
             };
           } catch (error) {
             return {

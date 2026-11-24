@@ -547,4 +547,41 @@ describe('AgentLoop', () => {
     expect(requests[0]?.tools?.map((tool) => tool.name)).toEqual(['read_file']);
     expect(requests[1]?.tools?.map((tool) => tool.name)).toEqual(['read_file', 'write_file']);
   });
+
+  it('keeps full output for the event but uses modelOutput in the model context', async () => {
+    const { bus, events } = createCollector();
+    const requests: ProviderRequest[] = [];
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
+      async *stream(request) {
+        requests.push(request);
+        if (requests.length === 1) {
+          yield { type: 'tool-call-end', toolCall: { id: 'c1', name: 'read_file', arguments: {} } };
+          yield { type: 'finish', reason: 'tool_calls' };
+          return;
+        }
+        yield { type: 'text-delta', text: '完成' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+
+    const loop = new AgentLoop({
+      provider,
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '读取' }],
+      tools: [readTool],
+      permissionGateway: new PermissionGateway(['read']),
+      executeTool: async () => ({ ok: true, output: 'FULL OUTPUT', modelOutput: 'PREVIEW' }),
+      eventBus: bus
+    });
+
+    await loop.run();
+
+    const completed = events.find((event) => event.type === 'tool.completed');
+    expect(completed?.payload).toMatchObject({ output: 'FULL OUTPUT', modelOutput: 'PREVIEW' });
+    // 第二次请求里，工具消息内容应为 modelOutput，而非完整输出
+    const toolMessage = requests[1]?.messages.find((message) => message.role === 'tool');
+    expect(toolMessage?.content).toBe('PREVIEW');
+  });
 });

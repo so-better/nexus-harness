@@ -196,7 +196,11 @@ export class SessionHistoryService {
             : (event.payload as EventPayloadMap['tool.failed']).toolCallId;
         const content =
           event.type === 'tool.completed'
-            ? ((event.payload as EventPayloadMap['tool.completed']).output ?? '')
+            ? (() => {
+                const payload = event.payload as EventPayloadMap['tool.completed'];
+                // 模型上下文优先使用截断预览，UI 仍用 output 展示完整内容
+                return payload.modelOutput ?? payload.output ?? '';
+              })()
             : JSON.stringify((event.payload as EventPayloadMap['tool.failed']).error);
         pendingCalls.delete(toolCallId);
         const approvalStatus = approvalByCall.get(toolCallId);

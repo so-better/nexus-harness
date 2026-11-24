@@ -126,6 +126,8 @@ export const eventPayloadSchemas = {
     toolCallId: z.string(),
     ok: z.boolean(),
     output: z.string().optional(),
+    /** 仅用于模型上下文的内容（可为截断预览）；UI 仍使用 output */
+    modelOutput: z.string().optional(),
     artifactId: z.string().optional(),
     bytes: z.number().nonnegative().optional()
   }),
