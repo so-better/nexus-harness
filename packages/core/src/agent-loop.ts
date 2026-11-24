@@ -49,6 +49,8 @@ export interface AgentLoopOptions {
   model: string;
   messages: ChatMessage[];
   tools?: AgentToolDefinition[];
+  /** 每步动态返回当前可用工具；优先于 tools，用于按需加载 */
+  getTools?: () => AgentToolDefinition[];
   blockedTools?: string[];
   executeTool?: ToolExecutor;
   eventBus?: EventBus;
@@ -96,6 +98,13 @@ export class AgentLoop {
   constructor(options: AgentLoopOptions) {
     this.options = options;
     this.messages = [...options.messages];
+  }
+
+  /**
+   * 读取当前生效的工具集；优先使用动态提供器，其次回退到静态 tools。
+   */
+  private currentTools(): AgentToolDefinition[] {
+    return this.options.getTools ? this.options.getTools() : (this.options.tools ?? []);
   }
 
   private emit<T extends NexusEventType>(type: T, payload: EventPayloadMap[T]): void {
@@ -313,6 +322,12 @@ export class AgentLoop {
         model: this.options.model,
         inputTokens: prepared.usage.inputTokens,
         outputTokens: prepared.usage.outputTokens,
+        ...(prepared.usage.cacheWriteTokens === undefined
+          ? {}
+          : { cacheWriteTokens: prepared.usage.cacheWriteTokens }),
+        ...(prepared.usage.cacheReadTokens === undefined
+          ? {}
+          : { cacheReadTokens: prepared.usage.cacheReadTokens }),
         ...(prepared.usage.cost === undefined ? {} : { cost: prepared.usage.cost })
       });
     }
@@ -342,10 +357,11 @@ export class AgentLoop {
     reasoningLimit?: boolean;
     error?: { code: string; message: string };
   }> {
+    const tools = this.currentTools();
     const request: ProviderRequest = {
       model: this.options.model,
       messages: [...this.messages],
-      ...(this.options.tools ? { tools: this.options.tools } : {}),
+      ...(tools.length ? { tools } : {}),
       ...(this.options.extraParams ? { extraParams: this.options.extraParams } : {}),
       ...(this.options.maxTokens === undefined ? {} : { maxTokens: this.options.maxTokens }),
       ...(this.options.signal ? { signal: this.options.signal } : {})
@@ -425,6 +441,12 @@ export class AgentLoop {
                 model: this.options.model,
                 inputTokens: event.usage.inputTokens,
                 outputTokens: event.usage.outputTokens,
+                ...(event.usage.cacheWriteTokens === undefined
+                  ? {}
+                  : { cacheWriteTokens: event.usage.cacheWriteTokens }),
+                ...(event.usage.cacheReadTokens === undefined
+                  ? {}
+                  : { cacheReadTokens: event.usage.cacheReadTokens }),
                 ...(event.usage.cost === undefined ? {} : { cost: event.usage.cost })
               });
             }
@@ -478,7 +500,7 @@ export class AgentLoop {
   private async authorizeTool(
     call: ProviderToolCall
   ): Promise<{ code: string; message: string } | undefined> {
-    const tool = this.options.tools?.find((item) => item.name === call.name);
+    const tool = this.currentTools().find((item) => item.name === call.name);
     if (!tool) {
       if (this.options.blockedTools?.includes(call.name)) {
         return { code: 'TOOL_MODE_DENIED', message: `当前模式不可用工具：${call.name}` };

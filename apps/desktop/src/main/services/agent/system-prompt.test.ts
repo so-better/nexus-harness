@@ -45,10 +45,11 @@ describe('agent system prompt', () => {
   });
 
   it('keeps every mode and workspace variant within the prompt budget', () => {
+    // 预算较原 600 略放宽，容纳按需加载的单行提示；其带来的工具 schema 节省远大于此
     for (const mode of ['plan', 'build'] as const) {
       for (const hasWorkspace of [true, false]) {
         expect(estimateTextTokens(buildAgentSystemPrompt({ mode, hasWorkspace }))).toBeLessThan(
-          600
+          640
         );
       }
     }

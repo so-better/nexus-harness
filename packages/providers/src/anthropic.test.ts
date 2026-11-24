@@ -57,6 +57,143 @@ describe('AnthropicProvider', () => {
     expect(normalizeOllamaBaseUrl('http://127.0.0.1:11434/v1/')).toBe('http://127.0.0.1:11434/v1');
   });
 
+  it('adds prompt cache control and counts cache tokens in usage', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      const chunks = [
+        sse({
+          type: 'message_start',
+          message: {
+            usage: {
+              input_tokens: 10,
+              cache_creation_input_tokens: 5,
+              cache_read_input_tokens: 7
+            }
+          }
+        }),
+        sse({
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'text' }
+        }),
+        sse({
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'text_delta', text: 'hi' }
+        }),
+        sse({ type: 'content_block_stop', index: 0 }),
+        sse({
+          type: 'message_delta',
+          delta: { stop_reason: 'end_turn' },
+          usage: { output_tokens: 3 }
+        }),
+        sse({ type: 'message_stop' })
+      ];
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const encoder = new TextEncoder();
+          for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+          controller.close();
+        }
+      });
+      return new Response(body, { status: 200 });
+    });
+
+    const provider = new AnthropicProvider({
+      baseUrl: 'https://example.com/v1',
+      apiKey: 'key',
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+    const events: ProviderStreamEvent[] = [];
+    for await (const event of provider.stream({
+      model: 'claude',
+      messages: [
+        { role: 'system', content: '规则' },
+        { role: 'user', content: 'hi' }
+      ],
+      tools: [
+        { name: 'a', description: 'A', inputSchema: { type: 'object' } },
+        { name: 'b', description: 'B', inputSchema: { type: 'object' } }
+      ]
+    })) {
+      events.push(event);
+    }
+
+    const system = requestBody?.['system'] as Array<Record<string, unknown>> | undefined;
+    expect(system?.[0]).toMatchObject({
+      type: 'text',
+      text: '规则',
+      cache_control: { type: 'ephemeral' }
+    });
+    const tools = requestBody?.['tools'] as Array<Record<string, unknown>>;
+    expect(tools[0]?.['cache_control']).toBeUndefined();
+    expect(tools[1]?.['cache_control']).toEqual({ type: 'ephemeral' });
+
+    const usage = events.find((event) => event.type === 'usage');
+    expect(usage?.usage.inputTokens).toBe(22);
+    expect(usage?.usage.cacheWriteTokens).toBe(5);
+    expect(usage?.usage.cacheReadTokens).toBe(7);
+  });
+
+  it('retries without cache control when the endpoint rejects it', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    let call = 0;
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      call += 1;
+      if (call === 1) return new Response('cache_control unsupported', { status: 400 });
+      const chunks = [
+        sse({ type: 'message_start', message: { usage: { input_tokens: 3 } } }),
+        sse({
+          type: 'message_delta',
+          delta: { stop_reason: 'end_turn' },
+          usage: { output_tokens: 1 }
+        }),
+        sse({ type: 'message_stop' })
+      ];
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const encoder = new TextEncoder();
+          for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+          controller.close();
+        }
+      });
+      return new Response(body, { status: 200 });
+    });
+
+    const provider = new AnthropicProvider({
+      baseUrl: 'https://example.com/v1',
+      apiKey: 'key',
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+    const events: ProviderStreamEvent[] = [];
+    for await (const event of provider.stream({
+      model: 'claude',
+      messages: [
+        { role: 'system', content: '规则' },
+        { role: 'user', content: 'hi' }
+      ],
+      tools: [{ name: 'a', description: 'A', inputSchema: { type: 'object' } }]
+    })) {
+      events.push(event);
+    }
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect((bodies[0]?.['system'] as Array<Record<string, unknown>>)[0]?.['cache_control']).toEqual(
+      {
+        type: 'ephemeral'
+      }
+    );
+    expect(bodies[1]?.['system']).toBe('规则');
+    expect((bodies[0]?.['tools'] as Array<Record<string, unknown>>)[0]?.['cache_control']).toEqual({
+      type: 'ephemeral'
+    });
+    expect(
+      (bodies[1]?.['tools'] as Array<Record<string, unknown>>)[0]?.['cache_control']
+    ).toBeUndefined();
+  });
+
   it('keeps malformed tool arguments as a structured value', async () => {
     const fetchImpl = vi.fn(async () => {
       const body = new ReadableStream<Uint8Array>({

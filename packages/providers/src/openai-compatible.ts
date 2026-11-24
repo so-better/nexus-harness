@@ -99,6 +99,27 @@ const toOpenAITool = (tool: ToolSchema): Record<string, unknown> => ({
 });
 
 /**
+ * 需要回传 reasoning 的最近 assistant 消息条数；更早的 reasoning 不再回传，避免历史无限累积。
+ */
+const MAX_REASONING_PASSBACK_MESSAGES = 8;
+
+/**
+ * 选出需要回传 reasoning 的 assistant 消息下标（从末尾往前取最近若干条）。
+ */
+const selectReasoningPassbackIndices = (messages: readonly ChatMessage[]): Set<number> => {
+  const indices = new Set<number>();
+  for (
+    let index = messages.length - 1;
+    index >= 0 && indices.size < MAX_REASONING_PASSBACK_MESSAGES;
+    index -= 1
+  ) {
+    const message = messages[index];
+    if (message?.role === 'assistant' && message.reasoning?.trim()) indices.add(index);
+  }
+  return indices;
+};
+
+/**
  * 尽力解析流式工具参数；失败时保留原始文本。
  */
 const parseArguments = (text: string): unknown => {
@@ -150,6 +171,9 @@ export class OpenAICompatibleProvider implements ChatProvider {
       typeof this.config.reasoningPassback === 'function'
         ? this.config.reasoningPassback(request.model)
         : this.config.reasoningPassback === true;
+    const reasoningPassbackIndices = reasoningPassback
+      ? selectReasoningPassbackIndices(request.messages)
+      : new Set<number>();
 
     const response = await fetchImpl(url, {
       method: 'POST',
@@ -160,7 +184,9 @@ export class OpenAICompatibleProvider implements ChatProvider {
       },
       body: JSON.stringify({
         model: request.model,
-        messages: request.messages.map((message) => toOpenAIMessage(message, reasoningPassback)),
+        messages: request.messages.map((message, index) =>
+          toOpenAIMessage(message, reasoningPassbackIndices.has(index))
+        ),
         ...(request.tools?.length ? { tools: request.tools.map(toOpenAITool) } : {}),
         stream: true,
         stream_options: { include_usage: true },

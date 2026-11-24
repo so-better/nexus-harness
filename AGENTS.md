@@ -9,7 +9,7 @@
 - 调整前说明动机与影响范围，避免为了短期便利破坏分层原则。
 - 结构性变更与规范变更必须在同一次提交中同步更新本文件。
 - 若新结构与本文冲突，以更新后的本文为准，不得只改代码不改文档。
-- 产品定位、能力分层、设计原则等讨论结论也应沉淀到本文件；内容过多时可拆分到 `docs/`，但本文件必须保留索引与结论。
+- 产品定位、能力分层、设计原则等讨论结论也应沉淀到本文件，保持与实际代码一致。
 - 定期回顾本文件，删除已失效的约定，保持与实际代码一致。
 
 ### 目录
@@ -291,9 +291,6 @@ nexus-harness/
 ├─ package.json                  # workspace 根脚本与统一依赖版本
 ├─ pnpm-workspace.yaml
 ├─ tsconfig.base.json
-├─ docs/                         # 产品、架构与决策记录
-│  ├─ decisions/                 # ADR 决策记录
-│  └─ ...
 ├─ apps/
 │  └─ desktop/
 │     ├─ build/                  # 应用图标与打包资源
@@ -494,7 +491,9 @@ interface ProviderCapabilities {
 - 仅对瞬时错误重试：指数退避 + 抖动，遵守 `Retry-After`；认证失败、参数错误与内容策略拒绝不重试。
 - 分别设置连接、首字节与流空闲超时；取消通过 `AbortSignal` 传播，关闭流后不再发起工具调用。
 - 速率限制按 provider/model 维度执行；并发请求数与排队上限可配置。
-- token 优先使用 provider 返回的 usage；缺失时使用本地估算，并在 UI 标记为估算值。
+- token 优先使用 provider 返回的 usage；缺失时使用本地估算，并在 UI 标记为估算值。提示缓存的读写 token 单独记录（`cacheReadTokens` / `cacheWriteTokens`），`inputTokens` 仍为总输入。
+- 提示缓存：Anthropic 对 system 与工具块设置 `cache_control` 复用稳定前缀；OpenAI 兼容/DeepSeek 依赖自动前缀缓存，需保持前缀稳定。不支持缓存的 Anthropic 兼容代理会在 400/422 时自动去掉 `cache_control` 重试一次。
+- reasoning 回传：OpenAI 兼容协议只回传最近若干条 assistant 的 reasoning（默认 8 条），避免长会话历史 reasoning 无限累积。
 - 模型回退只能由用户配置触发，禁止静默切换；发生回退必须记录事件。
 - 上下文超限错误触发一次压缩后重试；仍失败则中止并提示。
 - 流中断时保留已生成内容并标记未完成；重试不得重复已执行的工具调用。
@@ -648,10 +647,27 @@ interface ProviderCapabilities {
 | `theme_update` / `skin_apply` / `terminal_update_settings` / `terminal_create` / `terminal_write` / `terminal_close` / `terminal_request_access` | write | 是 |
 | `cache_clear` / `backup_export` / `backup_import` / `general_settings_update` | write | 是 |
 | `image_config_save` / `image_config_toggle` / `image_config_delete` | write | 是 |
+| `search_tools` | read | 否（系统内部） |
 
 `save_*` 工具写入 `<userData>/files`，不触发工作区写审批，但必须记录 `file.created` 并受大小与类型限制。`save_file` 支持文本与 Base64 二进制内容；`save_word` / `save_pdf` 使用 Markdown，`save_ppt` 支持模板化版式。
 
 本地二进制读取已接入：按 MIME 与扩展名选择专用读取器；图片作为视觉内容发送，PDF/Office/文本等可抽取格式转文本，其他二进制只保存文件引用，原始内容不得直接进入上下文。
+
+#### 工具分组与按需加载
+
+- 工具按领域分组：`core`（文件/命令、ask_user、search_tools、open_url、save_file、技能检索、记忆、知识库）、`web`、`media`、`office`、`terminal`、`appearance`、`maintenance`、`extensions`、`mcp`。
+- 自动选择统一由 `tool-selector` 完成：对内置工具与 MCP 工具使用同一套 BM25 + IDF「名称 + 描述」算法召回 top-N（默认 24），默认直接取前 K 个（`MAX_AUTO_TOOLS`=10）。不写死任何具体工具名或领域关键词，重排候选描述截断到 100 字。
+- 条件重排：仅当 Top-K 边界分数接近（相对分差小于阈值）或并列时，才调用当前对话模型从候选中挑选最终 K 个；分差清晰时不产生额外调用。
+- 重排调用失败、超时或输出非法时回退到 BM25 前 K 个，保证不因重排失败而丢工具；模型返回合法空数组时尊重“无需工具”的判断。重排调用记录 `usage.recorded`。候选不超过 K 时同样跳过重排。
+- 短指令（继续/再改）或空输入会把最近一条用户消息并入查询；MCP 与内置工具走同一条筛选流程。
+- 兜底：`search_tools(query)` 让模型随时按语义检索并加载内置或 MCP 工具，突破召回上限，是唯一的显式加载入口。
+- 默认只注入 `core`；其余内置工具与 MCP 工具默认不注入，由统一筛选按需加入，避免每次都注入整套工具 schema。
+- MCP：每 Run `listTools()` 取得全部真实工具后参与同一套筛选；模型可调用 `search_tools` 加载匹配的 MCP 工具。
+- 工具集每步动态读取；`search_tools` 加载后下一步请求即带上新 schema，并返回已加载的工具名。
+- 历史用过的工具按名称精确恢复（不整组加载），只恢复最近若干轮（默认 6）用过的工具，保证"继续/再改一下"同时避免长会话累积；不做会话级工具粘性。
+- 可选工具总量有上限（默认 24，常驻组除外），按自动筛选 → 历史用过 → `search_tools` 加载的优先级裁剪，防止历史或多次检索导致膨胀。
+- Plan 模式默认以只读组（`core`、`appearance`、`terminal`、`maintenance`、`extensions`）为基线，再与只读白名单求交。
+- 分组只影响 schema 注入，不改变执行、权限与审批；未注入工具调用返回 `TOOL_NOT_FOUND`（Plan 下已知写工具返回 `TOOL_MODE_DENIED`）。
 
 #### MCP 工具接入
 
@@ -757,7 +773,7 @@ interface ProviderCapabilities {
 - AI 的 `run_command` 在独立终端标签中执行并捕获输出，不主动打开面板、不启动外部终端程序；用户可打开面板查看，命令仍受审批、危险命令拦截、超时与输出上限约束。常驻服务可传 `detach: true`，立即返回 terminalId，不设置超时，退出后标签保留为已退出状态。AI 可通过 `terminal_read` / `terminal_wait` 读取当前会话内已授予 AI 访问权限的用户终端或 AI 终端输出，通过 `terminal_write` 写入文本或按键；用户终端需在面板中显式授予 AI 访问，或由 AI 调用 `terminal_request_access` 发起审批；写入与关闭需要审批，终端内容可能包含敏感信息；未授权时工具返回 `TERMINAL_ACCESS_DENIED` 并提示用户在终端标签右键授权。AI 的 `terminal_create` 和 `terminal_write` 只能使用已授权工作区目录，并受危险命令拦截约束。
 - 关闭正在运行的终端必须二次确认；命令内不允许自行追加 `&` 或 `nohup`。
 - 超时后终止整个进程树；Windows 使用 ConPTY，macOS/Linux 使用 PTY。
-- 输出超过上限时截断并标记；默认上限可配置，避免一次命令撑爆上下文。
+- 输出超过上限时截断并标记；`run_command` 的超长输出落 artifact、只回预览（头部 + 尾部）与 terminalId，完整内容保留在终端并可经 `terminal_read` 获取；默认上限可配置，避免一次命令撑爆上下文。
 - 打包后的 GUI 进程需要补齐 PATH，确保能找到 `node`、`npx`、`python` 等运行时。
 - 工作区文件写入前必须展示 diff，并创建逐文件检查点；写入 `files` 内部存储不触发工作区写审批。
 
@@ -1817,7 +1833,7 @@ CHANGELOG.md         # 版本变更记录
 
 - 外部贡献遵循 Conventional Commits 与本文工程规范。
 - PR 必须包含测试或说明无法测试的原因。
-- 涉及架构、协议、权限模型的变更必须先在 `docs/decisions/` 提交 ADR。
+- 涉及架构、协议、权限模型的变更，必须在 AGENTS.md 中同步记录结论与理由。
 - 插件、技能与 MCP 通过目录安装；在线市场与自动下载后续再设计。
 
 ---
@@ -2035,7 +2051,5 @@ CHANGELOG.md         # 版本变更记录
 | --- | --- |
 | `AGENTS.md` | 唯一强制性开发规范与索引 |
 | `README.md` | 产品介绍、安装与快速开始 |
-| `docs/decisions/` | 架构与产品决策记录（ADR） |
-| `docs/` 其他 | 详细设计、协议说明与评测报告 |
 
 新增文档必须在本文档索引中登记，避免规范与实现脱节。

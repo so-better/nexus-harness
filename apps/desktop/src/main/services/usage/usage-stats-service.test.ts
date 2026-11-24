@@ -41,6 +41,8 @@ describe('getUsageStats', () => {
         model: 'model-a',
         inputTokens: 100,
         outputTokens: 20,
+        cacheReadTokens: 30,
+        cacheWriteTokens: 10,
         cost: 0.01
       })
     );
@@ -125,6 +127,8 @@ describe('getUsageStats', () => {
     const result = getUsageStats(db, { sessionId: 'session-1', bucket: 'run' });
 
     expect(result.totals.totalTokens).toBe(180);
+    expect(result.totals.cacheReadTokens).toBe(30);
+    expect(result.totals.cacheWriteTokens).toBe(10);
     expect(result.series).toHaveLength(1);
     expect(result.series[0]?.key).toBe('run-1');
     expect(result.series[0]?.calls).toBe(2);

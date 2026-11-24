@@ -97,6 +97,23 @@ import {
   buildAgentSystemPrompt,
   buildEnvironmentContext
 } from './system-prompt';
+import {
+  DEFAULT_TOOL_GROUPS,
+  PLAN_TOOL_GROUPS,
+  TOOL_GROUP_IDS,
+  TOOL_GROUP_META,
+  searchToolsInputSchema,
+  searchToolsToolDefinition,
+  type ToolGroupId
+} from './tool-groups';
+import {
+  planAutoTools,
+  selectScoredTools,
+  selectToolsByRelevance,
+  type SelectableTool
+} from './tool-selector';
+import { rerankTools } from './tool-rerank';
+import { collectRecentUsedToolNames } from './tool-history';
 
 /**
  * 测试可注入 Provider 工厂；生产默认使用 OpenAI 兼容实现。
@@ -625,6 +642,7 @@ const runSkillScriptToolDefinition: AgentToolDefinition = {
 };
 
 const PLAN_ALLOWED_TOOLS = new Set([
+  'search_tools',
   'read_file',
   'list_dir',
   'glob',
@@ -664,6 +682,36 @@ const MCP_MANAGEMENT_TOOLS = new Set([
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const APP_MANAGEMENT_MIN_CONTEXT = 8_192;
+/**
+ * 自动筛选的最终注入数量（模型重排后的 K）。
+ */
+const MAX_AUTO_TOOLS = 10;
+/**
+ * BM25 召回候选数量（模型重排前的 N）。
+ */
+const RECALL_TOP_N = 24;
+/**
+ * 只恢复最近若干用户轮内用过的工具，避免长会话里历史工具无限累积。
+ */
+const RECENT_TOOL_TURNS = 6;
+/**
+ * 除常驻组外，单轮最多注入的可选工具数量（含自动筛选、历史、search_tools）。
+ */
+const MAX_OPTIONAL_TOOLS = 24;
+/**
+ * 命令输出预览：命令/日志的重要信息常在末尾，预览同时保留头部与尾部。
+ */
+const COMMAND_PREVIEW_HEAD = 400;
+
+/**
+ * 生成命令输出预览：短输出原样返回，长输出取头部 + 尾部，总长不超过预览上限。
+ */
+const commandOutputPreview = (output: string): string => {
+  if (output.length <= TOOL_OUTPUT_PREVIEW_CHAR_LIMIT) return output;
+  const marker = '\n...\n';
+  const tail = Math.max(0, TOOL_OUTPUT_PREVIEW_CHAR_LIMIT - COMMAND_PREVIEW_HEAD - marker.length);
+  return `${output.slice(0, COMMAND_PREVIEW_HEAD)}${marker}${output.slice(-tail)}`;
+};
 
 interface LoadedImage {
   image: ChatImage;
@@ -906,7 +954,15 @@ ${input.prompt.slice(0, 3_500)}
 助手：
 ${assistant.slice(0, 3_000)}`;
     let output = '';
-    let usage: { inputTokens: number; outputTokens: number; cost?: number } | undefined;
+    let usage:
+      | {
+          inputTokens: number;
+          outputTokens: number;
+          cost?: number;
+          cacheReadTokens?: number;
+          cacheWriteTokens?: number;
+        }
+      | undefined;
     const reportUsage = (): void => {
       if (!usage) return;
       eventBus.publish(
@@ -920,6 +976,12 @@ ${assistant.slice(0, 3_000)}`;
             model,
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
+            ...(usage.cacheWriteTokens === undefined
+              ? {}
+              : { cacheWriteTokens: usage.cacheWriteTokens }),
+            ...(usage.cacheReadTokens === undefined
+              ? {}
+              : { cacheReadTokens: usage.cacheReadTokens }),
             ...(usage.cost === undefined ? {} : { cost: usage.cost })
           }
         })
@@ -1123,7 +1185,81 @@ ${assistant.slice(0, 3_000)}`;
             };
       };
 
+      // 工具状态：注册表在下方构建，executeTool 运行时通过闭包读取最新集合
+      let currentToolDefinitions: AgentToolDefinition[] = [];
+      // 模型通过 search_tools 主动加载的工具名，以及可供检索的完整候选
+      const searchedToolNames = new Set<string>();
+      let searchableCandidates: SelectableTool[] = [];
+      let rebuildVisibleTools: () => void = () => {
+        throw new Error('工具注册表尚未初始化');
+      };
+
+      /**
+       * run_command 输出封顶：超长时落 artifact，只回预览与 terminalId。
+       * 完整输出仍保留在终端，模型可用 terminal_read 取更多，避免大日志撑爆上下文。
+       */
+      const capCommandOutput = async (
+        output: string,
+        terminalId: string
+      ): Promise<{ output: string; artifactId?: string; bytes?: number }> => {
+        if (output.length <= TOOL_OUTPUT_ARTIFACT_CHAR_LIMIT) return { output };
+        try {
+          const stored = await artifacts.saveText(input.sessionId, 'tool-run_command', output, {
+            runId
+          });
+          return {
+            output: JSON.stringify({
+              truncated: true,
+              terminalId,
+              artifactId: stored.artifactId,
+              bytes: stored.bytes,
+              preview: commandOutputPreview(output)
+            }),
+            artifactId: stored.artifactId,
+            bytes: stored.bytes
+          };
+        } catch {
+          return {
+            output: JSON.stringify({
+              truncated: true,
+              terminalId,
+              preview: commandOutputPreview(output),
+              note: '完整输出可在终端面板查看'
+            })
+          };
+        }
+      };
+
       const executeTool = async (call: { id?: string; name: string; arguments: unknown }) => {
+        // Plan 只读：写工具即使在异常路径下也必须先被拒绝
+        if (mode === 'plan' && !PLAN_ALLOWED_TOOLS.has(call.name)) {
+          return {
+            ok: false,
+            output: '',
+            error: { code: 'TOOL_MODE_DENIED', message: `Plan 模式不可用工具：${call.name}` }
+          };
+        }
+        if (call.name === 'search_tools') {
+          const parsed = searchToolsInputSchema.safeParse(call.arguments);
+          if (!parsed.success) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'TOOL_INPUT_INVALID', message: 'query 参数不合法' }
+            };
+          }
+          const matches = selectToolsByRelevance({
+            query: parsed.data.query,
+            candidates: searchableCandidates,
+            maxTools: parsed.data.limit ?? 8
+          });
+          for (const tool of matches) searchedToolNames.add(tool.name);
+          rebuildVisibleTools();
+          return {
+            ok: true,
+            output: JSON.stringify({ loaded: matches.map((tool) => tool.name) })
+          };
+        }
         if (call.name === 'theme_get' || call.name === 'theme_update') {
           return executeThemeTool(call.name, call.arguments);
         }
@@ -1322,14 +1458,6 @@ ${assistant.slice(0, 3_000)}`;
             };
           }
           return { ok: true, output: content };
-        }
-
-        if (mode === 'plan' && !PLAN_ALLOWED_TOOLS.has(call.name)) {
-          return {
-            ok: false,
-            output: '',
-            error: { code: 'TOOL_MODE_DENIED', message: `Plan 模式不可用工具：${call.name}` }
-          };
         }
 
         if (call.name === 'run_skill_script') {
@@ -1957,7 +2085,13 @@ ${assistant.slice(0, 3_000)}`;
                 }
               };
             }
-            return { ok: true, output: result.output };
+            const capped = await capCommandOutput(result.output, task.terminal.id);
+            return {
+              ok: true,
+              output: capped.output,
+              ...(capped.artifactId === undefined ? {} : { artifactId: capped.artifactId }),
+              ...(capped.bytes === undefined ? {} : { bytes: capped.bytes })
+            };
           } catch (error) {
             return {
               ok: false,
@@ -2130,61 +2264,194 @@ ${assistant.slice(0, 3_000)}`;
         ...generateImageToolDefinition,
         description: `${generateImageToolDefinition.description} 可用生图模型：${imageNames.join('、')}。有多个启用模型且用户未指定模型时，必须先调用 ask_user，把启用模型作为选项让用户选择；用户选择后再调用本工具，并在 model 参数中传入所选模型名称、模型 ID 或模型名。只有一个启用模型时可直接使用。`
       };
-      const allToolDefinitions = [
-        ...(toolset?.definitions ?? fileToolDefinitions),
-        ...mcpTools,
-        askUserToolDefinition,
-        openUrlToolDefinition,
-        ...(this.memory && this.memory.settings().retrieval
-          ? [memorySearchToolDefinition, memoryReadToolDefinition]
-          : []),
-        ...(this.knowledge ? [searchKnowledgeToolDefinition] : []),
-        saveFileToolDefinition,
-        saveWordToolDefinition,
-        saveExcelToolDefinition,
-        savePptToolDefinition,
-        savePdfToolDefinition,
-        webSearchToolDefinition,
-        webFetchToolDefinition,
-        ...(pexelsApiKey ? [searchImagesToolDefinition, searchVideosToolDefinition] : []),
-        ...(imageConfigs.length ? [imageToolDefinition] : []),
-        ...(this.imageSettings && modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT
-          ? imageConfigToolDefinitions
-          : []),
-        ...(this.generalSettings && modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT
-          ? generalSettingsToolDefinitions
-          : []),
-        ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? themeToolDefinitions : []),
-        ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? skinToolDefinitions : []),
-        ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? terminalToolDefinitions : []),
-        ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? cacheToolDefinitions : []),
-        ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? backupToolDefinitions : []),
-        ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? pluginToolDefinitions : []),
-        ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? skillToolDefinitions : []),
-        ...(modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT ? mcpToolDefinitions : []),
-        ...(this.skills
-          ? [
-              searchSkillsToolDefinition,
-              readSkillToolDefinition,
-              readSkillFileToolDefinition,
-              runSkillScriptToolDefinition
-            ]
-          : [])
-      ];
-      const visibleDefinitions =
+      const contextEnough = modelConfig.contextWindow >= APP_MANAGEMENT_MIN_CONTEXT;
+      const toolGroups: Record<ToolGroupId, AgentToolDefinition[]> = {
+        core: [
+          ...(toolset?.definitions ?? fileToolDefinitions),
+          askUserToolDefinition,
+          searchToolsToolDefinition,
+          openUrlToolDefinition,
+          saveFileToolDefinition,
+          ...(this.memory && this.memory.settings().retrieval
+            ? [memorySearchToolDefinition, memoryReadToolDefinition]
+            : []),
+          ...(this.knowledge ? [searchKnowledgeToolDefinition] : []),
+          ...(this.skills
+            ? [
+                searchSkillsToolDefinition,
+                readSkillToolDefinition,
+                readSkillFileToolDefinition,
+                runSkillScriptToolDefinition
+              ]
+            : [])
+        ],
+        web: [webSearchToolDefinition, webFetchToolDefinition],
+        media: [
+          ...(pexelsApiKey ? [searchImagesToolDefinition, searchVideosToolDefinition] : []),
+          ...(imageConfigs.length ? [imageToolDefinition] : [])
+        ],
+        office: [
+          saveWordToolDefinition,
+          saveExcelToolDefinition,
+          savePptToolDefinition,
+          savePdfToolDefinition
+        ],
+        terminal: contextEnough ? terminalToolDefinitions : [],
+        appearance: contextEnough ? [...themeToolDefinitions, ...skinToolDefinitions] : [],
+        maintenance: [
+          ...(contextEnough ? cacheToolDefinitions : []),
+          ...(contextEnough ? backupToolDefinitions : []),
+          ...(this.imageSettings && contextEnough ? imageConfigToolDefinitions : []),
+          ...(this.generalSettings && contextEnough ? generalSettingsToolDefinitions : [])
+        ],
+        extensions: [
+          ...(contextEnough ? pluginToolDefinitions : []),
+          ...(contextEnough ? skillToolDefinitions : []),
+          ...(contextEnough ? mcpToolDefinitions : [])
+        ],
+        mcp: mcpTools
+      };
+
+      const allToolDefinitions = Object.values(toolGroups).flat();
+      const blockedTools =
         mode === 'plan'
-          ? allToolDefinitions.filter((definition) => PLAN_ALLOWED_TOOLS.has(definition.name))
-          : allToolDefinitions;
-      const blockedTools = allToolDefinitions
-        .filter((definition) => !PLAN_ALLOWED_TOOLS.has(definition.name))
-        .map((definition) => definition.name);
-      const tools: AgentToolDefinition[] = visibleDefinitions.map((definition) => ({
-        name: definition.name,
-        description: definition.description,
-        inputSchema: definition.inputSchema,
-        permission: definition.permission,
-        requiresApproval: definition.requiresApproval
-      }));
+          ? allToolDefinitions
+              .filter((definition) => !PLAN_ALLOWED_TOOLS.has(definition.name))
+              .map((definition) => definition.name)
+          : undefined;
+
+      // 常驻组：Build 为 core；Plan 为只读基线，最终仍会与只读白名单求交
+      const baseGroups = new Set<ToolGroupId>([
+        ...DEFAULT_TOOL_GROUPS,
+        ...(mode === 'plan' ? PLAN_TOOL_GROUPS : [])
+      ]);
+
+      // 只恢复最近若干轮用过的工具，避免长会话里历史工具无限累积；更早的交给自动筛选
+      const usedToolNames = collectRecentUsedToolNames(hooks.history ?? [], RECENT_TOOL_TURNS);
+
+      // 统一候选集：内置工具按所属组标注，MCP 工具标记为 mcp 来源，供同一套算法筛选
+      const groupOfName = new Map<string, ToolGroupId>();
+      for (const id of TOOL_GROUP_IDS) {
+        for (const definition of toolGroups[id]) groupOfName.set(definition.name, id);
+      }
+      const candidates: SelectableTool[] = allToolDefinitions.map((definition) => {
+        const group = groupOfName.get(definition.name) ?? 'core';
+        const meta = TOOL_GROUP_META[group];
+        return {
+          ...definition,
+          group,
+          source: group === 'mcp' ? ('mcp' as const) : ('builtin' as const),
+          extraText: group === 'mcp' ? '' : meta.title
+        };
+      });
+
+      // 常驻组会整体注入，历史用过的会精确恢复；这些都不参与自动筛选
+      const presetNames = new Set<string>();
+      for (const id of baseGroups) {
+        for (const definition of toolGroups[id]) presetNames.add(definition.name);
+      }
+      for (const name of usedToolNames) presetNames.add(name);
+
+      // 自动筛选查询：优先当前输入；短指令（继续/再改）或空输入会拼上最近一条用户消息
+      const lastUserContent =
+        [...(hooks.history ?? [])].reverse().find((message) => message.role === 'user')?.content ??
+        '';
+      const trimmedPrompt = input.prompt.trim();
+      const selectionQuery =
+        trimmedPrompt.length >= 6
+          ? trimmedPrompt
+          : `${trimmedPrompt} ${lastUserContent}`.trim() || lastUserContent;
+
+      // 可供 search_tools 检索的候选：排除常驻/历史已注入的工具，Plan 下仅只读工具
+      searchableCandidates = (
+        mode === 'plan'
+          ? candidates.filter((tool) => PLAN_ALLOWED_TOOLS.has(tool.name))
+          : candidates
+      ).filter((tool) => !presetNames.has(tool.name));
+
+      // BM25 先召回 top-N；分差清晰时直接取前 K，模糊时才让模型重排
+      const recallScored = selectScoredTools({
+        query: selectionQuery,
+        candidates: searchableCandidates,
+        maxTools: RECALL_TOP_N
+      });
+      const plan = planAutoTools(recallScored, MAX_AUTO_TOOLS);
+
+      let autoTools: AgentToolDefinition[];
+      if (plan.kind === 'direct') {
+        autoTools = plan.tools;
+      } else if (hooks.signal?.aborted) {
+        autoTools = plan.shortlist.slice(0, MAX_AUTO_TOOLS);
+      } else {
+        const reranked = await rerankTools({
+          provider,
+          model: modelConfig.id,
+          query: selectionQuery,
+          candidates: plan.shortlist,
+          maxTools: MAX_AUTO_TOOLS,
+          ...(extraParams ? { extraParams } : {}),
+          ...(hooks.signal ? { signal: hooks.signal } : {})
+        });
+        if (reranked.usage && providerConfig.name) {
+          eventBus.publish(
+            createNexusEvent({
+              sessionId: input.sessionId,
+              runId,
+              seq: 1,
+              type: 'usage.recorded',
+              payload: {
+                provider: providerConfig.name,
+                model: modelConfig.id,
+                inputTokens: reranked.usage.inputTokens,
+                outputTokens: reranked.usage.outputTokens,
+                ...(reranked.usage.cacheWriteTokens === undefined
+                  ? {}
+                  : { cacheWriteTokens: reranked.usage.cacheWriteTokens }),
+                ...(reranked.usage.cacheReadTokens === undefined
+                  ? {}
+                  : { cacheReadTokens: reranked.usage.cacheReadTokens }),
+                ...(reranked.usage.cost === undefined ? {} : { cost: reranked.usage.cost })
+              }
+            })
+          );
+        }
+        // rerankTools 已处理非法输出回退；此处尊重模型返回（含合法空数组）
+        autoTools = reranked.selected;
+      }
+
+      // 可见工具 = 常驻组（不限） + 可选工具（按优先级，受总上限约束）；Plan 再过滤只读
+      const buildVisibleTools = (): AgentToolDefinition[] => {
+        const seen = new Set<string>();
+        const result: AgentToolDefinition[] = [];
+        const add = (definition: AgentToolDefinition): void => {
+          if (seen.has(definition.name)) return;
+          seen.add(definition.name);
+          result.push(definition);
+        };
+
+        for (const id of baseGroups) {
+          for (const definition of toolGroups[id]) add(definition);
+        }
+        const baseCount = result.length;
+
+        const optionals = [
+          ...autoTools,
+          ...allToolDefinitions.filter((definition) => usedToolNames.has(definition.name)),
+          ...allToolDefinitions.filter((definition) => searchedToolNames.has(definition.name))
+        ];
+        for (const definition of optionals) {
+          if (result.length - baseCount >= MAX_OPTIONAL_TOOLS) break;
+          add(definition);
+        }
+
+        return mode === 'plan'
+          ? result.filter((definition) => PLAN_ALLOWED_TOOLS.has(definition.name))
+          : result;
+      };
+      rebuildVisibleTools = (): void => {
+        currentToolDefinitions = buildVisibleTools();
+      };
+      rebuildVisibleTools();
 
       // 历史轮次也从附件存储重新读取内容；图片和文本共享预算，避免多轮附件无限膨胀
       const historyMessages: ChatMessage[] = [];
@@ -2231,13 +2498,13 @@ ${assistant.slice(0, 3_000)}`;
         sessionId: input.sessionId,
         runId,
         messages,
-        tools,
-        ...(mode === 'plan' ? { blockedTools } : {}),
+        getTools: () => currentToolDefinitions,
+        ...(blockedTools ? { blockedTools } : {}),
         permissionGateway: new PermissionGateway(
           mode === 'plan' ? ['read'] : ['read', 'write', 'execute', 'network']
         ),
         executeTool,
-        prepareContext: (messages) => context.prepare(messages, tools),
+        prepareContext: (messages) => context.prepare(messages, currentToolDefinitions),
         sanitizeToolInput: (call) => sanitizeImageConfigInput(call.name, call.arguments),
         ...(hooks.approveTool ? { approveTool: hooks.approveTool } : {}),
         ...(hooks.autoApprove ? { autoApprove: hooks.autoApprove } : {}),

@@ -153,27 +153,53 @@ export class AnthropicProvider implements ChatProvider {
   async *stream(request: ProviderRequest): AsyncIterable<ProviderStreamEvent> {
     const fetchImpl = this.config.fetchImpl ?? fetch;
     const converted = toAnthropicMessages(request.messages);
+    const endpointUrl = endpoint(this.config.baseUrl);
+    const headers = {
+      'Content-Type': 'application/json',
+      'x-api-key': this.config.apiKey,
+      'anthropic-version': ANTHROPIC_VERSION,
+      ...this.config.headers
+    };
 
-    const response = await fetchImpl(endpoint(this.config.baseUrl), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': this.config.apiKey,
-        'anthropic-version': ANTHROPIC_VERSION,
-        ...this.config.headers
-      },
-      body: JSON.stringify({
+    // 稳定前缀缓存：system 与工具块加 ephemeral 断点；不支持缓存的代理可去掉后重试
+    const buildBody = (usePromptCache: boolean): string => {
+      const tools = request.tools?.map((tool, index) => ({
+        ...toAnthropicTool(tool),
+        ...(usePromptCache && index === (request.tools?.length ?? 0) - 1
+          ? { cache_control: { type: 'ephemeral' } }
+          : {})
+      }));
+      return JSON.stringify({
         model: request.model,
         max_tokens: request.maxTokens ?? 4096,
         stream: true,
-        ...(converted.system ? { system: converted.system } : {}),
+        ...(converted.system
+          ? {
+              system: usePromptCache
+                ? [{ type: 'text', text: converted.system, cache_control: { type: 'ephemeral' } }]
+                : converted.system
+            }
+          : {}),
         messages: converted.messages,
-        ...(request.tools?.length ? { tools: request.tools.map(toAnthropicTool) } : {}),
+        ...(tools?.length ? { tools } : {}),
         ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
         ...sanitizeProviderParams(request.extraParams)
-      }),
+      });
+    };
+
+    const requestInit = (body: string): RequestInit => ({
+      method: 'POST',
+      headers,
+      body,
       ...(request.signal ? { signal: request.signal } : {})
     });
+
+    let response = await fetchImpl(endpointUrl, requestInit(buildBody(true)));
+    if (!response.ok && (response.status === 400 || response.status === 422)) {
+      // 兼容不支持 prompt cache 的 Anthropic 兼容代理：去掉 cache_control 重试一次
+      await response.text().catch(() => '');
+      response = await fetchImpl(endpointUrl, requestInit(buildBody(false)));
+    }
 
     if (!response.ok) {
       const detail = (await response.text().catch(() => '')).slice(0, 2000);
@@ -195,6 +221,8 @@ export class AnthropicProvider implements ChatProvider {
     let buffer = '';
     let inputTokens = 0;
     let outputTokens = 0;
+    let cacheWriteTokens = 0;
+    let cacheReadTokens = 0;
     let finishReason = 'end_turn';
     let done = false;
 
@@ -214,7 +242,13 @@ export class AnthropicProvider implements ChatProvider {
         const message = data['message'];
         if (message && typeof message === 'object') {
           const usage = (message as { usage?: Record<string, unknown> }).usage;
-          if (usage) inputTokens = Number(usage['input_tokens'] ?? 0);
+          if (usage) {
+            const freshInput = Number(usage['input_tokens'] ?? 0);
+            cacheWriteTokens = Number(usage['cache_creation_input_tokens'] ?? 0);
+            cacheReadTokens = Number(usage['cache_read_input_tokens'] ?? 0);
+            // inputTokens 维持总输入（含缓存），并单独记录缓存读写便于统计命中率
+            inputTokens = freshInput + cacheWriteTokens + cacheReadTokens;
+          }
         }
         return events;
       }
@@ -302,7 +336,12 @@ export class AnthropicProvider implements ChatProvider {
         done = true;
         events.push({
           type: 'usage',
-          usage: { inputTokens, outputTokens } satisfies UsageSummary
+          usage: {
+            inputTokens,
+            outputTokens,
+            ...(cacheWriteTokens ? { cacheWriteTokens } : {}),
+            ...(cacheReadTokens ? { cacheReadTokens } : {})
+          } satisfies UsageSummary
         });
         events.push({
           type: 'finish',

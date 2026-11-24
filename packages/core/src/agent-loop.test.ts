@@ -5,7 +5,7 @@
 import type { NexusEvent } from '@nexus/shared';
 import { MockProvider, type ChatProvider, type ProviderRequest } from '@nexus/providers';
 import { describe, expect, it, vi } from 'vitest';
-import { AgentLoop } from './agent-loop';
+import { AgentLoop, type AgentToolDefinition } from './agent-loop';
 import { EventBus } from './event-bus';
 import { PermissionGateway } from './permissions';
 
@@ -509,5 +509,42 @@ describe('AgentLoop', () => {
         message: expect.stringContaining('已达到最大执行步骤')
       }
     });
+  });
+
+  it('reads the latest tool set from getTools on each step', async () => {
+    const requests: ProviderRequest[] = [];
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
+      async *stream(request) {
+        requests.push(request);
+        if (requests.length === 1) {
+          yield { type: 'tool-call-end', toolCall: { id: 'c1', name: 'read_file', arguments: {} } };
+          yield { type: 'finish', reason: 'tool_calls' };
+          return;
+        }
+        yield { type: 'text-delta', text: '完成' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+
+    let tools: AgentToolDefinition[] = [readTool];
+    const loop = new AgentLoop({
+      provider,
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '读取' }],
+      getTools: () => tools,
+      permissionGateway: new PermissionGateway(['read', 'write']),
+      executeTool: async () => {
+        // 执行首个工具后动态加入 write_file，模拟按需加载
+        tools = [readTool, writeTool];
+        return { ok: true, output: 'ok' };
+      }
+    });
+
+    await loop.run();
+
+    expect(requests[0]?.tools?.map((tool) => tool.name)).toEqual(['read_file']);
+    expect(requests[1]?.tools?.map((tool) => tool.name)).toEqual(['read_file', 'write_file']);
   });
 });

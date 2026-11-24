@@ -17,6 +17,8 @@ const HOUR_MS = 60 * 60 * 1000;
 interface AggregateRow {
   inputTokens: number | null;
   outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
   cost: number | null;
   calls: number;
 }
@@ -49,6 +51,8 @@ const totalsFrom = (row: AggregateRow | undefined): UsageTotals => {
     inputTokens,
     outputTokens,
     totalTokens: inputTokens + outputTokens,
+    cacheReadTokens: toNumber(row?.cacheReadTokens),
+    cacheWriteTokens: toNumber(row?.cacheWriteTokens),
     cost: toNumber(row?.cost),
     calls: toNumber(row?.calls)
   };
@@ -81,6 +85,8 @@ export const getUsageStats = (db: DatabaseSync, input: UsageStatsInput = {}): Us
            s.title AS title,
            COALESCE(CAST(json_extract(e.payload, '$.inputTokens') AS INTEGER), 0) AS inputTokens,
            COALESCE(CAST(json_extract(e.payload, '$.outputTokens') AS INTEGER), 0) AS outputTokens,
+           COALESCE(CAST(json_extract(e.payload, '$.cacheReadTokens') AS INTEGER), 0) AS cacheReadTokens,
+           COALESCE(CAST(json_extract(e.payload, '$.cacheWriteTokens') AS INTEGER), 0) AS cacheWriteTokens,
            COALESCE(CAST(json_extract(e.payload, '$.cost') AS REAL), 0) AS cost,
            json_extract(e.payload, '$.model') AS model,
            json_extract(e.payload, '$.provider') AS provider
@@ -90,6 +96,8 @@ export const getUsageStats = (db: DatabaseSync, input: UsageStatsInput = {}): Us
   )`;
   const aggregate = `SUM(inputTokens) AS inputTokens,
                      SUM(outputTokens) AS outputTokens,
+                     SUM(cacheReadTokens) AS cacheReadTokens,
+                     SUM(cacheWriteTokens) AS cacheWriteTokens,
                      SUM(cost) AS cost,
                      COUNT(*) AS calls`;
   const bucket = input.bucket ?? 'day';

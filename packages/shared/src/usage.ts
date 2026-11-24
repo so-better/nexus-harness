@@ -10,6 +10,10 @@ import { z } from 'zod';
 export interface UsageSummary {
   inputTokens: number;
   outputTokens: number;
+  /** 提示缓存写入 token（Anthropic 等）；未提供时视为 0 */
+  cacheWriteTokens?: number;
+  /** 提示缓存读取 token（Anthropic 等）；未提供时视为 0 */
+  cacheReadTokens?: number;
   cost?: number;
 }
 
@@ -55,6 +59,8 @@ export const emptyUsageTotals = (): UsageTotals => ({
   inputTokens: 0,
   outputTokens: 0,
   totalTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
   cost: 0,
   calls: 0
 });

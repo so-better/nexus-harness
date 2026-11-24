@@ -69,6 +69,8 @@ export interface PluginUsageTotals {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   cost: number;
   calls: number;
 }

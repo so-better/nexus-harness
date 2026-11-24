@@ -244,6 +244,7 @@ describe('AgentService', () => {
 
     expect(result.finishReason).toBe('stop');
     expect(requests[0]?.messages[0]?.content).toContain('无工作区');
+    // 默认仅注入 core（文件工具、ask_user、search_tools、open_url、save_file）
     expect(requests[0]?.tools?.map((tool) => tool.name)).toEqual([
       'read_file',
       'list_dir',
@@ -253,52 +254,189 @@ describe('AgentService', () => {
       'glob',
       'grep',
       'ask_user',
+      'search_tools',
       'open_url',
-      'save_file',
-      'save_word',
-      'save_excel',
-      'save_ppt',
-      'save_pdf',
-      'web_search',
-      'web_fetch',
-      'theme_get',
-      'theme_update',
-      'skin_list',
-      'skin_apply',
-      'terminal_get_settings',
-      'terminal_update_settings',
-      'terminal_list',
-      'terminal_create',
-      'terminal_request_access',
-      'terminal_read',
-      'terminal_wait',
-      'terminal_write',
-      'terminal_close',
-      'cache_get_info',
-      'cache_clear',
-      'backup_status',
-      'backup_export',
-      'backup_import',
-      'plugin_list',
-      'plugin_read',
-      'plugin_reload',
-      'plugin_set_enabled',
-      'plugin_delete',
-      'plugin_import',
-      'plugin_write',
-      'skill_list',
-      'skill_refresh',
-      'skill_import',
-      'skill_create',
-      'skill_update',
-      'skill_delete',
-      'mcp_update',
-      'mcp_list',
-      'mcp_read',
-      'mcp_save',
-      'mcp_refresh',
-      'mcp_test'
+      'save_file'
     ]);
+  });
+
+  it('selects relevant tools from the prompt with the shared selector', async () => {
+    const requests: ProviderRequest[] = [];
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: false, vision: false, reasoning: false },
+      async *stream(request) {
+        requests.push(request);
+        yield { type: 'text-delta', text: '好' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const service = new AgentService({ createProvider: () => provider });
+    await service.run(
+      {
+        sessionId: 'intent-test',
+        prompt: '把主题改成深色',
+        rootPaths: [],
+        providerId: 'p',
+        modelId: 'm'
+      },
+      {
+        id: 'p',
+        protocol: 'openai' as const,
+        name: 'Mock Provider',
+        baseUrl: 'https://example.com/v1',
+        models: [{ id: 'm', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+        defaultModelId: 'm',
+        apiKey: 'secret',
+        enabled: true
+      }
+    );
+
+    const names = requests[0]?.tools?.map((tool) => tool.name) ?? [];
+    expect(names).toContain('theme_update');
+    expect(names).not.toContain('plugin_write');
+  });
+
+  it('lets the model search and load tools via search_tools', async () => {
+    const requests: ProviderRequest[] = [];
+    let step = 0;
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
+      async *stream(request) {
+        requests.push(request);
+        step += 1;
+        if (step > 1) {
+          yield { type: 'text-delta', text: '已加载' };
+          yield { type: 'finish', reason: 'stop' };
+          return;
+        }
+        const call = { id: 'search-1', name: 'search_tools', arguments: { query: 'ppt' } };
+        yield { type: 'tool-call-start', id: call.id, name: call.name };
+        yield {
+          type: 'tool-call-delta',
+          id: call.id,
+          argumentsDelta: JSON.stringify(call.arguments)
+        };
+        yield { type: 'tool-call-end', toolCall: call };
+        yield { type: 'finish', reason: 'tool_calls' };
+      }
+    };
+    const service = new AgentService({ createProvider: () => provider });
+    await service.run(
+      {
+        sessionId: 'search-tools-test',
+        prompt: '你好',
+        rootPaths: [],
+        providerId: 'p',
+        modelId: 'm'
+      },
+      {
+        id: 'p',
+        protocol: 'openai' as const,
+        name: 'Mock Provider',
+        baseUrl: 'https://example.com/v1',
+        models: [{ id: 'm', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+        defaultModelId: 'm',
+        apiKey: 'secret',
+        enabled: true
+      }
+    );
+
+    const firstNames = requests[0]?.tools?.map((tool) => tool.name) ?? [];
+    const secondNames = requests[1]?.tools?.map((tool) => tool.name) ?? [];
+    expect(firstNames).not.toContain('save_ppt');
+    expect(secondNames).toContain('save_ppt');
+  });
+
+  it('reranks BM25 recall with the model and injects the picked tools', async () => {
+    const requests: ProviderRequest[] = [];
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: false, vision: false, reasoning: false },
+      async *stream(request) {
+        requests.push(request);
+        if (!request.tools?.length) {
+          // 重排调用：无工具 schema，返回模型挑选结果
+          yield { type: 'text-delta', text: '["save_ppt","save_word"]' };
+          yield { type: 'finish', reason: 'stop' };
+          return;
+        }
+        yield { type: 'text-delta', text: '完成' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const service = new AgentService({ createProvider: () => provider });
+    await service.run(
+      {
+        sessionId: 'rerank-test',
+        prompt: '文件 搜索 生成 终端 插件 主题 缓存 备份 图片 网页 文档 表格 PDF',
+        rootPaths: [],
+        providerId: 'p',
+        modelId: 'm'
+      },
+      {
+        id: 'p',
+        protocol: 'openai' as const,
+        name: 'Mock Provider',
+        baseUrl: 'https://example.com/v1',
+        models: [{ id: 'm', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+        defaultModelId: 'm',
+        apiKey: 'secret',
+        enabled: true
+      }
+    );
+
+    // 第一个请求是重排（不带工具），第二个是主调用
+    expect(requests[0]?.tools).toBeUndefined();
+    const mainNames = requests[1]?.tools?.map((tool) => tool.name) ?? [];
+    expect(mainNames).toContain('save_ppt');
+    expect(mainNames).toContain('save_word');
+  });
+
+  it('restores tool groups from history when continuing a session', async () => {
+    const requests: ProviderRequest[] = [];
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: false, vision: false, reasoning: false },
+      async *stream(request) {
+        requests.push(request);
+        yield { type: 'text-delta', text: '继续完成' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const service = new AgentService({ createProvider: () => provider });
+    const history: ChatMessage[] = [
+      { role: 'user', content: '做一份 PPT' },
+      {
+        role: 'assistant',
+        content: '',
+        toolCalls: [{ id: 't1', name: 'save_ppt', arguments: { slides: [] } }]
+      },
+      { role: 'tool', toolCallId: 't1', content: JSON.stringify({ ok: true }) },
+      { role: 'assistant', content: '已生成' }
+    ];
+    await service.run(
+      {
+        sessionId: 'restore-test',
+        prompt: '继续',
+        rootPaths: [],
+        providerId: 'p',
+        modelId: 'm'
+      },
+      {
+        id: 'p',
+        protocol: 'openai' as const,
+        name: 'Mock Provider',
+        baseUrl: 'https://example.com/v1',
+        models: [{ id: 'm', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+        defaultModelId: 'm',
+        apiKey: 'secret',
+        enabled: true
+      },
+      { history }
+    );
+
+    const names = requests[0]?.tools?.map((tool) => tool.name) ?? [];
+    expect(names).toContain('save_ppt');
+    expect(names).toContain('read_file');
+    expect(names).not.toContain('plugin_write');
   });
 
   it('requires plugin-development before creating a plugin', async () => {
@@ -758,7 +896,7 @@ describe('AgentService', () => {
       protocol: 'openai' as const,
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
-      models: [{ id: 'mock-model', contextWindow: 5_120, maxOutputTokens: 1_024 }],
+      models: [{ id: 'mock-model', contextWindow: 6_144, maxOutputTokens: 1_024 }],
       defaultModelId: 'mock-model',
       apiKey: 'secret',
       enabled: true

@@ -251,6 +251,53 @@ describe('SessionHistoryService', () => {
     }
   });
 
+  it('rehydrates images from every user turn', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'nexus-history-images-all-'));
+    const first = join(root, 'first.png');
+    const second = join(root, 'second.png');
+    await writeFile(first, Buffer.from([1]));
+    await writeFile(second, Buffer.from([2]));
+    const events = [
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: {
+          messageId: 'user-1',
+          role: 'user',
+          content: '第一张',
+          images: [{ path: first, mime: 'image/png' }]
+        }
+      }),
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 2,
+        type: 'message.completed',
+        payload: { messageId: 'assistant-1', role: 'assistant', content: '好' }
+      }),
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 3,
+        type: 'message.completed',
+        payload: {
+          messageId: 'user-2',
+          role: 'user',
+          content: '第二张',
+          images: [{ path: second, mime: 'image/png' }]
+        }
+      })
+    ] as NexusEvent[];
+
+    try {
+      const store = { list: () => events } as unknown as EventStore;
+      const history = await new SessionHistoryService(store).load('session-1');
+      expect(history[0]?.images).toEqual([{ mimeType: 'image/png', data: 'AQ==' }]);
+      expect(history[2]?.images).toEqual([{ mimeType: 'image/png', data: 'Ag==' }]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('adds a placeholder result for an interrupted tool call', async () => {
     const events = [
       createNexusEvent({

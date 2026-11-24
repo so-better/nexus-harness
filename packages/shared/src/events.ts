@@ -191,6 +191,8 @@ export const eventPayloadSchemas = {
     model: z.string(),
     inputTokens: z.number().nonnegative(),
     outputTokens: z.number().nonnegative(),
+    cacheWriteTokens: z.number().nonnegative().optional(),
+    cacheReadTokens: z.number().nonnegative().optional(),
     cost: z.number().nonnegative().optional()
   }),
   'file.created': z.object({

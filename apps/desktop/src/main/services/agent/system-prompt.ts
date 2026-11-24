@@ -25,6 +25,9 @@ const FILE_RULES = '文件：修改前核对来源；数据不全先说明；保
 
 const SKILL_RULES = '技能：专业任务先 search_skills/read_skill；插件开发读 plugin-development。';
 
+const TOOL_GROUP_PROMPT =
+  '工具按需加载：缺少所需工具时用 search_tools(query) 检索并加载，再调用具体工具。';
+
 const MEDIA_MARKDOWN_PROMPT =
   '图片/视频直接嵌入（图片 Markdown、视频 <video>），禁止裸链接或表格。';
 
@@ -67,6 +70,7 @@ export const buildAgentSystemPrompt = (input: {
     ...(input.mode === 'build' ? [BROWSER_RULES] : []),
     FILE_RULES,
     SKILL_RULES,
+    TOOL_GROUP_PROMPT,
     ...(input.mode === 'build' ? [ARTIFACT_RULES, IMAGE_RULES] : []),
     modeSystemPrompt(input.mode),
     MEDIA_MARKDOWN_PROMPT,
