@@ -14,7 +14,7 @@
           <p>{{ t('plugins.hint') }}</p>
           <div class="nh-extensions__header-actions">
             <NButton type="primary" secondary :loading="importing" @click="importPlugin">
-              <template #icon><AppIcon name="download" :size="14" /></template>
+              <template #icon><AppIcon name="upload" :size="14" /></template>
               {{ t('plugins.import') }}
             </NButton>
             <NButton secondary :loading="reloading" @click="reloadPlugins">

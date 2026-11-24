@@ -59,7 +59,7 @@
     <div class="nh-media__footer">
       <NButton text type="primary" size="small" @click="openPexels">
         {{ t('settings.pexelsOpen') }}
-        <template #icon><AppIcon name="export" :size="14" /></template>
+        <template #icon><AppIcon name="globe" :size="14" /></template>
       </NButton>
       <span class="nh-media__local">{{ t('settings.pexelsLocalOnly') }}</span>
     </div>
@@ -127,7 +127,7 @@
     <div class="nh-media__footer">
       <NButton text type="primary" size="small" @click="openAnysearch">
         {{ t('settings.anysearchOpen') }}
-        <template #icon><AppIcon name="export" :size="14" /></template>
+        <template #icon><AppIcon name="globe" :size="14" /></template>
       </NButton>
       <span class="nh-media__local">{{ t('settings.anysearchLocalOnly') }}</span>
     </div>

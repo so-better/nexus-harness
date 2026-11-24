@@ -14,7 +14,7 @@
       <article class="nh-migration__card">
         <div class="nh-migration__card-head">
           <span class="nh-migration__card-icon">
-            <AppIcon name="export" :size="17" />
+            <AppIcon name="download" :size="17" />
           </span>
           <div>
             <p class="nh-migration__card-title">{{ t('settings.migrationExport') }}</p>
@@ -29,7 +29,7 @@
           :disabled="migrationBusy || pendingRestart"
           @click="handleExport"
         >
-          <template #icon><AppIcon name="export" :size="14" /></template>
+          <template #icon><AppIcon name="download" :size="14" /></template>
           {{ t('settings.migrationExport') }}
         </NButton>
       </article>
@@ -37,7 +37,7 @@
       <article class="nh-migration__card">
         <div class="nh-migration__card-head">
           <span class="nh-migration__card-icon">
-            <AppIcon name="download" :size="17" />
+            <AppIcon name="upload" :size="17" />
           </span>
           <div>
             <p class="nh-migration__card-title">{{ t('settings.migrationImport') }}</p>
@@ -53,7 +53,7 @@
               :loading="importing"
               :disabled="migrationBusy || pendingRestart"
             >
-              <template #icon><AppIcon name="download" :size="14" /></template>
+              <template #icon><AppIcon name="upload" :size="14" /></template>
               {{ t('settings.migrationImport') }}
             </NButton>
           </template>

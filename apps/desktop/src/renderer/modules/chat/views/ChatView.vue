@@ -34,7 +34,7 @@
             :disabled="exporting"
             :title="t('session.export')"
           >
-            <template #icon><AppIcon name="export" :size="15" /></template>
+            <template #icon><AppIcon name="download" :size="15" /></template>
             {{ t('session.export') }}
             <AppIcon name="chevron-down" :size="12" />
           </NButton>
