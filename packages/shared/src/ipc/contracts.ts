@@ -19,6 +19,12 @@ import type { McpServerStatus, McpTestResult } from '../mcp';
 import type { ImageSettings } from '../image';
 import type { SearchSettings } from '../search';
 import type { SkillDetail, SkillSummary } from '../skills';
+import type {
+  KnowledgeDirectoryImportInput,
+  KnowledgeDirectoryScan,
+  KnowledgeImportResult,
+  KnowledgeSource
+} from '../knowledge';
 import type { UsageStats, UsageStatsInput } from '../usage';
 import type { MemoryCreateInput, MemoryItem, MemorySettings, MemoryUpdateInput } from '../memory';
 
@@ -52,7 +58,7 @@ export type ThemeInfo = z.infer<typeof themeInfoSchema>;
 /**
  * 可打开的本地数据位置；使用枚举避免渲染层传入任意路径。
  */
-export const openDataLocationSchema = z.enum(['plugins', 'skills', 'mcp']);
+export const openDataLocationSchema = z.enum(['plugins', 'skills', 'mcp', 'knowledge']);
 export type OpenDataLocation = z.infer<typeof openDataLocationSchema>;
 
 /**
@@ -375,6 +381,18 @@ export interface NexusBridge {
     read: (name: string) => Promise<Result<SkillDetail>>;
     importDirectory: () => Promise<Result<SkillSummary[] | null>>;
     delete: (id: string) => Promise<Result<SkillSummary[]>>;
+  };
+  knowledge: {
+    list: () => Promise<Result<KnowledgeSource[]>>;
+    importFiles: () => Promise<Result<KnowledgeImportResult | null>>;
+    scanDirectory: () => Promise<Result<KnowledgeDirectoryScan | null>>;
+    importDirectory: (
+      input: KnowledgeDirectoryImportInput
+    ) => Promise<Result<KnowledgeImportResult | null>>;
+    remove: (id: string) => Promise<Result<{ removed: boolean }>>;
+    reindex: (id: string) => Promise<Result<KnowledgeSource>>;
+    openSource: (id: string) => Promise<Result<{ opened: boolean }>>;
+    onChanged: (handler: () => void) => Unsubscribe;
   };
   terminal: {
     create: (input: TerminalCreateInput) => Promise<Result<TerminalSessionPublic>>;

@@ -289,6 +289,65 @@ const migrate = (db: DatabaseSync): void => {
     );
     db.exec('PRAGMA user_version = 17');
   }
+
+  if (version < 18) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS knowledge_sources (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        origin_path TEXT,
+        mime TEXT,
+        bytes INTEGER NOT NULL DEFAULT 0,
+        raw_text TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'ready',
+        error TEXT,
+        chunk_count INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_knowledge_sources_updated
+        ON knowledge_sources(updated_at DESC);
+
+      CREATE TABLE IF NOT EXISTS knowledge_chunks (
+        id TEXT PRIMARY KEY,
+        source_id TEXT NOT NULL REFERENCES knowledge_sources(id) ON DELETE CASCADE,
+        ordinal INTEGER NOT NULL,
+        heading TEXT,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        UNIQUE(source_id, ordinal)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_source
+        ON knowledge_chunks(source_id, ordinal);
+    `);
+    try {
+      db.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
+          chunk_id UNINDEXED,
+          source_id UNINDEXED,
+          source_name,
+          content,
+          tokenize = 'trigram'
+        );
+      `);
+    } catch (error) {
+      console.warn('知识库 FTS5 索引不可用，降级为 LIKE 搜索', error);
+    }
+    db.exec('PRAGMA user_version = 18');
+  }
+
+  if (version < 19) {
+    // 知识库文件改为保存到 userData/knowledge；兼容已经迁移到 18 的本地数据库
+    try {
+      db.exec('ALTER TABLE knowledge_sources ADD COLUMN stored_path TEXT');
+    } catch {
+      // 列已存在时继续完成版本标记
+    }
+    db.exec('PRAGMA user_version = 19');
+  }
 };
 
 /**

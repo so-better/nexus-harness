@@ -40,6 +40,7 @@ export interface AppDataPaths {
   plugins: string;
   skills: string;
   mcp: string;
+  knowledge: string;
   settings: string;
   files: string;
   attachments: string;
@@ -59,6 +60,7 @@ export const getAppDataPaths = (): AppDataPaths => {
     plugins: join(root, 'plugins'),
     skills: join(root, 'skills'),
     mcp: join(root, 'mcp'),
+    knowledge: join(root, 'knowledge'),
     settings: join(root, 'settings'),
     files: join(root, 'files'),
     attachments: join(root, 'attachments'),
@@ -77,6 +79,7 @@ export const ensureAppDataDirectories = async (): Promise<void> => {
     paths.plugins,
     paths.skills,
     paths.mcp,
+    paths.knowledge,
     getMcpWorkdirPath(paths.mcp),
     paths.settings,
     paths.files,

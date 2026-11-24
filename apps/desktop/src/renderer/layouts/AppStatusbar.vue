@@ -1,11 +1,11 @@
 <template>
   <footer class="nh-statusbar">
     <div class="nh-statusbar__meta">
+      <span class="nh-statusbar__version">v{{ version }}</span>
       <NButton text size="tiny" @click="emit('open-changelog')">
         <template #icon><AppIcon name="history" :size="14" /></template>
         {{ t('changelog.open') }}
       </NButton>
-      <span class="nh-statusbar__version">v{{ version }}</span>
       <PluginSlot location="statusbar.left" :context="{ location: 'statusbar.left', sessionId }" />
       <NButton
         v-for="item in pluginItems.left"
@@ -59,6 +59,11 @@
       >
         <template #icon><AppIcon name="terminal" :size="14" /></template>
         {{ t('terminal.title') }}
+      </NButton>
+
+      <NButton text size="tiny" @click="emit('open-knowledge')">
+        <template #icon><AppIcon name="database" :size="14" /></template>
+        {{ t('knowledge.open') }}
       </NButton>
 
       <NButton text size="tiny" @click="emit('open-extensions')">
@@ -117,6 +122,7 @@ watch(
 const emit = defineEmits<{
   'update-theme': [source: ThemeSource];
   'open-settings': [];
+  'open-knowledge': [];
   'open-extensions': [];
   'toggle-terminal': [];
   'open-changelog': [];

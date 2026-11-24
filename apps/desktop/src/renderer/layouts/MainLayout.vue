@@ -61,6 +61,7 @@
       :version="version"
       :terminal-open="terminal.open"
       :session-id="activeId ?? undefined"
+      @open-knowledge="knowledgeOpen = true"
       @open-extensions="extensionsOpen = true"
       @toggle-terminal="terminal.togglePanel"
       @update-theme="setTheme"
@@ -68,6 +69,7 @@
       @open-changelog="changelogOpen = true"
     />
 
+    <KnowledgeModal :show="knowledgeOpen" @update:show="knowledgeOpen = $event" />
     <ExtensionsModal :show="extensionsOpen" @update:show="extensionsOpen = $event" />
     <PluginViewModal />
     <ChangelogModal :show="changelogOpen" @update:show="changelogOpen = $event" />
@@ -117,6 +119,7 @@ import { getLanguage, onGeneralSettingsChanged } from '@/modules/settings/api/se
 import SettingsModal from '@/modules/settings/views/SettingsModal.vue';
 import { useTerminalStore } from '@/modules/terminal/stores/terminal.store';
 import ExtensionsModal from '@/plugin-runtime/components/ExtensionsModal.vue';
+import KnowledgeModal from '@/modules/knowledge/views/KnowledgeModal.vue';
 import ChangelogModal from '@/components/ChangelogModal.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
 import PluginSkinLayer from '@/plugin-runtime/components/PluginSkinLayer.vue';
@@ -135,6 +138,7 @@ const sessions = useSessionStore();
 const chat = useChatStore();
 const terminal = useTerminalStore();
 const pluginRuntime = usePluginRuntimeStore();
+const knowledgeOpen = ref(false);
 const extensionsOpen = ref(false);
 const changelogOpen = ref(false);
 const sidebarRef = ref<{ openSearch: () => Promise<void> } | null>(null);
@@ -286,6 +290,9 @@ const { commandPaletteOpen, paletteCommands, executeCommand } = useAppCommands({
   },
   openExtensions: () => {
     extensionsOpen.value = true;
+  },
+  openKnowledge: () => {
+    knowledgeOpen.value = true;
   },
   toggleTerminal: () => terminal.togglePanel(),
   openChangelog: () => {

@@ -35,7 +35,8 @@ vi.mock('../services/storage/paths', () => ({
     root: '/tmp/nexus',
     plugins: '/tmp/nexus/plugins',
     skills: '/tmp/nexus/skills',
-    mcp: '/tmp/nexus/mcp'
+    mcp: '/tmp/nexus/mcp',
+    knowledge: '/tmp/nexus/knowledge'
   })
 }));
 

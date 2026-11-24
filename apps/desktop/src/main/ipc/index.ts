@@ -11,6 +11,7 @@ import { registerWindowIpc } from './window';
 import { registerAppIpc } from './app';
 import { registerPluginIpc } from './plugin';
 import { registerSkillsIpc } from './skills';
+import { registerKnowledgeIpc } from './knowledge';
 import { registerMcpIpc } from './mcp';
 import { registerMemoryIpc } from './memory';
 import { registerProviderIpc } from './provider';
@@ -35,6 +36,7 @@ export const registerIpcHandlers = (): void => {
   registerProviderIpc();
   registerPluginIpc();
   registerSkillsIpc();
+  registerKnowledgeIpc();
   registerMcpIpc();
   registerMemoryIpc();
   registerSessionIpc();

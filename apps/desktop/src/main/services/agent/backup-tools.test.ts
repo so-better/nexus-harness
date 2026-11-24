@@ -31,7 +31,8 @@ describe('backup tools', () => {
       logs: join(root, 'logs'),
       plugins: join(root, 'plugins'),
       skills: join(root, 'skills'),
-      mcp: join(root, 'mcp')
+      mcp: join(root, 'mcp'),
+      knowledge: join(root, 'knowledge')
     };
     database = createDatabase(join(root, 'nexus.db'));
   });
@@ -44,7 +45,11 @@ describe('backup tools', () => {
 
   it('exports a backup, reports status and stages an import', async () => {
     const destination = join(output, 'backup.zip');
-    const exported = await executeBackupTool('backup_export', { path: destination }, { paths, database });
+    const exported = await executeBackupTool(
+      'backup_export',
+      { path: destination },
+      { paths, database }
+    );
     expect(exported.ok).toBe(true);
     await expect(stat(destination)).resolves.toBeTruthy();
 
@@ -52,7 +57,11 @@ describe('backup tools', () => {
     expect(status.ok).toBe(true);
     expect(JSON.parse(status.output)).toMatchObject({ lastExportPath: destination });
 
-    const imported = await executeBackupTool('backup_import', { path: destination }, { paths, database });
+    const imported = await executeBackupTool(
+      'backup_import',
+      { path: destination },
+      { paths, database }
+    );
     expect(imported.ok).toBe(true);
     expect(JSON.parse(imported.output)).toMatchObject({ restartRequired: true });
   });

@@ -230,6 +230,20 @@ const bridge: NexusBridge = {
     importDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.skillsImport),
     delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.skillsDelete, id)
   },
+  knowledge: {
+    list: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeList),
+    importFiles: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeImportFiles),
+    scanDirectory: () => ipcRenderer.invoke(IPC_CHANNELS.knowledgeScanDirectory),
+    importDirectory: (input) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeImportDirectory, input),
+    remove: (id) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeRemove, { id }),
+    reindex: (id) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeReindex, { id }),
+    openSource: (id) => ipcRenderer.invoke(IPC_CHANNELS.knowledgeOpenSource, { id }),
+    onChanged: (handler) => {
+      const listener = () => handler();
+      ipcRenderer.on(IPC_CHANNELS.knowledgeChanged, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.knowledgeChanged, listener);
+    }
+  },
   terminal: {
     create: (input) => ipcRenderer.invoke(IPC_CHANNELS.terminalCreate, input),
     write: (input) => ipcRenderer.invoke(IPC_CHANNELS.terminalWrite, input),

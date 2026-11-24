@@ -44,12 +44,14 @@ import {
 } from '@nexus/toolkit';
 import { ArtifactService } from '../artifacts/artifact-service';
 import { MemoryService } from '../memory/memory-service';
+import { KnowledgeService } from '../knowledge/knowledge-service';
 import {
   executeMemoryReadTool,
   executeMemorySearchTool,
   memoryReadToolDefinition,
   memorySearchToolDefinition
 } from './memory-tools';
+import { executeSearchKnowledgeTool, searchKnowledgeToolDefinition } from './knowledge-tools';
 import { FileService } from '../files/file-service';
 import { AttachmentService } from '../attachments/attachment-service';
 import { CheckpointService } from '../checkpoint/checkpoint-service';
@@ -647,7 +649,8 @@ const PLAN_ALLOWED_TOOLS = new Set([
   'skill_refresh',
   'mcp_list',
   'memory_search',
-  'memory_read'
+  'memory_read',
+  'search_knowledge'
 ]);
 
 const MCP_MANAGEMENT_TOOLS = new Set([
@@ -846,6 +849,7 @@ export class AgentService {
   private readonly attachmentBaseDir: string | undefined;
   private readonly database: DatabaseSync | undefined;
   private readonly memory: MemoryService | undefined;
+  private readonly knowledge: KnowledgeService | undefined;
   private readonly skills: SkillService | undefined;
   private readonly mcp: McpService | undefined;
   private readonly imageSettings: (() => Promise<ImageSettings | null>) | undefined;
@@ -861,6 +865,7 @@ export class AgentService {
     this.attachmentBaseDir = options.attachmentBaseDir;
     this.database = options.database;
     this.memory = options.database ? new MemoryService(options.database) : undefined;
+    this.knowledge = options.database ? new KnowledgeService(options.database) : undefined;
     this.skills = options.skills;
     this.mcp = options.mcp;
     this.imageSettings = options.imageSettings;
@@ -1190,6 +1195,16 @@ ${assistant.slice(0, 3_000)}`;
           return call.name === 'memory_search'
             ? executeMemorySearchTool(call.arguments, this.memory)
             : executeMemoryReadTool(call.arguments, this.memory);
+        }
+        if (call.name === 'search_knowledge') {
+          if (!this.knowledge) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'KNOWLEDGE_UNAVAILABLE', message: '知识库服务不可用' }
+            };
+          }
+          return executeSearchKnowledgeTool(call.arguments, this.knowledge);
         }
         if (call.name === 'ask_user') {
           const parsed = askUserInputSchema.safeParse(call.arguments);
@@ -2123,6 +2138,7 @@ ${assistant.slice(0, 3_000)}`;
         ...(this.memory && this.memory.settings().retrieval
           ? [memorySearchToolDefinition, memoryReadToolDefinition]
           : []),
+        ...(this.knowledge ? [searchKnowledgeToolDefinition] : []),
         saveFileToolDefinition,
         saveWordToolDefinition,
         saveExcelToolDefinition,

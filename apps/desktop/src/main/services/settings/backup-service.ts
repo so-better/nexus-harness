@@ -22,6 +22,7 @@ const BACKUP_DIRECTORIES = [
   'plugins',
   'files',
   'attachments',
+  'knowledge',
   'artifacts',
   'checkpoints'
 ] as const;
@@ -218,6 +219,13 @@ const rebaseDatabasePaths = (
         rebasePath(attachment.stored_path, sourceRoot, targetRoot),
         attachment.id
       );
+    }
+    const knowledge = db
+      .prepare('SELECT id, stored_path FROM knowledge_sources WHERE stored_path IS NOT NULL')
+      .all() as Array<{ id: string; stored_path: string }>;
+    const updateKnowledge = db.prepare('UPDATE knowledge_sources SET stored_path = ? WHERE id = ?');
+    for (const source of knowledge) {
+      updateKnowledge.run(rebasePath(source.stored_path, sourceRoot, targetRoot), source.id);
     }
     const artifacts = db.prepare('SELECT id, path FROM artifacts').all() as Array<{
       id: string;

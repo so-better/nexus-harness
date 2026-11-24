@@ -71,7 +71,8 @@ vi.mock('../services/storage/paths', () => ({
     files: '/tmp/files',
     artifacts: '/tmp/artifacts',
     logs: '/tmp/logs',
-    mcp: '/tmp/mcp'
+    mcp: '/tmp/mcp',
+    knowledge: '/tmp/knowledge'
   }),
   getMcpWorkdirPath: (mcp: string) => `${mcp}/workdir`
 }));

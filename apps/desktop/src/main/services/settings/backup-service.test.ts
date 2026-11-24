@@ -22,6 +22,7 @@ describe('backup service', () => {
       plugins: join(root, 'plugins'),
       skills: join(root, 'skills'),
       mcp: join(root, 'mcp'),
+      knowledge: join(root, 'knowledge'),
       settings: join(root, 'settings'),
       files: join(root, 'files'),
       attachments: join(root, 'attachments'),
@@ -86,15 +87,16 @@ describe('backup service', () => {
       plugins: join(targetRoot, 'plugins'),
       skills: join(targetRoot, 'skills'),
       mcp: join(targetRoot, 'mcp'),
+      knowledge: join(targetRoot, 'knowledge'),
       logs: join(targetRoot, 'logs')
     };
     await stageBackup(exported.path, targetPaths);
     await applyPendingRestore(targetPaths);
 
     const restoredDb = new DatabaseSync(join(targetRoot, 'nexus.db'));
-    const row = restoredDb
-      .prepare('SELECT stored_path FROM files WHERE id = ?')
-      .get('file-1') as { stored_path: string };
+    const row = restoredDb.prepare('SELECT stored_path FROM files WHERE id = ?').get('file-1') as {
+      stored_path: string;
+    };
     restoredDb.close();
     expect(row.stored_path).toBe(join(targetRoot, 'files', 'session-1', 'output.txt'));
     await rm(exportParent, { recursive: true, force: true });
@@ -131,11 +133,13 @@ describe('backup service', () => {
   it('rejects backup sources inside the application data directory', async () => {
     const source = join(root, 'backup.zip');
     const archive = new AdmZip();
-    archive.addFile('nexus-backup.json', Buffer.from(JSON.stringify({ format: 'nexus-backup', version: 1 })));
+    archive.addFile(
+      'nexus-backup.json',
+      Buffer.from(JSON.stringify({ format: 'nexus-backup', version: 1 }))
+    );
     archive.addFile('nexus.db', Buffer.from('db'));
     await archive.writeZipPromise(source);
 
     await expect(stageBackup(source, paths)).rejects.toThrow('不能导入应用数据目录内部的备份');
   });
-
 });

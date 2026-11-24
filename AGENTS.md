@@ -315,6 +315,7 @@ nexus-harness/
 │        │  │  ├─ plugin-host/   # 插件发现、加载、权限、事件分发
 │        │  │  ├─ storage/       # 持久化（会话、设置、工作区索引）
 │        │  │  ├─ files/         # AI 输出文件存储与另存为
+│        │  │  ├─ knowledge/     # 知识库来源、切分与检索
 │        │  │  ├─ search/        # 跨会话全文索引与查询
 │        │  │  ├─ export/        # 会话导出（Markdown/HTML/PDF）
 │        │  └─ security/         # 沙箱、路径白名单、命令拦截
@@ -627,6 +628,7 @@ interface ProviderCapabilities {
 | `ask_user` | read | 否（等待用户） |
 | `open_url` | network | 是 |
 | `memory_search` | read | 否 |
+| `search_knowledge` | read | 否 |
 | `search_skills` | read | 否（系统内部） |
 | `read_skill` | read | 否（系统内部） |
 | `checkpoint` | write | 否（系统内部） |
@@ -1068,6 +1070,7 @@ export function activate(ctx) {
 ├─ mcp/cache/uv/        # uvx/uv 依赖缓存，不随运行缓存清理
 ├─ settings/             # 启动设置（主题等，后续迁移到 settings 表）
 ├─ files/                # AI 输出文件与会话导出，按会话存放
+├─ knowledge/            # 知识库导入文件副本，按来源 ID 存放
 ├─ attachments/          # 用户上传附件与抽取内容，按会话存放
 ├─ artifacts/            # 工具产物与完整日志
 ├─ checkpoints/          # 逐文件快照，按会话/检查点存放
@@ -1094,13 +1097,16 @@ export function activate(ctx) {
 | `artifacts` | 工具产物索引：会话、Run、标签、路径、大小与类型 |
 | `plugin_storage` | 按插件隔离的键值存储 |
 | `memory_items` | 全局长期记忆：类型、标题、内容、优先级、候选/已保存状态与来源 |
+| `knowledge_sources` | 知识库来源：名称、类型、原始路径、原文、状态与统计 |
+| `knowledge_chunks` | 知识库切分片段：来源、序号、标题与正文 |
+| `knowledge_fts` | 知识库全文索引（FTS5 trigram，不可用时降级 LIKE） |
 | `memory_events` | 记忆创建、更新、删除的本地审计记录 |
 | `memory_fts` | 全局记忆全文索引（FTS5 trigram，不可用时降级 LIKE） |
 | `memory_settings` | 自动沉淀与记忆检索开关 |
 
 规则：
 
-- 所有运行期文件只写在 `<userData>` 下，不写入应用安装目录。
+- 所有运行期文件只写在 `<userData>` 下，不写入应用安装目录；知识库文件副本位于 `<userData>/knowledge/<sourceId>/`。
 - 启动时创建缺失的 `plugins`、`skills`、`mcp`、`settings`、`files`、`attachments`、`artifacts`、`checkpoints`、`logs` 目录。
 - 插件、技能、MCP 目录由用户维护，应用只读取；启用/禁用等状态写数据库。
 - 文件系统是扩展的唯一事实来源，数据库只保存投影状态，启动时以扫描结果为准。
@@ -1852,6 +1858,7 @@ CHANGELOG.md         # 版本变更记录
 | 交互式提问 | 结构化 `ask_user` | 行内选项、暂停 Run、回答写事件 |
 | 工具调用上限 | 默认不启用 | 次数只做观测，用户可配置可选硬上限 |
 | 消息操作 | 编辑重发 / 重新生成 / 停止 | 旧消息标记 `superseded`，不物理删除 |
+| 知识库 V1 | 本地来源、FTS5 检索与引用 | `search_knowledge`；后续再做 Embedding 与混合 RAG |
 | 变更审阅 | 不做 | App 内不提供独立审阅面板与回滚 UI，深度审阅交给外部工具；写前审批展示实际变更 |
 | 工作区索引 | SQLite 增量索引 | 尊重 `.gitignore`，跳过二进制与大文件 |
 | 本地二进制读取 | 已支持基础能力 | 图片走视觉输入；PDF/Office/文本转文本；其他类型按文件引用处理 |

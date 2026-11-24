@@ -29,7 +29,8 @@ beforeEach(async () => {
     logs: join(root, 'logs'),
     plugins: join(root, 'plugins'),
     skills: join(root, 'skills'),
-    mcp: join(root, 'mcp')
+    mcp: join(root, 'mcp'),
+    knowledge: join(root, 'knowledge')
   };
   await mkdir(paths.files, { recursive: true });
   await mkdir(paths.artifacts, { recursive: true });

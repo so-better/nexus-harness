@@ -90,6 +90,39 @@ const zhCN = {
   'plugins.title': '扩展',
   'plugins.tab': '插件',
   'skills.tab': 'SKILL',
+  'knowledge.open': '知识库',
+  'knowledge.title': '知识库',
+  'knowledge.hint': '导入文件或目录后，Agent 可以在任务中检索并引用来源。',
+  'knowledge.limitHint': '单文件最大 10MB；正文超过 2MB 时会截断。',
+  'knowledge.importFiles': '导入文件',
+  'knowledge.importFolder': '导入目录',
+  'knowledge.scanTitle': '导入目录预览',
+  'knowledge.scanSummary': '将导入 {count} 个文件，共 {size}',
+  'knowledge.scanSkipped': '已跳过 {count} 个不支持或过大的文件',
+  'knowledge.scanErrors': '{count} 个目录项无法读取，导入时会跳过',
+  'knowledge.scanEmpty': '没有找到可导入的文件',
+  'knowledge.scanFailed': '扫描知识库目录失败',
+  'knowledge.confirmImport': '确认导入',
+  'knowledge.cancel': '取消',
+  'knowledge.openDirectory': '打开知识库目录',
+  'knowledge.openDirectoryFailed': '打开知识库目录失败',
+  'knowledge.sources': '来源',
+  'knowledge.empty': '还没有知识库来源',
+  'knowledge.emptyHint': '导入资料后，Agent 会在需要时主动检索，并保留来源引用。',
+  'knowledge.statusReady': '就绪',
+  'knowledge.statusError': '异常',
+  'knowledge.chunkCount': '{count} 个片段',
+  'knowledge.openSource': '打开位置',
+  'knowledge.reindex': '重新解析',
+  'knowledge.reindexed': '已重新解析',
+  'knowledge.delete': '删除',
+  'knowledge.deleteConfirm': '确定删除这个知识库来源？',
+  'knowledge.deleted': '知识库来源已删除',
+  'knowledge.imported': '已导入 {count} 个来源',
+  'knowledge.importFailed': '导入知识库失败',
+  'knowledge.reindexFailed': '重新解析失败',
+  'knowledge.deleteFailed': '删除知识库来源失败',
+  'knowledge.loadFailed': '读取知识库失败',
   'skills.builtin': '内置',
   'skills.user': '用户',
   'mcp.tab': 'MCP',
@@ -691,6 +724,40 @@ const enUS: Record<MessageKey, string> = {
   'plugins.title': 'Extensions',
   'plugins.tab': 'Plugins',
   'skills.tab': 'SKILLS',
+  'knowledge.open': 'Knowledge',
+  'knowledge.title': 'Knowledge',
+  'knowledge.hint': 'Import files or folders so the agent can retrieve and cite them in tasks.',
+  'knowledge.limitHint': 'Files up to 10MB; extracted text over 2MB is truncated.',
+  'knowledge.importFiles': 'Import files',
+  'knowledge.importFolder': 'Import folder',
+  'knowledge.scanTitle': 'Directory import preview',
+  'knowledge.scanSummary': 'Import {count} files, {size} total',
+  'knowledge.scanSkipped': 'Skipped {count} unsupported or oversized files',
+  'knowledge.scanErrors': '{count} directory entries could not be read and will be skipped',
+  'knowledge.scanEmpty': 'No importable files found',
+  'knowledge.scanFailed': 'Failed to scan knowledge folder',
+  'knowledge.confirmImport': 'Confirm import',
+  'knowledge.cancel': 'Cancel',
+  'knowledge.openDirectory': 'Open knowledge folder',
+  'knowledge.openDirectoryFailed': 'Failed to open knowledge folder',
+  'knowledge.sources': 'Sources',
+  'knowledge.empty': 'No knowledge sources yet',
+  'knowledge.emptyHint':
+    'After importing material, the agent can search it on demand and keep source citations.',
+  'knowledge.statusReady': 'Ready',
+  'knowledge.statusError': 'Error',
+  'knowledge.chunkCount': '{count} chunks',
+  'knowledge.openSource': 'Open location',
+  'knowledge.reindex': 'Reparse',
+  'knowledge.reindexed': 'Reparsed',
+  'knowledge.delete': 'Delete',
+  'knowledge.deleteConfirm': 'Delete this knowledge source?',
+  'knowledge.deleted': 'Knowledge source deleted',
+  'knowledge.imported': 'Imported {count} sources',
+  'knowledge.importFailed': 'Failed to import knowledge',
+  'knowledge.reindexFailed': 'Failed to reparse source',
+  'knowledge.deleteFailed': 'Failed to delete knowledge source',
+  'knowledge.loadFailed': 'Failed to load knowledge',
   'skills.builtin': 'Built-in',
   'skills.user': 'User',
   'mcp.tab': 'MCP',
@@ -1243,5 +1310,13 @@ export const setLocale = (language: AppLanguage): void => {
 /**
  * 读取当前语言文案；缺失 key 时回退中文。
  */
-export const t = (key: MessageKey): string =>
-  dictionaries[locale.value][key] ?? dictionaries['zh-CN'][key] ?? key;
+/**
+ * 读取当前语言文案，并替换 {name} 形式的简单占位符。
+ */
+export const t = (key: MessageKey, params?: Record<string, string | number>): string => {
+  const value = dictionaries[locale.value][key] ?? dictionaries['zh-CN'][key] ?? key;
+  if (!params) return value;
+  return value.replace(/\{(\w+)\}/g, (match, name: string) =>
+    name in params ? String(params[name]) : match
+  );
+};

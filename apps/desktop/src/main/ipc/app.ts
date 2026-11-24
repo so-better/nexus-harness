@@ -57,7 +57,13 @@ export const registerAppIpc = (): void => {
       const paths = getAppDataPaths();
       const target: OpenDataLocation = parsed.data;
       const targetPath =
-        target === 'plugins' ? paths.plugins : target === 'skills' ? paths.skills : paths.mcp;
+        target === 'plugins'
+          ? paths.plugins
+          : target === 'skills'
+            ? paths.skills
+            : target === 'knowledge'
+              ? paths.knowledge
+              : paths.mcp;
       const error = await shell.openPath(targetPath);
       return error ? fail('OPEN_DATA_LOCATION_FAILED', error) : ok({ opened: true });
     }

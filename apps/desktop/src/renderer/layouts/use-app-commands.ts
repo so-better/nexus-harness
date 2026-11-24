@@ -20,6 +20,7 @@ interface AppCommandOptions {
   openSearch: () => void | Promise<void>;
   openSettings: () => void;
   openExtensions: () => void;
+  openKnowledge: () => void;
   toggleTerminal: () => void;
   openChangelog: () => void;
   toggleTheme: () => void;
@@ -105,6 +106,11 @@ export const useAppCommands = (options: AppCommandOptions) => {
       handler: options.openExtensions
     },
     {
+      id: 'knowledge.open',
+      title: () => t('knowledge.open'),
+      handler: options.openKnowledge
+    },
+    {
       id: 'terminal.toggle',
       title: () => t('terminal.title'),
       shortcut: 'CmdOrCtrl+J',
@@ -134,6 +140,7 @@ export const useAppCommands = (options: AppCommandOptions) => {
     'session.search': 'search',
     'settings.open': 'settings',
     'extensions.open': 'plug',
+    'knowledge.open': 'database',
     'terminal.toggle': 'terminal',
     'changelog.open': 'history',
     'theme.toggle': 'sun',

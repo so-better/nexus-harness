@@ -30,7 +30,7 @@
 - [x] 1. 全局记忆 V1：`memory_items`、模型语义候选、用户确认保存、Run 注入、开关与列表
 - [x] 2a. 记忆候选与确认：Run 结束候选、会话内用户确认
 - [x] 2b. 记忆检索与治理：FTS5、`memory_search`、去重与冲突处理
-- [ ] 3. 知识库 V1：来源管理、文本抽取、chunk、FTS5 检索、`search_knowledge`、引用
+- [x] 3. 知识库 V1：来源管理、文本抽取、chunk、FTS5 检索、`search_knowledge`、引用
 - [ ] 4. Embedding 与向量：Embedding Provider、chunk embedding、增量重建、向量检索
 - [ ] 5. 混合 RAG：RRF、rerank、query rewrite、引用校验、上下文预算与评测
 - [ ] 6. 向量记忆：仅在全局记忆规模变大后，复用向量与混合检索能力
