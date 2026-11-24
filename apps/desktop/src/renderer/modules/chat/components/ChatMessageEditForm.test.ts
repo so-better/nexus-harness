@@ -33,6 +33,7 @@ vi.mock('../use-skill-palette', async () => {
       items: ref([]),
       activeIndex: ref(0),
       choose: vi.fn(),
+      refresh: vi.fn(),
       handleKeydown: vi.fn()
     })
   };
@@ -69,6 +70,52 @@ const flush = async (): Promise<void> => {
 describe('ChatMessageEditForm', () => {
   afterEach(() => {
     document.body.innerHTML = '';
+  });
+
+  it('keeps an explicit skill as a tag while editing', async () => {
+    const save = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ChatMessageEditForm, {
+      message: { ...message, content: '/fix-tests 帮我修复' },
+      sessionId: 'session-1',
+      onSave: save
+    });
+    app.mount(host);
+    await flush();
+
+    expect(host.querySelector('.nh-skill-tag')?.textContent).toContain('fix-tests');
+    expect(host.querySelector('textarea')?.value).toBe('帮我修复');
+    const send = [...host.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('发送')
+    );
+    send?.click();
+    await flush();
+    expect(save).toHaveBeenCalledWith('/fix-tests 帮我修复', undefined, undefined);
+    app.unmount();
+  });
+
+  it('keeps an explicit skill when the edited prompt starts with a slash', async () => {
+    const save = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(ChatMessageEditForm, {
+      message: { ...message, content: '/fix-tests /review this' },
+      sessionId: 'session-1',
+      onSave: save
+    });
+    app.mount(host);
+    await flush();
+
+    expect(host.querySelector('.nh-skill-tag')?.textContent).toContain('fix-tests');
+    expect(host.querySelector('textarea')?.value).toBe('/review this');
+    const send = [...host.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('发送')
+    );
+    send?.click();
+    await flush();
+    expect(save).toHaveBeenCalledWith('/fix-tests /review this', undefined, undefined);
+    app.unmount();
   });
 
   it('initializes the draft and emits the edited content', async () => {

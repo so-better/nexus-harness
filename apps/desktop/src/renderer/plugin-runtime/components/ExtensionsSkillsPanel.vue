@@ -45,15 +45,10 @@
             <strong>{{ skill.name }}</strong>
             <span class="nh-extension-item__id">{{ skill.id }} · v{{ skill.version }}</span>
           </div>
-          <NTag
-            class="nh-extension-item__source-tag"
-            :class="{ 'nh-extension-item__builtin-tag': skill.source === 'builtin' }"
-            size="small"
-            :bordered="skill.source === 'builtin'"
-            :type="skill.source === 'builtin' ? 'success' : 'primary'"
-          >
-            {{ skill.source === 'builtin' ? t('skills.builtin') : t('skills.user') }}
-          </NTag>
+          <ExtensionSourceTag
+            :source="skill.source"
+            :label="skill.source === 'builtin' ? t('skills.builtin') : t('skills.user')"
+          />
         </div>
         <p v-if="skill.description" class="nh-extension-item__description">
           {{ skill.description }}
@@ -95,6 +90,7 @@ import { NButton, NEmpty, NInput, NPopconfirm, NTag, useMessage } from 'naive-ui
 import type { SkillSummary } from '@shared/skills';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
+import ExtensionSourceTag from './ExtensionSourceTag.vue';
 import { deleteSkill, importSkillDirectory, listSkills } from '@/modules/chat/api/skills.api';
 import { openDataLocation } from '@/app/data-location.api';
 
@@ -276,15 +272,6 @@ onMounted(load);
   font-size: 12px;
   line-height: 1.5;
   letter-spacing: 0.01em;
-}
-
-.nh-extension-item__top :deep(.nh-extension-item__builtin-tag) {
-  --n-color: color-mix(in srgb, var(--nh-color-success) 16%, transparent);
-  --n-text-color: var(--nh-color-success);
-  --n-border: 1px solid color-mix(in srgb, var(--nh-color-success) 42%, transparent);
-  --n-border-hover: 1px solid color-mix(in srgb, var(--nh-color-success) 62%, transparent);
-
-  font-weight: 600;
 }
 
 .nh-extension-item__tags :deep(.n-tag) {

@@ -71,6 +71,7 @@ import type {
   ProviderModel
 } from '@shared/ipc/contracts';
 import { askUserInputSchema, type AskQuestion, type AskUserAnswer } from '@shared/ask-user';
+import { parseExplicitSkill } from '@shared/skills';
 import { executeThemeTool, themeToolDefinitions } from './theme-tools';
 import { executeSkinTool, skinToolDefinitions } from './skin-tools';
 import { executeTerminalTool, terminalToolDefinitions } from './terminal-tools';
@@ -2042,9 +2043,9 @@ ${assistant.slice(0, 3_000)}`;
         : [];
       let agentPrompt = input.prompt;
       let skillContext = '';
-      const explicitSkill = input.prompt.trim().match(/^\/([a-zA-Z0-9._-]+)(?:\s+([\s\S]*))?$/);
+      const explicitSkill = parseExplicitSkill(input.prompt);
       if (explicitSkill && this.skills) {
-        const skill = await this.skills.read(explicitSkill[1]!);
+        const skill = await this.skills.read(explicitSkill.id);
         if (skill) {
           activatedSkills.add(skill.id);
           eventBus.publish(
@@ -2056,7 +2057,7 @@ ${assistant.slice(0, 3_000)}`;
               payload: { skillId: skill.id, trigger: 'explicit' }
             })
           );
-          agentPrompt = explicitSkill[2]?.trim() || `按照 Skill「${skill.name}」执行任务。`;
+          agentPrompt = explicitSkill.prompt || `按照 Skill「${skill.name}」执行任务。`;
           skillContext = `\n\n<skill name="${skill.name}">\n${skill.content.slice(0, 40_000)}\n</skill>`;
         }
       }

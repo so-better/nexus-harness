@@ -55,7 +55,16 @@
           @keydown="onComposerKeydown"
           @paste="onPaste"
           @blur="onInputBlur"
-        />
+        >
+          <template v-if="selectedSkill" #prefix>
+            <SkillTag
+              :id="selectedSkill.id"
+              :title="selectedSkill.name"
+              removable
+              @remove="clearSelectedSkill"
+            />
+          </template>
+        </NInput>
       </template>
       <SkillPalette
         v-if="skillOpen && skillItems.length > 0"
@@ -99,7 +108,7 @@
       :mode="mode"
       :approval-policy="approvalPolicy"
       :has-workspace="roots.length > 0"
-      :can-send="Boolean(draft.trim() || selectedReferences.length || hasAttachments) && !uploading"
+      :can-send="hasSendableContent && !uploading"
       :can-reference="roots.length > 0"
       :can-attach="!disabled && !running && !uploading"
       @attach="fileInput?.click()"
@@ -115,9 +124,11 @@
  * 输入区：消息发送、文件引用和模型/工作区选择。
  */
 
-import { computed, ref, toRef } from 'vue';
+import { computed, ref, toRef, watch } from 'vue';
 import { NInput, NPopover, type InputInst } from 'naive-ui';
 import type { MessageFileReference } from '@shared/events';
+import { buildSkillPrompt } from '@shared/skills';
+import type { SkillSummary } from '@shared/skills';
 import type {
   AgentMode,
   ApprovalPolicy,
@@ -135,6 +146,7 @@ import ComposerFileChips from './ComposerFileChips.vue';
 import ComposerFileReference from './ComposerFileReference.vue';
 import ComposerModelPicker from './ComposerModelPicker.vue';
 import ComposerRootPicker from './ComposerRootPicker.vue';
+import SkillTag from './SkillTag.vue';
 import SkillPalette from './SkillPalette.vue';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import type { ChatUsage } from '../types';
@@ -176,6 +188,7 @@ const emit = defineEmits<{
 
 const draft = ref('');
 const inputRef = ref<InputInst | null>(null);
+const selectedSkill = ref<SkillSummary>();
 const fileInput = ref<HTMLInputElement | null>(null);
 const placeholder = computed(() => t('chat.composerPlaceholder'));
 
@@ -191,10 +204,30 @@ const {
   items: skillItems,
   activeIndex: skillActiveIndex,
   choose: chooseSkill,
+  refresh: refreshSkillPalette,
   handleKeydown: handleSkillKeydown
-} = useSkillPalette(draft, inputRef);
+} = useSkillPalette(draft, inputRef, {
+  enabled: () => !selectedSkill.value,
+  onChoose: (skill) => {
+    selectedSkill.value = skill;
+    draft.value = '';
+  }
+});
+
+/**
+ * 清除临时选择的 Skill；若输入框仍以 / 开头，重新打开候选。
+ */
+const clearSelectedSkill = (): void => {
+  selectedSkill.value = undefined;
+  refreshSkillPalette();
+};
 
 const onComposerKeydown = (event: KeyboardEvent): void => {
+  if (event.key === 'Backspace' && !event.isComposing && !draft.value && selectedSkill.value) {
+    event.preventDefault();
+    clearSelectedSkill();
+    return;
+  }
   if (handleSkillKeydown(event)) return;
   onKeydown(event);
 };
@@ -221,13 +254,37 @@ const { selectedReferences, addReference, removeReference, send } = useComposerR
   }
 });
 
+const hasSendableContent = computed(() =>
+  Boolean(
+    draft.value.trim() ||
+    selectedReferences.value.length ||
+    hasAttachments.value ||
+    selectedSkill.value
+  )
+);
+
 /**
- * 关闭候选列表后提交消息。
+ * 关闭候选列表后提交消息；选了 Skill 时在发送前恢复 /id 前缀。
  */
 const submit = (): void => {
   closeReferences();
+  const skill = selectedSkill.value;
+  if (!skill || !hasSendableContent.value || props.disabled || props.running) {
+    send();
+    return;
+  }
+  const prompt = draft.value.trim();
+  selectedSkill.value = undefined;
+  draft.value = buildSkillPrompt(skill.id, prompt);
   send();
 };
+
+watch(
+  () => props.sessionId,
+  () => {
+    selectedSkill.value = undefined;
+  }
+);
 
 /**
  * 处理文件选择、粘贴与拖拽上传。
@@ -300,6 +357,8 @@ const {
 </script>
 
 <style scoped lang="less">
+@import '../../../styles/input-prefix.less';
+
 .nh-composer {
   display: flex;
   flex: none;
@@ -352,6 +411,14 @@ const {
   min-width: 0;
   align-items: center;
   gap: 2px;
+}
+
+.nh-composer :deep(.n-input__prefix) {
+  // NInput 前缀默认与多行输入顶部对齐，这里补偿 textarea 首行 padding
+  align-self: flex-start;
+  margin-right: 6px;
+  padding-top: 6px;
+  line-height: 1.5;
 }
 
 .nh-composer__file-input {

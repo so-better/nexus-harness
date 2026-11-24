@@ -32,12 +32,17 @@
         <NInput
           ref="editInput"
           v-model:value="draft"
+          class="nh-message__edit-input"
           type="textarea"
           :autosize="{ minRows: 2, maxRows: 6 }"
           @keydown="onEditKeydown"
           @paste="onEditPaste"
           @blur="onEditBlur"
-        />
+        >
+          <template v-if="editingSkillId" #prefix>
+            <SkillTag :id="editingSkillId" removable @remove="clearEditingSkill" />
+          </template>
+        </NInput>
       </template>
       <SkillPalette
         v-if="editSkillOpen && editSkillItems.length > 0"
@@ -61,7 +66,10 @@
         type="primary"
         secondary
         :disabled="
-          (!draft.trim() && !editingReferences.length && !editingAttachments.length) ||
+          (!draft.trim() &&
+            !editingSkillId &&
+            !editingReferences.length &&
+            !editingAttachments.length) ||
           editingUploading
         "
         @click="save"
@@ -81,6 +89,7 @@ import { computed, nextTick, onMounted, ref } from 'vue';
 import { NButton, NInput, NPopover, type InputInst } from 'naive-ui';
 import { t } from '@/app/i18n';
 import type { MessageAttachment, MessageFileReference } from '@shared/events';
+import { buildSkillPrompt, parseExplicitSkill } from '@shared/skills';
 import type { WorkspaceFileReference } from '@shared/ipc/contracts';
 import { isImageFile } from '@shared/files';
 import type { ChatMessageView } from '../types';
@@ -93,6 +102,7 @@ import AttachmentChip from './AttachmentChip.vue';
 import UserFileChip from './UserFileChip.vue';
 import ComposerFileReference from './ComposerFileReference.vue';
 import SkillPalette from './SkillPalette.vue';
+import SkillTag from './SkillTag.vue';
 
 const props = defineProps<{
   message: ChatMessageView;
@@ -106,6 +116,7 @@ const emit = defineEmits<{
 }>();
 
 const draft = ref('');
+const editingSkillId = ref<string>();
 const editingReferences = ref<MessageFileReference[]>([]);
 const editInput = ref<InputInst | null>(null);
 
@@ -132,7 +143,14 @@ const editFileReference = useFileReference({
   submit: () => undefined,
   toggleMode: () => undefined
 });
-const editSkillPalette = useSkillPalette(draft, editInput);
+const editSkillPalette = useSkillPalette(draft, editInput, {
+  enabled: () => !editingSkillId.value,
+  onChoose: (skill) => {
+    editingSkillId.value = skill.id;
+    draft.value = '';
+  }
+});
+
 const {
   attachments: editingAttachments,
   uploading: editingUploading,
@@ -178,8 +196,17 @@ const {
   items: editSkillItems,
   activeIndex: editSkillActiveIndex,
   choose: chooseEditSkill,
+  refresh: refreshEditSkillPalette,
   handleKeydown: handleEditSkillKeydown
 } = editSkillPalette;
+
+/**
+ * 清除编辑态 Skill；若输入框仍以 / 开头，重新打开候选。
+ */
+const clearEditingSkill = (): void => {
+  editingSkillId.value = undefined;
+  refreshEditSkillPalette();
+};
 
 /**
  * 编辑态失焦时关闭 Skill 与 @ 候选，避免浮层残留。
@@ -214,6 +241,11 @@ const onEditDrop = (event: DragEvent): void => {
  * 编辑态键盘：优先处理 Skill 与 @ 候选，保留 Cmd/Ctrl+Enter 保存与 Esc 取消。
  */
 const onEditKeydown = (event: KeyboardEvent): void => {
+  if (event.key === 'Backspace' && !event.isComposing && !draft.value && editingSkillId.value) {
+    event.preventDefault();
+    clearEditingSkill();
+    return;
+  }
   if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
     event.preventDefault();
     save();
@@ -231,7 +263,7 @@ const onEditKeydown = (event: KeyboardEvent): void => {
 };
 
 const save = (): void => {
-  const content = draft.value.trim();
+  const content = buildSkillPrompt(editingSkillId.value, draft.value);
   if (editingUploading.value) return;
   if (!content && !editingReferences.value.length && !editingAttachments.value.length) return;
   emit(
@@ -250,7 +282,10 @@ const cancel = (): void => {
 
 const start = (): void => {
   const parts = splitUserMessageReferences(props.message.content);
-  draft.value = props.message.references?.length ? props.message.content : parts.text;
+  const text = props.message.references?.length ? props.message.content : parts.text;
+  const skill = parseExplicitSkill(text);
+  editingSkillId.value = skill?.id;
+  draft.value = skill?.prompt ?? text;
   editingReferences.value = props.message.references?.length
     ? props.message.references
     : parts.references;
@@ -271,11 +306,17 @@ onMounted(start);
 </script>
 
 <style scoped lang="less">
+@import '../../../styles/input-prefix.less';
+
 .nh-message__edit-files {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.nh-message__edit-input :deep(.n-input__prefix) {
+  .textarea-prefix-align();
 }
 
 .nh-message__edit-actions {

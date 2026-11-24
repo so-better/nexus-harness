@@ -7,13 +7,28 @@ import type { InputInst } from 'naive-ui';
 import type { SkillSummary } from '@shared/skills';
 import { listSkills } from './api/skills.api';
 
-export const useSkillPalette = (draft: Ref<string>, inputRef: Ref<InputInst | null>) => {
+interface SkillPaletteOptions {
+  /** 自定义选择行为；未提供时把 /id 写回输入框 */
+  onChoose?: (skill: SkillSummary) => void;
+  /** 返回 false 时把 / 当普通字符，不再打开候选 */
+  enabled?: () => boolean;
+}
+
+export const useSkillPalette = (
+  draft: Ref<string>,
+  inputRef: Ref<InputInst | null>,
+  options: SkillPaletteOptions = {}
+) => {
   const open = ref(false);
   const items = ref<SkillSummary[]>([]);
   const activeIndex = ref(0);
   let request = 0;
 
-  watch(draft, async (value) => {
+  const evaluate = async (value: string): Promise<void> => {
+    if (options.enabled && !options.enabled()) {
+      open.value = false;
+      return;
+    }
     const match = /^\/([a-zA-Z0-9._-]*)$/.exec(value);
     if (!match) {
       open.value = false;
@@ -46,10 +61,28 @@ export const useSkillPalette = (draft: Ref<string>, inputRef: Ref<InputInst | nu
       items.value = [];
       open.value = false;
     }
+  };
+
+  watch(draft, (value) => {
+    evaluate(value).catch((error: unknown) => {
+      console.error('检索 Skill 失败', error);
+    });
   });
 
+  /** 移除已选 Skill 后按当前输入重新判断是否打开候选 */
+  const refresh = (): void => {
+    evaluate(draft.value).catch((error: unknown) => {
+      console.error('检索 Skill 失败', error);
+    });
+  };
+
   const choose = (id: string): void => {
-    draft.value = `/${id} `;
+    const skill = items.value.find((item) => item.id === id);
+    if (skill && options.onChoose) {
+      options.onChoose(skill);
+    } else {
+      draft.value = `/${id} `;
+    }
     open.value = false;
     inputRef.value?.focus();
   };
@@ -83,5 +116,5 @@ export const useSkillPalette = (draft: Ref<string>, inputRef: Ref<InputInst | nu
     return false;
   };
 
-  return { open, items, activeIndex, choose, handleKeydown };
+  return { open, items, activeIndex, choose, refresh, handleKeydown };
 };

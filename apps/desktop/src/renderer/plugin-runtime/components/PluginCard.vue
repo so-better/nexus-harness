@@ -9,15 +9,10 @@
         <NTag v-if="plugin.hasMain" size="small" type="warning" :bordered="false">
           {{ t('plugins.mainCode') }}
         </NTag>
-        <NTag
-          class="nh-plugin-card__source-tag"
-          :class="{ 'nh-plugin-card__builtin-tag': plugin.source === 'builtin' }"
-          size="small"
-          :bordered="plugin.source === 'builtin'"
-          :type="plugin.source === 'builtin' ? 'success' : 'primary'"
-        >
-          {{ plugin.source === 'builtin' ? t('plugins.builtin') : t('plugins.user') }}
-        </NTag>
+        <ExtensionSourceTag
+          :source="plugin.source"
+          :label="plugin.source === 'builtin' ? t('plugins.builtin') : t('plugins.user')"
+        />
       </div>
     </div>
     <p v-if="plugin.description" class="nh-plugin-card__description">{{ plugin.description }}</p>
@@ -68,6 +63,7 @@ import { NButton, NPopconfirm, NSwitch, NTag } from 'naive-ui';
 import type { PluginPublic } from '@shared/plugin';
 import { t } from '@/app/i18n';
 import PluginSettingsForm from './PluginSettingsForm.vue';
+import ExtensionSourceTag from './ExtensionSourceTag.vue';
 import AppIcon from '@/components/AppIcon.vue';
 
 defineProps<{ plugin: PluginPublic; busy: boolean }>();
@@ -120,15 +116,6 @@ const emit = defineEmits<{
   font-size: 12px;
   line-height: 1.5;
   letter-spacing: 0.01em;
-}
-
-.nh-plugin-card__tags :deep(.nh-plugin-card__builtin-tag) {
-  --n-color: color-mix(in srgb, var(--nh-color-success) 16%, transparent);
-  --n-text-color: var(--nh-color-success);
-  --n-border: 1px solid color-mix(in srgb, var(--nh-color-success) 42%, transparent);
-  --n-border-hover: 1px solid color-mix(in srgb, var(--nh-color-success) 62%, transparent);
-
-  font-weight: 600;
 }
 
 .nh-plugin-card__description {

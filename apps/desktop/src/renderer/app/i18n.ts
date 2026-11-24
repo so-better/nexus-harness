@@ -240,6 +240,8 @@ const zhCN = {
   'chat.fileReferenceEmpty': '没有匹配文件',
   'chat.fileReferenceRemove': '移除引用',
   'chat.skillTitle': '斜杠技能',
+  'chat.skillLabel': '技能',
+  'chat.skillRemove': '移除技能',
   'chat.emptySessionTitle': '从一个目标开始',
   'chat.emptySessionHint': '说清要达成的结果，Nexus 会推进并记录过程。',
   'chat.modeChangeFailed': '切换 Agent 模式失败',
@@ -843,6 +845,8 @@ const enUS: Record<MessageKey, string> = {
   'chat.fileReferenceEmpty': 'No matching files',
   'chat.fileReferenceRemove': 'Remove reference',
   'chat.skillTitle': 'Slash SKILLS',
+  'chat.skillLabel': 'Skill',
+  'chat.skillRemove': 'Remove skill',
   'chat.emptySessionTitle': 'Start with a goal',
   'chat.emptySessionHint':
     'State the outcome you want. Nexus will move it forward and record the process.',

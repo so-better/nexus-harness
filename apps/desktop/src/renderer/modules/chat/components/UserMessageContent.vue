@@ -1,6 +1,12 @@
 <template>
   <div class="nh-user-message">
-    <p v-if="parts.text" class="nh-user-message__text">{{ parts.text }}</p>
+    <p v-if="skill || parts.text" class="nh-user-message__text">
+      <SkillTag v-if="skill" :id="skill.id" /><span
+        v-if="displayText"
+        class="nh-user-message__prompt"
+        >{{ displayText }}</span
+      >
+    </p>
     <div v-if="parts.references.length || attachments?.length" class="nh-user-message__references">
       <UserFileChip
         v-for="file in parts.references"
@@ -25,7 +31,9 @@
 
 import { computed } from 'vue';
 import type { MessageAttachment, MessageFileReference } from '@shared/events';
+import { parseExplicitSkill } from '@shared/skills';
 import { isImageFile } from '@shared/files';
+import SkillTag from './SkillTag.vue';
 import { splitUserMessageReferences } from '../message-references';
 import AttachmentChip from './AttachmentChip.vue';
 import UserFileChip from './UserFileChip.vue';
@@ -42,6 +50,13 @@ const parts = computed(() => {
   }
   return splitUserMessageReferences(props.content);
 });
+
+/**
+ * 显式 Skill 调用：与主进程使用相同的前缀规则，展示 /skill-id 标签。
+ */
+const skill = computed(() => parseExplicitSkill(parts.value.text));
+
+const displayText = computed(() => skill.value?.prompt ?? parts.value.text);
 </script>
 
 <style scoped lang="less">
@@ -58,6 +73,11 @@ const parts = computed(() => {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   text-wrap: pretty;
+}
+
+.nh-user-message__text :deep(.nh-skill-tag) {
+  margin-right: 6px;
+  vertical-align: middle;
 }
 
 .nh-user-message__references {
