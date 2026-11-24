@@ -76,6 +76,30 @@ describe('MessageList thinking placeholder', () => {
     app.unmount();
   });
 
+  it('inserts a date divider when messages cross a day boundary', async () => {
+    const first = { ...userMessage, id: 'u-old', createdAt: new Date(2020, 0, 1, 10).getTime() };
+    const second = { ...userMessage, id: 'u-new', createdAt: new Date(2021, 0, 1, 10).getTime() };
+    const messages = ref<ChatMessageView[]>([first, second]);
+    const Wrapper = defineComponent({
+      setup() {
+        return () => h(MessageList, { messages: messages.value, sessionId: 'session-1' });
+      }
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(Wrapper);
+    app.mount(host);
+    await nextTick();
+
+    const labels = [...host.querySelectorAll('.nh-message-list__date')].map((node) =>
+      node.textContent?.trim()
+    );
+    expect(labels).toHaveLength(2);
+    expect(labels[0]).toContain('2020');
+    expect(labels[1]).toContain('2021');
+    app.unmount();
+  });
+
   it('scrolls to the latest message on initial mount', async () => {
     const messages: ChatMessageView[] = [userMessage];
     const host = document.createElement('div');

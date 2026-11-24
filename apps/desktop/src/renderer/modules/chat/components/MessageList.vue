@@ -1,33 +1,36 @@
 <template>
   <div ref="viewport" class="nh-message-list" @scroll="handleScroll">
     <div ref="stack" class="nh-message-list__stack">
-      <ChatMessageItem
-        v-for="(message, index) in messages"
-        :key="message.id"
-        :message="message"
-        :grouped="isGrouped(index)"
-        :highlighted="message.id === highlightedId"
-        :ask-users="askForMessage(message.id)"
-        :approvals="approvals"
-        :session-id="sessionId"
-        :is-last-assistant="message.id === lastAssistantId"
-        :actions-disabled="actionsDisabled"
-        :workspace-auth="workspaceAuth ?? null"
-        :workspace-auth-tool-exists="workspaceAuthToolExists"
-        :run-thinking="message.id === thinkingTargetId"
-        @content-growth="handleContentGrowth"
-        @answer-user="(requestId, answers) => emit('answer-user', requestId, answers)"
-        @approve="emit('approve', $event)"
-        @reject="emit('reject', $event)"
-        @edit-message="
-          (content, references, attachmentIds) =>
-            emit('edit-message', message.id, content, references, attachmentIds)
-        "
-        @regenerate-message="emit('regenerate-message', message.id)"
-        @request-root="emit('request-root')"
-        @allow-workspace="emit('allow-workspace')"
-        @reject-workspace="emit('reject-workspace')"
-      />
+      <template v-for="(message, index) in messages" :key="message.id">
+        <div v-if="showDateDivider(index)" class="nh-message-list__date">
+          {{ dateLabel(message.createdAt) }}
+        </div>
+        <ChatMessageItem
+          :message="message"
+          :grouped="isGrouped(index)"
+          :highlighted="message.id === highlightedId"
+          :ask-users="askForMessage(message.id)"
+          :approvals="approvals"
+          :session-id="sessionId"
+          :is-last-assistant="message.id === lastAssistantId"
+          :actions-disabled="actionsDisabled"
+          :workspace-auth="workspaceAuth ?? null"
+          :workspace-auth-tool-exists="workspaceAuthToolExists"
+          :run-thinking="message.id === thinkingTargetId"
+          @content-growth="handleContentGrowth"
+          @answer-user="(requestId, answers) => emit('answer-user', requestId, answers)"
+          @approve="emit('approve', $event)"
+          @reject="emit('reject', $event)"
+          @edit-message="
+            (content, references, attachmentIds) =>
+              emit('edit-message', message.id, content, references, attachmentIds)
+          "
+          @regenerate-message="emit('regenerate-message', message.id)"
+          @request-root="emit('request-root')"
+          @allow-workspace="emit('allow-workspace')"
+          @reject-workspace="emit('reject-workspace')"
+        />
+      </template>
       <RunThinkingMessage v-if="showThinking && !thinkingTargetId" />
     </div>
   </div>
@@ -42,6 +45,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { AskUserAnswer } from '@shared/ask-user';
 import type { MessageFileReference } from '@shared/events';
 import { indexAskUsersByMessage } from '../ask-user-index';
+import { formatMessageDay, isSameMessageDay } from '../message-time';
+import { useMessageClock } from '../use-message-clock';
+import { locale, t } from '@/app/i18n';
 import { shouldShowRunThinking } from '../agent-generation';
 import type { WorkspaceAuthorizationRequest } from '@shared/ipc/contracts';
 import type { ChatApproval, ChatAskUser, ChatMessageView } from '../types';
@@ -87,6 +93,25 @@ const workspaceAuthToolExists = computed(() => {
     props.messages.some((message) => message.toolCalls.some((tool) => tool.id === toolCallId))
   );
 });
+
+const messageClock = useMessageClock();
+
+const showDateDivider = (index: number): boolean => {
+  const current = props.messages[index];
+  const previous = props.messages[index - 1];
+  return Boolean(
+    current && (!previous || !isSameMessageDay(current.createdAt, previous.createdAt))
+  );
+};
+
+const dateLabel = (timestamp: number): string =>
+  formatMessageDay(
+    timestamp,
+    locale.value,
+    messageClock.value,
+    t('session.groupToday'),
+    t('session.groupYesterday')
+  );
 
 const lastAssistantId = computed(
   () =>
@@ -253,7 +278,8 @@ const isGrouped = (index: number): boolean => {
     previous.role === 'assistant' &&
     !current.compactionNotice &&
     !previous.compactionNotice &&
-    current.createdAt - previous.createdAt < 10 * 60 * 1000
+    current.createdAt - previous.createdAt < 10 * 60 * 1000 &&
+    isSameMessageDay(current.createdAt, previous.createdAt)
   );
 };
 
@@ -287,6 +313,28 @@ watch(
   flex: 1;
   overflow: auto;
   padding: 40px 32px;
+}
+
+.nh-message-list__date {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: -8px 0;
+  color: var(--nh-color-text-disabled);
+  font-size: 11px;
+  text-align: center;
+}
+
+.nh-message-list__date::before,
+.nh-message-list__date::after {
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(90deg, transparent, var(--nh-border-subtle));
+  content: '';
+}
+
+.nh-message-list__date::after {
+  transform: scaleX(-1);
 }
 
 .nh-message-list__stack {

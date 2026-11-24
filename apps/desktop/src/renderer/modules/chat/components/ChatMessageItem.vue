@@ -122,6 +122,9 @@ import ChatMessageActions from './ChatMessageActions.vue';
 import ChatMessageEditForm from './ChatMessageEditForm.vue';
 import AssistantMessageFlow from './AssistantMessageFlow.vue';
 import { hasStreamingText, shouldShowMessageThinking } from '../agent-generation';
+import { formatMessageTime } from '../message-time';
+import { useMessageClock } from '../use-message-clock';
+import { locale, t } from '@/app/i18n';
 import { useMessageFlow } from '../use-message-flow';
 import { useMessageStreaming } from '../use-message-streaming';
 
@@ -224,11 +227,15 @@ const showThinking = computed(
     })
 );
 
+const messageClock = useMessageClock();
 const timeLabel = computed(() =>
-  new Intl.DateTimeFormat('zh-CN', {
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(props.message.createdAt)
+  formatMessageTime(
+    props.message.createdAt,
+    locale.value,
+    messageClock.value,
+    t('session.groupToday'),
+    t('session.groupYesterday')
+  )
 );
 </script>
 
