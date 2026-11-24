@@ -3,7 +3,10 @@
     v-if="message.role === 'system'"
     class="nh-message nh-message--system"
     :data-message-id="message.id"
-    :class="{ 'nh-message--highlighted': highlighted }"
+    :class="{
+      'nh-message--highlighted': highlighted,
+      'nh-message--compaction': message.compactionNotice
+    }"
   >
     <span class="nh-message__system-dot" />
     <span>{{ message.content }}</span>
@@ -331,9 +334,43 @@ const timeLabel = computed(() =>
   text-align: center;
 }
 
+.nh-message--compaction {
+  width: min(100%, 820px);
+  gap: 12px;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--nh-color-text-secondary) 72%, transparent);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+}
+
+.nh-message--compaction::before,
+.nh-message--compaction::after {
+  height: 1px;
+  flex: 1;
+  min-width: 24px;
+  background: linear-gradient(90deg, transparent, var(--nh-border-subtle));
+  content: '';
+}
+
+.nh-message--compaction::after {
+  transform: scaleX(-1);
+}
+
+.nh-message--compaction > span:last-child {
+  max-width: 72%;
+}
+
+.nh-message--compaction .nh-message__system-dot {
+  display: none;
+}
+
 .nh-message__system-dot {
   width: 6px;
   height: 6px;
+  flex: none;
   border-radius: 50%;
   background: var(--nh-color-warning);
 }

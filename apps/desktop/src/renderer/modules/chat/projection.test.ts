@@ -405,7 +405,10 @@ describe('projectEvents', () => {
       status: 'succeeded',
       output: 'hello'
     });
-    expect(projection.messages[2]).toMatchObject({ role: 'system' });
+    expect(projection.messages[2]).toMatchObject({
+      role: 'system',
+      compactionNotice: true
+    });
     expect(projection.approvals[0]?.status).toBe('approved');
     expect(projection.usage).toEqual({ inputTokens: 10, outputTokens: 5, cost: 0.1 });
     expect(projection.messages.find((message) => message.id === 'assistant-1')?.usage).toEqual({
@@ -417,7 +420,7 @@ describe('projectEvents', () => {
     expect(projection.running).toBe(false);
   });
 
-  it('shows only one meaningful compaction notice and hides tool-output truncation', () => {
+  it('shows only one meaningful compaction notice', () => {
     const projection = projectEvents([
       event({
         sessionId: 'session-1',
@@ -449,9 +452,11 @@ describe('projectEvents', () => {
       })
     ]);
 
-    const notices = projection.messages.filter((message) => message.role === 'system');
+    const notices = projection.messages.filter((message) => message.compactionNotice);
     expect(notices).toHaveLength(1);
-    expect(notices[0]?.content).toContain('上下文压缩');
+    expect(notices[0]?.role).toBe('system');
+    expect(notices[0]?.content).toContain('上下文较长');
+    expect(notices[0]?.toolCalls).toEqual([]);
   });
 
   it('projects run failures as an assistant error bubble', () => {

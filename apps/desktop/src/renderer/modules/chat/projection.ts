@@ -549,12 +549,14 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       );
       if (meaningful && !compactionNoticeShown) {
         compactionNoticeShown = true;
-        messages.push(
-          systemMessage(
-            event,
-            `上下文压缩：${payload.beforeTokens} → ${payload.afterTokens} tokens（${payload.strategy}）`
-          )
-        );
+        messages.push({
+          id: `compaction-${event.id}`,
+          role: 'system',
+          content: '会话上下文较长，我已自动整理较早内容，保留关键目标和未完成事项。我们继续。',
+          toolCalls: [],
+          createdAt: event.ts,
+          compactionNotice: true
+        });
       }
     }
   }
@@ -621,14 +623,3 @@ const updateTool = (
     }
   }
 };
-
-/**
- * 生成系统提示消息。
- */
-const systemMessage = (event: NexusEvent, content: string): ChatMessageView => ({
-  id: `system-${event.id}`,
-  role: 'system',
-  content,
-  toolCalls: [],
-  createdAt: event.ts
-});

@@ -144,6 +144,54 @@ describe('MessageList thinking placeholder', () => {
     }
   });
 
+  it('does not force-scroll a compaction notice when the user is reading history', async () => {
+    const messages = ref<ChatMessageView[]>([userMessage]);
+    const Wrapper = defineComponent({
+      setup() {
+        return () =>
+          h(MessageList, {
+            messages: messages.value,
+            sessionId: 'session-1'
+          });
+      }
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(Wrapper);
+
+    try {
+      app.mount(host);
+      await nextTick();
+      const viewport = host.querySelector<HTMLElement>('.nh-message-list');
+      if (!viewport) throw new Error('message viewport missing');
+      Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 720 });
+      Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 200 });
+      viewport.scrollTop = 120;
+      viewport.dispatchEvent(new Event('scroll'));
+      const scrollTo = vi.mocked(HTMLElement.prototype.scrollTo);
+      scrollTo.mockClear();
+
+      messages.value = [
+        userMessage,
+        {
+          id: 'compaction-1',
+          role: 'system',
+          content: '上下文压缩',
+          toolCalls: [],
+          createdAt: 2,
+          compactionNotice: true
+        }
+      ];
+      await nextTick();
+      await nextTick();
+
+      // 与普通助手消息一致：用户没有贴底时，不强行拉回底部
+      expect(scrollTo).not.toHaveBeenCalled();
+    } finally {
+      app.unmount();
+    }
+  });
+
   it('returns to the latest message when switching sessions', async () => {
     const messages = ref<ChatMessageView[]>([userMessage]);
     const sessionId = ref('session-1');

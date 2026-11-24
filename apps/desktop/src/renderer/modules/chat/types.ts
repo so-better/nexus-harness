@@ -56,6 +56,8 @@ export interface ChatMessageView {
   streaming?: boolean;
   superseded?: boolean;
   hidden?: boolean;
+  /** 上下文压缩提示，使用系统消息样式 */
+  compactionNotice?: boolean;
   runId?: string;
   usage?: ChatUsage;
   files?: OutputFile[];

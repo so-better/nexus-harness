@@ -89,7 +89,10 @@ const workspaceAuthToolExists = computed(() => {
 });
 
 const lastAssistantId = computed(
-  () => [...props.messages].reverse().find((message) => message.role === 'assistant')?.id
+  () =>
+    [...props.messages]
+      .reverse()
+      .find((message) => message.role === 'assistant' && !message.compactionNotice)?.id
 );
 const showThinking = computed(() => shouldShowRunThinking(Boolean(props.thinking), props.messages));
 const thinkingTargetId = computed(() => {
@@ -248,6 +251,8 @@ const isGrouped = (index: number): boolean => {
     previous &&
     current.role === 'assistant' &&
     previous.role === 'assistant' &&
+    !current.compactionNotice &&
+    !previous.compactionNotice &&
     current.createdAt - previous.createdAt < 10 * 60 * 1000
   );
 };
@@ -267,8 +272,8 @@ watch(
     await nextTick();
     if (focusing.value) return;
 
-    // 用户自己发送消息时始终回到最新；其余新消息仅在贴底时跟随
     const last = props.messages.at(-1);
+    // 用户自己发送消息时始终回到最新；其余新消息仅在贴底时跟随
     if (last?.role !== 'user' && !stickToBottom.value) return;
     stickToBottom.value = true;
     scrollToLatest();
