@@ -325,7 +325,7 @@ onMounted(load);
   flex: none;
   place-items: center;
   border-radius: 50%;
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
   color: var(--nh-color-text-secondary);
   font-family: var(--nh-font-mono);
   font-size: 10px;

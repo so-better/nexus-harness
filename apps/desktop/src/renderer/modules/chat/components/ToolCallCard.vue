@@ -246,7 +246,7 @@ const statusTone = computed<'success' | 'error' | 'warning' | 'info'>(() => {
 }
 
 .nh-tool :deep(.n-collapse-item__header:hover) {
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
 }
 
 .nh-tool :deep(.n-collapse-item__header-main) {
@@ -285,7 +285,7 @@ const statusTone = computed<'success' | 'error' | 'warning' | 'info'>(() => {
   flex: none;
   place-items: center;
   border-radius: 6px;
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-elevated);
   color: var(--nh-color-text-secondary);
 }
 
@@ -404,7 +404,7 @@ const statusTone = computed<'success' | 'error' | 'warning' | 'info'>(() => {
   margin: 8px 0 0;
   padding: 4px 8px;
   border-radius: 6px;
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-elevated);
   color: var(--nh-color-text-secondary);
   font-size: 11px;
   overflow-wrap: anywhere;

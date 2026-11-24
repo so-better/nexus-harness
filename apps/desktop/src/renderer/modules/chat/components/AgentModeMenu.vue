@@ -93,7 +93,7 @@ const options = computed<Array<{ value: AgentMode; label: string; description: s
 }
 
 .nh-mode-option:hover {
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
 }
 
 .nh-mode-option--plan .nh-mode-option__title {

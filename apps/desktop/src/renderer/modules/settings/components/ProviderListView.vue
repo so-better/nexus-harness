@@ -172,7 +172,7 @@ const initialOf = (name: string): string => name.trim().charAt(0).toUpperCase() 
 }
 
 .nh-provider-item--disabled .nh-provider-item__avatar {
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
   color: var(--nh-color-text-secondary);
 }
 

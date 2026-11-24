@@ -115,7 +115,7 @@ const rootName = (path: string): string => path.split(/[\\/]/).filter(Boolean).a
 }
 
 .nh-reference:hover {
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
 }
 
 .nh-reference--active,
@@ -130,7 +130,7 @@ const rootName = (path: string): string => path.split(/[\\/]/).filter(Boolean).a
   flex: none;
   place-items: center;
   border-radius: 6px;
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
   color: var(--nh-color-text-secondary);
 }
 

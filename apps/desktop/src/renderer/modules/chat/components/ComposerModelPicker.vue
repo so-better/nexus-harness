@@ -133,7 +133,7 @@ const onModelChange = (key: string | number): void => {
 }
 
 .nh-composer__selector:hover:not(:disabled) {
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
   color: var(--nh-color-text-primary);
 }
 

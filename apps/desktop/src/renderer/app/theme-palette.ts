@@ -129,7 +129,7 @@ export const getNaiveOverrides = (palette: ThemePalette): GlobalThemeOverrides =
     popoverColor: palette.bgPopover,
     inputColor: 'var(--nh-input-bg)',
     actionColor: palette.bgElevated,
-    hoverColor: palette.bgHover,
+    hoverColor: 'var(--nh-surface-hover)',
     borderColor: 'var(--nh-border-subtle)',
     dividerColor: 'var(--nh-border-subtle)',
     textColorBase: palette.textPrimary,

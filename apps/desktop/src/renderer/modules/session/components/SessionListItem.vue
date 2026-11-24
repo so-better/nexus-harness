@@ -257,7 +257,7 @@ const relativeTime = computed(() => {
   flex: none;
   place-items: center;
   border-radius: 7px;
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-elevated);
   color: var(--nh-color-text-secondary);
 }
 
@@ -387,7 +387,7 @@ const relativeTime = computed(() => {
 }
 
 .nh-session-item__action:hover {
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
   color: var(--nh-color-text-primary);
 }
 </style>

@@ -122,7 +122,7 @@ const choose = (value: ApprovalPolicy): void => {
 }
 
 .nh-approval-select:hover:not(:disabled) {
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
 }
 
 .nh-approval-select--workspace {
@@ -189,7 +189,7 @@ const choose = (value: ApprovalPolicy): void => {
 }
 
 .nh-approval-option:hover:not(:disabled) {
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
 }
 
 .nh-approval-option--workspace .nh-approval-option__title {

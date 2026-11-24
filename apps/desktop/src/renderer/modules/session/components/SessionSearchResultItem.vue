@@ -58,7 +58,7 @@ const roleLabel = computed(() =>
 }
 
 .nh-search-result:hover {
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
 }
 
 .nh-search-result--active {

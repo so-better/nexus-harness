@@ -126,6 +126,7 @@ const handleClick = async (event: MouseEvent): Promise<void> => {
   padding: 1px 4px;
   border-radius: 4px;
   background: var(--nh-color-bg-hover);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nh-border-subtle) 78%, transparent);
   font-family: var(--nh-font-mono);
   font-size: 0.92em;
 }
@@ -206,7 +207,7 @@ const handleClick = async (event: MouseEvent): Promise<void> => {
   padding: 10px 12px;
   border: 1px solid var(--nh-border-subtle);
   border-radius: 10px;
-  background: var(--nh-color-bg-hover);
+  background: color-mix(in srgb, var(--nh-color-danger) 7%, var(--nh-surface-elevated));
   color: var(--nh-color-danger);
 }
 

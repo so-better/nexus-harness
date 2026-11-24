@@ -80,7 +80,7 @@ const html = computed(() => DOMPurify.sanitize(marked.parse(content.value) as st
 .nh-changelog :deep(code) {
   padding: 1px 4px;
   border-radius: 4px;
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
   font-family: var(--nh-font-mono);
   font-size: 12px;
 }

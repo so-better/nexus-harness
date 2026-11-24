@@ -92,7 +92,7 @@ watch(
 }
 
 .nh-skill-palette__item:hover {
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
 }
 
 .nh-skill-palette__item--active,
@@ -107,7 +107,7 @@ watch(
   flex: none;
   place-items: center;
   border-radius: 6px;
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
   color: var(--nh-color-text-secondary);
 }
 

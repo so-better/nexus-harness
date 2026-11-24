@@ -107,7 +107,7 @@ const isSelected = (optionId: string): boolean => props.selectedIds.includes(opt
 }
 
 .nh-ask-option:hover {
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
 }
 
 .nh-ask-option--selected {

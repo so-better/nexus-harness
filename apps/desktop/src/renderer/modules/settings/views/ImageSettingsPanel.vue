@@ -250,7 +250,7 @@ onMounted(load);
 }
 
 .nh-image-card--disabled .nh-image-card__avatar {
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
   color: var(--nh-color-text-secondary);
 }
 

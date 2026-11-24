@@ -87,7 +87,7 @@ const choose = (mode: AgentMode): void => {
 }
 
 .nh-mode-select:hover:not(:disabled) {
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
 }
 
 .nh-mode-select--plan {

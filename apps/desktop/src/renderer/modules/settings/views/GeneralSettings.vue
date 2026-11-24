@@ -296,7 +296,7 @@ onBeforeUnmount(() => {
   flex: none;
   place-items: center;
   border-radius: 8px;
-  background: var(--nh-color-bg-hover);
+  background: var(--nh-surface-hover);
   color: var(--nh-color-text-secondary);
 }
 

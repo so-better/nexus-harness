@@ -16,6 +16,7 @@
   --nh-space-lg: 24px;
   --nh-surface-base: var(--nh-color-bg-base);
   --nh-surface-elevated: var(--nh-color-bg-elevated);
+  --nh-surface-hover: var(--nh-color-bg-hover);
   --nh-surface-overlay: var(--nh-color-bg-modal);
   --nh-surface-popover: var(--nh-color-bg-popover);
   --nh-surface-input: var(--nh-color-bg-base);
@@ -44,6 +45,7 @@
 :root[data-skin='active'] {
   --nh-surface-base: color-mix(in srgb, var(--nh-color-bg-base) 52%, transparent);
   --nh-surface-elevated: color-mix(in srgb, var(--nh-color-bg-elevated) 60%, transparent);
+  --nh-surface-hover: color-mix(in srgb, var(--nh-color-bg-hover) 55%, transparent);
   --nh-border-subtle: color-mix(in srgb, var(--nh-color-border) 66%, transparent);
   --nh-surface-input: color-mix(in srgb, var(--nh-color-bg-base) 76%, transparent);
 }
@@ -135,6 +137,7 @@ body:has(.n-modal-mask) .nh-titlebar {
 .n-dropdown-menu {
   --nh-surface-base: var(--nh-color-bg-base);
   --nh-surface-elevated: var(--nh-color-bg-elevated);
+  --nh-surface-hover: var(--nh-color-bg-hover);
   --nh-surface-input: var(--nh-color-bg-base);
   --nh-border-subtle: var(--nh-color-border);
   --nh-input-bg: var(--nh-color-bg-base);
