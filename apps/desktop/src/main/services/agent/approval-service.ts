@@ -42,6 +42,16 @@ export class ApprovalService {
   }
 
   /**
+   * 查询某个 Run 是否仍有待处理审批；用于避免单个子代理审批结束时提前恢复状态。
+   */
+  hasPendingForRun(runId: string): boolean {
+    for (const item of this.pending.values()) {
+      if (item.runId === runId) return true;
+    }
+    return false;
+  }
+
+  /**
    * Run 取消或结束时拒绝所有待处理审批。
    */
   cancelRun(runId: string): void {

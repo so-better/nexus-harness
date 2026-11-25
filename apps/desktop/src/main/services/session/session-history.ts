@@ -70,7 +70,8 @@ export class SessionHistoryService {
       pendingCalls.clear();
     };
 
-    const allEvents = this.events.list(sessionId);
+    // 子代理事件不进入父会话上下文；实时嵌套只用于 UI
+    const allEvents = this.events.list(sessionId).filter((event) => !event.parentToolCallId);
     const supersededIds = new Set(
       allEvents
         .filter((event) => event.type === 'message.superseded')

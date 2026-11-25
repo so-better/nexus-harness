@@ -3,6 +3,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { sep } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
@@ -11,8 +12,10 @@ import {
   EventBus,
   PermissionGateway,
   createNexusEvent,
-  type AgentToolDefinition
+  type AgentToolDefinition,
+  type ToolExecutionResult
 } from '@nexus/core';
+import { z } from 'zod';
 import {
   AnthropicProvider,
   OllamaProvider,
@@ -134,6 +137,7 @@ export interface AgentRunHooks {
     id?: string;
     name: string;
     input: unknown;
+    parentToolCallId?: string;
   }) => Promise<string[] | undefined>;
   terminalOwnerId?: number;
 }
@@ -622,7 +626,65 @@ const runSkillScriptToolDefinition: AgentToolDefinition = {
   }
 };
 
+/**
+ * task 工具输入：自包含子任务说明；explore 只读，general 完整工具（写/执行仍审批）。
+ */
+const taskInputSchema = z
+  .object({
+    prompt: z.string().min(1).max(20_000).optional(),
+    prompts: z.array(z.string().min(1).max(20_000)).min(1).max(4).optional(),
+    agent: z.enum(['explore', 'general']).optional(),
+    description: z.string().max(200).optional(),
+    maxSteps: z.number().int().positive().max(20).optional()
+  })
+  .refine((value) => Boolean(value.prompt) || Boolean(value.prompts?.length), {
+    message: 'prompt 或 prompts 必填'
+  });
+
+const taskToolDefinition: AgentToolDefinition = {
+  name: 'task',
+  description:
+    '启动子代理在独立上下文中完成子任务，只返回结论摘要。传 prompt 运行单个子代理；传 prompts（1-4 个）并行运行多个。explore 只读；general 可用完整工具（写/执行/联网会串行化并需审批）。简单任务不要使用。',
+  permission: 'read',
+  requiresApproval: false,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      prompt: { type: 'string', description: '单个子任务说明（与 prompts 二选一）' },
+      prompts: {
+        type: 'array',
+        items: { type: 'string' },
+        description: '并行子任务说明（1-4 个，与 prompt 二选一）'
+      },
+      agent: {
+        type: 'string',
+        enum: ['explore', 'general'],
+        description: 'explore 只读；general 完整工具（写/执行审批）'
+      },
+      description: { type: 'string', description: '简短描述，用于展示' },
+      maxSteps: { type: 'number', description: '子代理最大步数，默认 explore=8 / general=6' }
+    },
+    additionalProperties: false
+  }
+};
+
+interface SubagentApprovalRecord {
+  runId?: string;
+  approvalId: string;
+  toolCallId: string;
+  scope: string;
+  decision?: 'approved' | 'rejected' | 'expired';
+}
+
+const tasksInputSchema = z.object({
+  prompts: z.array(z.string().min(1).max(20_000)).min(1).max(4),
+  agent: z.enum(['explore', 'general']).optional(),
+  description: z.string().max(200).optional(),
+  maxSteps: z.number().int().positive().max(20).optional()
+});
+
 const PLAN_ALLOWED_TOOLS = new Set([
+  'task',
   'read_artifact',
   'read_file',
   'list_dir',
@@ -845,6 +907,26 @@ export const createAgentProvider: ProviderFactory = (config) => {
   return new OpenAICompatibleProvider({ ...shared, reasoningPassback });
 };
 
+/**
+ * 简单互斥队列：用于并行子代理串行化写/执行/联网等有副作用的工具调用。
+ */
+const createMutex = () => {
+  let tail: Promise<void> = Promise.resolve();
+  return async <T>(task: () => Promise<T>): Promise<T> => {
+    const previous = tail;
+    let release!: () => void;
+    tail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      return await task();
+    } finally {
+      release();
+    }
+  };
+};
+
 export class AgentService {
   private readonly createProvider: ProviderFactory;
   private readonly artifactBaseDir: string | undefined;
@@ -1014,6 +1096,32 @@ ${assistant.slice(0, 3_000)}`;
     const eventBus = new EventBus((error) => {
       console.error('Agent 事件处理失败', error);
     });
+    // 子代理执行期间的 file/checkpoint 事件打上 parentToolCallId，UI 不再当成父会话产物
+    const subagentEventScope = new AsyncLocalStorage<{
+      parentToolCallId: string;
+      childRunId: string;
+    }>();
+    const originalPublish = eventBus.publish.bind(eventBus);
+    eventBus.publish = ((event: NexusEvent) => {
+      if (event.type === 'file.created' || event.type === 'checkpoint.created') {
+        const store = subagentEventScope.getStore();
+        if (store) {
+          originalPublish({
+            ...event,
+            runId: store.childRunId,
+            parentToolCallId: store.parentToolCallId
+          } as NexusEvent);
+          return;
+        }
+      }
+      originalPublish(event);
+    }) as typeof eventBus.publish;
+    // 子代理原始事件转发到父事件流，并标记 parentToolCallId 供 UI 嵌套投影
+    const forwardChildEvent = (event: NexusEvent, parentToolCallId: string): void => {
+      // ask_user 在子代理中禁用；审批保留原始归属，供嵌套时间线直接展示
+      if (event.type.startsWith('ask_user.')) return;
+      eventBus.publish({ ...event, parentToolCallId } as NexusEvent);
+    };
     const unsubscribe = hooks.onEvent ? eventBus.subscribeAll(hooks.onEvent) : undefined;
 
     try {
@@ -1034,6 +1142,8 @@ ${assistant.slice(0, 3_000)}`;
       let toolset =
         input.rootPaths.length > 0 ? await createFileToolset(input.rootPaths) : undefined;
       const provider = this.createProvider(providerConfig);
+      // 并行子代理的写/执行/联网工具通过该互斥器串行化，避免并发副作用
+      const mutationLock = createMutex();
       const artifacts = new ArtifactService(this.artifactBaseDir, this.database);
       const files = this.database ? new FileService(this.database, this.fileBaseDir) : undefined;
       const checkpoints = new CheckpointService();
@@ -1131,7 +1241,35 @@ ${assistant.slice(0, 3_000)}`;
             };
       };
 
+      // task 运行器在工具定义构建后赋值；executeTool 运行时才调用，避免前向依赖
+      // eslint-disable-next-line prefer-const -- 需要在工具列表构建完成后赋值
+      let runTaskTool:
+        | ((call: {
+            id?: string;
+            name: string;
+            arguments: unknown;
+          }) => Promise<ToolExecutionResult>)
+        | undefined;
+      // eslint-disable-next-line prefer-const -- 需要在工具列表构建完成后赋值
+      let runTasksTool:
+        | ((call: {
+            id?: string;
+            name: string;
+            arguments: unknown;
+          }) => Promise<ToolExecutionResult>)
+        | undefined;
+
       const executeTool = async (call: { id?: string; name: string; arguments: unknown }) => {
+        if (call.name === 'task') {
+          if (!runTaskTool) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'TOOL_UNAVAILABLE', message: '子代理暂不可用' }
+            };
+          }
+          return runTaskTool(call);
+        }
         if (call.name === 'read_artifact') {
           return runReadArtifactTool(artifacts, input.sessionId, call.arguments, {
             maxCharsLimit: readArtifactMaxCharsLimit
@@ -1828,10 +1966,12 @@ ${assistant.slice(0, 3_000)}`;
           }
           if (!workspaceDenied && hooks.requestWorkspace) {
             try {
+              const scope = subagentEventScope.getStore();
               const roots = await hooks.requestWorkspace({
                 name: call.name,
                 input: call.arguments,
-                ...(call.id ? { id: call.id } : {})
+                ...(call.id ? { id: call.id } : {}),
+                ...(scope ? { parentToolCallId: scope.parentToolCallId } : {})
               });
               if (roots?.length) {
                 toolset = await createFileToolset(roots);
@@ -2122,6 +2262,7 @@ ${assistant.slice(0, 3_000)}`;
         ...mcpTools,
         askUserToolDefinition,
         readArtifactToolDefinition,
+        taskToolDefinition,
         openUrlToolDefinition,
         ...(this.memory && this.memory.settings().retrieval
           ? [memorySearchToolDefinition, memoryReadToolDefinition]
@@ -2179,6 +2320,708 @@ ${assistant.slice(0, 3_000)}`;
         description,
         inputSchema
       }));
+      // 子代理写/执行/联网工具需要串行化；权限按工具名查询
+      const permissionByName = new Map(tools.map((tool) => [tool.name, tool.permission]));
+
+      /**
+       * 子代理：独立上下文运行一次 AgentLoop，只把结论回给父会话。
+       * explore 只读；general 复用父工具与审批，但禁止递归 task / ask_user。
+       */
+      runTaskTool = async (call) => {
+        const parsed = taskInputSchema.safeParse(call.arguments);
+        if (!parsed.success) {
+          return {
+            ok: false,
+            output: '',
+            error: { code: 'TOOL_INPUT_INVALID', message: 'task 参数不合法' }
+          };
+        }
+        if (parsed.data.prompts?.length) {
+          if (!runTasksTool) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'TOOL_UNAVAILABLE', message: '并行子代理暂不可用' }
+            };
+          }
+          return runTasksTool(call);
+        }
+        const agent = mode === 'plan' ? 'explore' : (parsed.data.agent ?? 'explore');
+        if (agent === 'explore' && !toolset) {
+          return {
+            ok: false,
+            output: '',
+            error: { code: 'TOOL_WORKSPACE_REQUIRED', message: '探索子代理需要工作区' }
+          };
+        }
+
+        const parentToolCallId = call.id ?? '';
+        const childRunId = randomUUID();
+        const exploreNames = new Set(['read_file', 'list_dir', 'glob', 'grep', 'read_artifact']);
+        const childTools =
+          agent === 'explore'
+            ? tools.filter((tool) => exploreNames.has(tool.name))
+            : tools.filter(
+                (tool) => tool.name !== 'task' && tool.name !== 'tasks' && tool.name !== 'ask_user'
+              );
+        const childProvider = this.createProvider(providerConfig);
+        const childContext = new AgentContextService({
+          provider: childProvider,
+          model: modelConfig.id,
+          contextWindow: modelConfig.contextWindow,
+          maxOutputTokens: modelConfig.maxOutputTokens,
+          artifacts,
+          sessionId: input.sessionId,
+          runId: childRunId,
+          ...(extraParams ? { extraParams } : {}),
+          ...(hooks.signal ? { signal: hooks.signal } : {})
+        });
+
+        const childExecute = async (childCall: {
+          id?: string;
+          name: string;
+          arguments: unknown;
+        }): Promise<ToolExecutionResult> => {
+          if (agent === 'explore') {
+            if (childCall.name === 'read_artifact') {
+              return runReadArtifactTool(artifacts, input.sessionId, childCall.arguments, {
+                maxCharsLimit: readArtifactMaxCharsLimit
+              });
+            }
+            if (toolset && exploreNames.has(childCall.name)) {
+              return toolset.execute(childCall.name, childCall.arguments);
+            }
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'TOOL_MODE_DENIED', message: `子代理不可用工具：${childCall.name}` }
+            };
+          }
+          if (
+            childCall.name === 'task' ||
+            childCall.name === 'tasks' ||
+            childCall.name === 'ask_user'
+          ) {
+            return {
+              ok: false,
+              output: '',
+              error: { code: 'TOOL_MODE_DENIED', message: `子代理不可用工具：${childCall.name}` }
+            };
+          }
+          const permission = permissionByName.get(childCall.name);
+          const run = () =>
+            subagentEventScope.run({ parentToolCallId, childRunId }, () => executeTool(childCall));
+          return permission === 'write' || permission === 'execute' || permission === 'network'
+            ? mutationLock(run)
+            : run();
+        };
+
+        const childBus = new EventBus((error) => {
+          console.error('子代理事件处理失败', error);
+        });
+        childBus.subscribeAll((event) => forwardChildEvent(event, parentToolCallId));
+        const childToolNames = new Map<string, string>();
+        const childToolInputs = new Map<string, unknown>();
+        const childUsage = {
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cost: 0
+        };
+        const childApprovals: SubagentApprovalRecord[] = [];
+        childBus.subscribe('approval.requested', (event) => {
+          childApprovals.push({
+            ...(event.runId ? { runId: event.runId } : {}),
+            approvalId: event.payload.approvalId,
+            toolCallId: event.payload.toolCallId,
+            scope: event.payload.scope
+          });
+        });
+        childBus.subscribe('approval.resolved', (event) => {
+          const item = childApprovals.find(
+            (approval) => approval.approvalId === event.payload.approvalId
+          );
+          if (item) item.decision = event.payload.decision;
+        });
+
+        // 进度事件用于父卡片摘要；子代理原始事件另行转发供嵌套渲染
+        childBus.subscribe('tool.requested', (event) => {
+          childToolNames.set(event.payload.toolCallId, event.payload.name);
+          childToolInputs.set(event.payload.toolCallId, event.payload.input);
+          eventBus.publish(
+            createNexusEvent({
+              sessionId: input.sessionId,
+              runId,
+              seq: 1,
+              type: 'subagent.progress',
+              payload: { parentToolCallId, name: event.payload.name }
+            })
+          );
+        });
+        childBus.subscribe('tool.completed', (event) => {
+          const name = childToolNames.get(event.payload.toolCallId) ?? 'tool';
+          childToolNames.delete(event.payload.toolCallId);
+          childToolInputs.delete(event.payload.toolCallId);
+          eventBus.publish(
+            createNexusEvent({
+              sessionId: input.sessionId,
+              runId,
+              seq: 1,
+              type: 'subagent.progress',
+              payload: { parentToolCallId, name, ok: true }
+            })
+          );
+        });
+        childBus.subscribe('tool.failed', (event) => {
+          const name = childToolNames.get(event.payload.toolCallId) ?? 'tool';
+          childToolNames.delete(event.payload.toolCallId);
+          childToolInputs.delete(event.payload.toolCallId);
+          eventBus.publish(
+            createNexusEvent({
+              sessionId: input.sessionId,
+              runId,
+              seq: 1,
+              type: 'subagent.progress',
+              payload: { parentToolCallId, name, ok: false }
+            })
+          );
+        });
+        childBus.subscribe('usage.recorded', (event) => {
+          childUsage.inputTokens += event.payload.inputTokens;
+          childUsage.outputTokens += event.payload.outputTokens;
+          childUsage.cacheReadTokens += event.payload.cacheReadTokens ?? 0;
+          childUsage.cacheWriteTokens += event.payload.cacheWriteTokens ?? 0;
+          childUsage.cost += event.payload.cost ?? 0;
+        });
+        eventBus.publish(
+          createNexusEvent({
+            sessionId: input.sessionId,
+            runId,
+            seq: 1,
+            type: 'subagent.started',
+            payload: {
+              parentToolCallId,
+              agent,
+              ...(parsed.data.description === undefined
+                ? {}
+                : { description: parsed.data.description })
+            }
+          })
+        );
+
+        const childMessages = [
+          {
+            role: 'system' as const,
+            content:
+              agent === 'explore'
+                ? '你是只读探索子代理：只调查与阅读，不修改文件、不执行命令；最后给出简洁结论、关键文件路径与行号，不要输出无关细节。'
+                : '你是子代理：在独立上下文中完成给定子任务，完成后给出简洁结论；不要询问用户，遇到阻塞说明原因。'
+          },
+          { role: 'user' as const, content: parsed.data.prompt ?? '' }
+        ];
+        const childLoop = new AgentLoop({
+          provider: childProvider,
+          providerName: providerConfig.name,
+          model: modelConfig.id,
+          sessionId: input.sessionId,
+          runId: childRunId,
+          messages: childMessages,
+          tools: childTools,
+          permissionGateway: new PermissionGateway(
+            agent === 'explore' ? ['read'] : ['read', 'write', 'execute', 'network']
+          ),
+          executeTool: childExecute,
+          prepareContext: (messages) => childContext.prepare(messages, childTools),
+          eventBus: childBus,
+          ...(agent === 'general' && hooks.approveTool ? { approveTool: hooks.approveTool } : {}),
+          ...(agent === 'general' && hooks.autoApprove ? { autoApprove: hooks.autoApprove } : {}),
+          ...(hooks.signal ? { signal: hooks.signal } : {}),
+          maxSteps: parsed.data.maxSteps ?? (agent === 'explore' ? 8 : 6),
+          maxTokens: modelConfig.maxOutputTokens,
+          ...(extraParams ? { extraParams } : {})
+        });
+
+        let childFailure: string | undefined;
+        const childResult = await childLoop.run().catch((error: unknown) => {
+          childFailure = error instanceof Error ? error.message : String(error);
+          return undefined;
+        });
+        if (!childResult) {
+          const message = childFailure ?? '未知错误';
+          eventBus.publish(
+            createNexusEvent({
+              sessionId: input.sessionId,
+              runId,
+              seq: 1,
+              type: 'subagent.completed',
+              payload: {
+                parentToolCallId,
+                agent,
+                ok: false,
+                summary: `子代理执行失败：${message}`,
+                steps: 0,
+                toolCalls: 0
+              }
+            })
+          );
+          return {
+            ok: false,
+            output: '',
+            error: { code: 'SUBAGENT_FAILED', message: `子代理执行失败：${message}` }
+          };
+        }
+        const ok = childResult.finishReason === 'stop';
+        const text =
+          [...childResult.messages]
+            .reverse()
+            .find((message) => message.role === 'assistant' && message.content.trim())
+            ?.content.trim() ?? '';
+        const summary = text.length > 4_000 ? `${text.slice(0, 4_000)}…` : text;
+        const hasUsage =
+          childUsage.inputTokens > 0 || childUsage.outputTokens > 0 || childUsage.cost > 0;
+
+        let transcriptRef: string | undefined;
+        try {
+          const stored = await artifacts.saveText(
+            input.sessionId,
+            'subagent-transcript',
+            JSON.stringify({
+              messages: childResult.messages,
+              approvals: childApprovals,
+              createdAt: Date.now()
+            }),
+            { runId }
+          );
+          transcriptRef = stored.artifactId;
+        } catch {
+          // 审计产物失败不影响主流程
+        }
+
+        eventBus.publish(
+          createNexusEvent({
+            sessionId: input.sessionId,
+            runId,
+            seq: 1,
+            type: 'subagent.completed',
+            payload: {
+              parentToolCallId,
+              agent,
+              ok,
+              summary: summary || (ok ? '子代理已完成（无文字结论）' : '子代理未完成'),
+              steps: childResult.steps,
+              toolCalls: childResult.toolCalls,
+              ...(transcriptRef === undefined ? {} : { transcriptRef }),
+              ...(hasUsage
+                ? {
+                    usage: {
+                      inputTokens: childUsage.inputTokens,
+                      outputTokens: childUsage.outputTokens,
+                      ...(childUsage.cacheReadTokens
+                        ? { cacheReadTokens: childUsage.cacheReadTokens }
+                        : {}),
+                      ...(childUsage.cacheWriteTokens
+                        ? { cacheWriteTokens: childUsage.cacheWriteTokens }
+                        : {}),
+                      ...(childUsage.cost ? { cost: childUsage.cost } : {})
+                    }
+                  }
+                : {})
+            }
+          })
+        );
+
+        return ok
+          ? { ok: true, output: summary || '子代理已完成，但未返回文字结论。' }
+          : {
+              ok: false,
+              output: '',
+              error: {
+                code: 'SUBAGENT_FAILED',
+                message: `子代理未完成（${childResult.finishReason}）${summary ? `：${summary.slice(0, 500)}` : ''}`
+              }
+            };
+      };
+
+      /**
+       * 并行子代理：每个子任务独立上下文并发运行，合并结论返回。
+       */
+      runTasksTool = async (call) => {
+        const parsed = tasksInputSchema.safeParse(call.arguments);
+        if (!parsed.success) {
+          return {
+            ok: false,
+            output: '',
+            error: { code: 'TOOL_INPUT_INVALID', message: 'tasks 参数不合法' }
+          };
+        }
+        if (!toolset) {
+          return {
+            ok: false,
+            output: '',
+            error: { code: 'TOOL_WORKSPACE_REQUIRED', message: '并行探索需要工作区' }
+          };
+        }
+
+        const parentToolCallId = call.id ?? '';
+        const prompts = parsed.data.prompts;
+        const agent = mode === 'plan' ? 'explore' : (parsed.data.agent ?? 'explore');
+        const fileToolset = toolset;
+        const exploreNames = new Set(['read_file', 'list_dir', 'glob', 'grep', 'read_artifact']);
+        const childTools =
+          agent === 'explore'
+            ? tools.filter((tool) => exploreNames.has(tool.name))
+            : tools.filter(
+                (tool) => tool.name !== 'task' && tool.name !== 'tasks' && tool.name !== 'ask_user'
+              );
+        const childBus = new EventBus((error) => {
+          console.error('并行子代理事件处理失败', error);
+        });
+        childBus.subscribeAll((event) => forwardChildEvent(event, parentToolCallId));
+        const childToolNames = new Map<string, string>();
+        const childToolInputs = new Map<string, unknown>();
+        const childIndexByRun = new Map<string, number>();
+        // 同一批并行 general 写同一文件时返回冲突，避免后写覆盖
+        const writeOwners = new Map<string, number>();
+        const childUsage = {
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cost: 0
+        };
+        const childApprovals: SubagentApprovalRecord[] = [];
+        childBus.subscribe('approval.requested', (event) => {
+          childApprovals.push({
+            ...(event.runId ? { runId: event.runId } : {}),
+            approvalId: event.payload.approvalId,
+            toolCallId: event.payload.toolCallId,
+            scope: event.payload.scope
+          });
+        });
+        childBus.subscribe('approval.resolved', (event) => {
+          const item = childApprovals.find(
+            (approval) => approval.approvalId === event.payload.approvalId
+          );
+          if (item) item.decision = event.payload.decision;
+        });
+
+        childBus.subscribe('tool.requested', (event) => {
+          // 工具名保持原始（审批 toolName 需要精确匹配）；展示进度时才加 #i 前缀
+          const rawName = event.payload.name;
+          childToolNames.set(event.payload.toolCallId, rawName);
+          childToolInputs.set(event.payload.toolCallId, event.payload.input);
+          const index = childIndexByRun.get(event.runId ?? '');
+          const name = index === undefined ? rawName : `#${index + 1} ${rawName}`;
+          eventBus.publish(
+            createNexusEvent({
+              sessionId: input.sessionId,
+              runId,
+              seq: 1,
+              type: 'subagent.progress',
+              payload: { parentToolCallId, name }
+            })
+          );
+        });
+        childBus.subscribe('tool.completed', (event) => {
+          const rawName = childToolNames.get(event.payload.toolCallId) ?? 'tool';
+          childToolNames.delete(event.payload.toolCallId);
+          childToolInputs.delete(event.payload.toolCallId);
+          const index = childIndexByRun.get(event.runId ?? '');
+          const name = index === undefined ? rawName : `#${index + 1} ${rawName}`;
+          eventBus.publish(
+            createNexusEvent({
+              sessionId: input.sessionId,
+              runId,
+              seq: 1,
+              type: 'subagent.progress',
+              payload: { parentToolCallId, name, ok: true }
+            })
+          );
+        });
+        childBus.subscribe('tool.failed', (event) => {
+          const rawName = childToolNames.get(event.payload.toolCallId) ?? 'tool';
+          childToolNames.delete(event.payload.toolCallId);
+          childToolInputs.delete(event.payload.toolCallId);
+          const index = childIndexByRun.get(event.runId ?? '');
+          const name = index === undefined ? rawName : `#${index + 1} ${rawName}`;
+          eventBus.publish(
+            createNexusEvent({
+              sessionId: input.sessionId,
+              runId,
+              seq: 1,
+              type: 'subagent.progress',
+              payload: { parentToolCallId, name, ok: false }
+            })
+          );
+        });
+        childBus.subscribe('usage.recorded', (event) => {
+          childUsage.inputTokens += event.payload.inputTokens;
+          childUsage.outputTokens += event.payload.outputTokens;
+          childUsage.cacheReadTokens += event.payload.cacheReadTokens ?? 0;
+          childUsage.cacheWriteTokens += event.payload.cacheWriteTokens ?? 0;
+          childUsage.cost += event.payload.cost ?? 0;
+        });
+
+        eventBus.publish(
+          createNexusEvent({
+            sessionId: input.sessionId,
+            runId,
+            seq: 1,
+            type: 'subagent.started',
+            payload: {
+              parentToolCallId,
+              agent,
+              ...(parsed.data.description === undefined
+                ? {}
+                : { description: parsed.data.description })
+            }
+          })
+        );
+
+        const results = await Promise.all(
+          prompts.map(async (prompt, index) => {
+            const childRunId = randomUUID();
+            childIndexByRun.set(childRunId, index);
+            const childProvider = this.createProvider(providerConfig);
+            const childContext = new AgentContextService({
+              provider: childProvider,
+              model: modelConfig.id,
+              contextWindow: modelConfig.contextWindow,
+              maxOutputTokens: modelConfig.maxOutputTokens,
+              artifacts,
+              sessionId: input.sessionId,
+              runId: childRunId,
+              ...(extraParams ? { extraParams } : {}),
+              ...(hooks.signal ? { signal: hooks.signal } : {})
+            });
+            const childExecute = async (childCall: {
+              id?: string;
+              name: string;
+              arguments: unknown;
+            }): Promise<ToolExecutionResult> => {
+              if (agent === 'explore') {
+                if (childCall.name === 'read_artifact') {
+                  return runReadArtifactTool(artifacts, input.sessionId, childCall.arguments, {
+                    maxCharsLimit: readArtifactMaxCharsLimit
+                  });
+                }
+                if (exploreNames.has(childCall.name)) {
+                  return fileToolset.execute(childCall.name, childCall.arguments);
+                }
+                return {
+                  ok: false,
+                  output: '',
+                  error: {
+                    code: 'TOOL_MODE_DENIED',
+                    message: `子代理不可用工具：${childCall.name}`
+                  }
+                };
+              }
+              if (
+                childCall.name === 'task' ||
+                childCall.name === 'tasks' ||
+                childCall.name === 'ask_user'
+              ) {
+                return {
+                  ok: false,
+                  output: '',
+                  error: {
+                    code: 'TOOL_MODE_DENIED',
+                    message: `子代理不可用工具：${childCall.name}`
+                  }
+                };
+              }
+              const permission = permissionByName.get(childCall.name);
+              const run = () =>
+                subagentEventScope.run({ parentToolCallId, childRunId }, () =>
+                  executeTool(childCall)
+                );
+              if (permission !== 'write' && permission !== 'execute' && permission !== 'network') {
+                return run();
+              }
+              return mutationLock(async () => {
+                // 写/执行工具已串行化；run_command 的间接写不做路径级冲突检测
+                const pathArgument =
+                  childCall.name === 'write_file' || childCall.name === 'apply_patch'
+                    ? getPathArgument(childCall.arguments)
+                    : undefined;
+                // 归一化到真实路径，避免 ./a 与 a 绕过冲突检测；越界时交给 executeTool 报错
+                let normalizedPath = pathArgument;
+                if (pathArgument) {
+                  try {
+                    normalizedPath = await fileToolset.resolvePath(pathArgument, { mode: 'write' });
+                  } catch {
+                    normalizedPath = pathArgument;
+                  }
+                }
+                if (normalizedPath) {
+                  const owner = writeOwners.get(normalizedPath);
+                  if (owner !== undefined && owner !== index) {
+                    return {
+                      ok: false,
+                      output: '',
+                      error: {
+                        code: 'SUBAGENT_WRITE_CONFLICT',
+                        message: `文件正被另一个子代理修改：${normalizedPath}`
+                      }
+                    };
+                  }
+                  writeOwners.set(normalizedPath, index);
+                }
+                const result = await run();
+                // 首次写入失败/被拒绝时释放占位，避免阻塞后续子代理
+                if (!result.ok && normalizedPath && writeOwners.get(normalizedPath) === index) {
+                  writeOwners.delete(normalizedPath);
+                }
+                return result;
+              });
+            };
+            const childLoop = new AgentLoop({
+              provider: childProvider,
+              providerName: providerConfig.name,
+              model: modelConfig.id,
+              sessionId: input.sessionId,
+              runId: childRunId,
+              messages: [
+                {
+                  role: 'system',
+                  content:
+                    agent === 'explore'
+                      ? '你是只读探索子代理：只调查与阅读，不修改文件、不执行命令；最后给出简洁结论、关键文件路径与行号。'
+                      : '你是子代理：在独立上下文中完成给定子任务，完成后给出简洁结论；不要询问用户，遇到阻塞说明原因。'
+                },
+                { role: 'user', content: prompt }
+              ],
+              tools: childTools,
+              permissionGateway: new PermissionGateway(
+                agent === 'explore' ? ['read'] : ['read', 'write', 'execute', 'network']
+              ),
+              executeTool: childExecute,
+              prepareContext: (messages) => childContext.prepare(messages, childTools),
+              eventBus: childBus,
+              ...(agent === 'general' && hooks.approveTool
+                ? { approveTool: hooks.approveTool }
+                : {}),
+              ...(agent === 'general' && hooks.autoApprove
+                ? { autoApprove: hooks.autoApprove }
+                : {}),
+              ...(hooks.signal ? { signal: hooks.signal } : {}),
+              maxSteps: parsed.data.maxSteps ?? (agent === 'explore' ? 8 : 6),
+              maxTokens: modelConfig.maxOutputTokens,
+              ...(extraParams ? { extraParams } : {})
+            });
+            try {
+              const result = await childLoop.run();
+              const text =
+                [...result.messages]
+                  .reverse()
+                  .find((message) => message.role === 'assistant' && message.content.trim())
+                  ?.content.trim() ?? '';
+              return {
+                ok: result.finishReason === 'stop',
+                summary: text,
+                steps: result.steps,
+                toolCalls: result.toolCalls,
+                messages: result.messages,
+                childRunId
+              };
+            } catch (error) {
+              return {
+                ok: false,
+                summary: `失败：${error instanceof Error ? error.message : String(error)}`,
+                steps: 0,
+                toolCalls: 0,
+                messages: undefined,
+                childRunId
+              };
+            }
+          })
+        );
+
+        // 每个子代理的完整对话落 Artifact，供 UI 逐个查看
+        const transcripts: Array<{ index: number; ref: string }> = [];
+        for (let index = 0; index < results.length; index += 1) {
+          const childMessages = results[index]?.messages;
+          if (!childMessages) continue;
+          try {
+            const childRunId = results[index]?.childRunId;
+            const approvalRecords = childApprovals.filter(
+              (approval) => approval.runId === childRunId
+            );
+            const stored = await artifacts.saveText(
+              input.sessionId,
+              'subagent-transcript',
+              JSON.stringify({
+                messages: childMessages,
+                approvals: approvalRecords,
+                createdAt: Date.now()
+              }),
+              { runId }
+            );
+            transcripts.push({ index, ref: stored.artifactId });
+          } catch {
+            // 审计产物失败不影响主流程
+          }
+        }
+
+        const ok = results.every((result) => result.ok);
+        const summary = results
+          .map(
+            (result, index) =>
+              `#${index + 1} ${result.summary || (result.ok ? '已完成' : '未完成')}`
+          )
+          .join('\n\n')
+          .slice(0, 6_000);
+        const hasUsage =
+          childUsage.inputTokens > 0 || childUsage.outputTokens > 0 || childUsage.cost > 0;
+        const steps = results.reduce((total, result) => total + result.steps, 0);
+        const toolCalls = results.reduce((total, result) => total + result.toolCalls, 0);
+
+        eventBus.publish(
+          createNexusEvent({
+            sessionId: input.sessionId,
+            runId,
+            seq: 1,
+            type: 'subagent.completed',
+            payload: {
+              parentToolCallId,
+              agent,
+              ok,
+              summary: summary || (ok ? '并行子代理已完成' : '并行子代理未完成'),
+              steps,
+              toolCalls,
+              ...(transcripts.length ? { transcripts } : {}),
+              ...(hasUsage
+                ? {
+                    usage: {
+                      inputTokens: childUsage.inputTokens,
+                      outputTokens: childUsage.outputTokens,
+                      ...(childUsage.cacheReadTokens
+                        ? { cacheReadTokens: childUsage.cacheReadTokens }
+                        : {}),
+                      ...(childUsage.cacheWriteTokens
+                        ? { cacheWriteTokens: childUsage.cacheWriteTokens }
+                        : {}),
+                      ...(childUsage.cost ? { cost: childUsage.cost } : {})
+                    }
+                  }
+                : {})
+            }
+          })
+        );
+
+        return ok
+          ? { ok: true, output: summary || '并行探索已完成，但未返回文字结论。' }
+          : {
+              ok: false,
+              output: '',
+              error: {
+                code: 'SUBAGENT_FAILED',
+                message: `部分子代理未完成${summary ? `：${summary.slice(0, 500)}` : ''}`
+              }
+            };
+      };
 
       // 历史轮次也从附件存储重新读取内容；图片和文本共享预算，避免多轮附件无限膨胀
       const historyMessages: ChatMessage[] = [];

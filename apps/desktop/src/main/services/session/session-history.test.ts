@@ -308,4 +308,28 @@ describe('SessionHistoryService', () => {
       content: '看这个\n\n@/workspace/a.ts'
     });
   });
+
+  it('skips subagent events when rebuilding parent history', async () => {
+    const events = [
+      createNexusEvent({
+        sessionId: 'session-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: { messageId: 'user-1', role: 'user', content: '父会话问题' }
+      }),
+      createNexusEvent({
+        sessionId: 'session-1',
+        runId: 'child-1',
+        seq: 2,
+        type: 'message.completed',
+        parentToolCallId: 'task-1',
+        payload: { messageId: 'child-1', role: 'assistant', content: '子代理内部内容' }
+      })
+    ] as NexusEvent[];
+
+    const store = { list: () => events } as unknown as EventStore;
+    const history = await new SessionHistoryService(store).load('session-1');
+
+    expect(history).toEqual([{ role: 'user', content: '父会话问题' }]);
+  });
 });

@@ -95,4 +95,18 @@ describe('session export', () => {
     expect(markdown).toContain('输入 token：10');
     expect(markdown).not.toContain('旧回复');
   });
+
+  it('excludes subagent events from the export body', () => {
+    const childEvent = createNexusEvent({
+      sessionId: 'session-1',
+      runId: 'child-1',
+      seq: 3,
+      type: 'message.completed',
+      parentToolCallId: 'task-1',
+      payload: { messageId: 'child-1', role: 'assistant', content: '子代理内部内容' }
+    });
+    const markdown = buildSessionMarkdown(session, [...events, childEvent] as NexusEvent[]);
+
+    expect(markdown).not.toContain('子代理内部内容');
+  });
 });

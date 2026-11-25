@@ -138,10 +138,42 @@ export const eventPayloadSchemas = {
     label: z.string(),
     path: z.string().optional(),
     existed: z.boolean().optional(),
-    toolCallId: z.string().optional()
+    toolCallId: z.string().optional(),
+    parentToolCallId: z.string().optional()
   }),
   'checkpoint.restored': z.object({
     checkpointId: z.string()
+  }),
+  'subagent.started': z.object({
+    parentToolCallId: z.string(),
+    agent: z.enum(['explore', 'general']),
+    description: z.string().optional()
+  }),
+  'subagent.progress': z.object({
+    parentToolCallId: z.string(),
+    name: z.string(),
+    ok: z.boolean().optional()
+  }),
+  'subagent.completed': z.object({
+    parentToolCallId: z.string(),
+    agent: z.enum(['explore', 'general']),
+    ok: z.boolean(),
+    summary: z.string(),
+    steps: z.number().int().nonnegative(),
+    toolCalls: z.number().int().nonnegative(),
+    transcriptRef: z.string().optional(),
+    transcripts: z
+      .array(z.object({ index: z.number().int().nonnegative(), ref: z.string() }))
+      .optional(),
+    usage: z
+      .object({
+        inputTokens: z.number().nonnegative(),
+        outputTokens: z.number().nonnegative(),
+        cacheReadTokens: z.number().nonnegative().optional(),
+        cacheWriteTokens: z.number().nonnegative().optional(),
+        cost: z.number().nonnegative().optional()
+      })
+      .optional()
   }),
   'ask_user.requested': z.object({
     requestId: z.string(),
@@ -156,7 +188,9 @@ export const eventPayloadSchemas = {
   'approval.requested': z.object({
     approvalId: z.string(),
     toolCallId: z.string(),
-    scope: z.string()
+    scope: z.string(),
+    toolName: z.string().optional(),
+    input: z.unknown().optional()
   }),
   'approval.resolved': z.object({
     approvalId: z.string(),
@@ -200,7 +234,8 @@ export const eventPayloadSchemas = {
     name: z.string(),
     mime: z.string(),
     bytes: z.number().nonnegative(),
-    source: z.enum(['generated', 'downloaded'])
+    source: z.enum(['generated', 'downloaded']),
+    parentToolCallId: z.string().optional()
   }),
   'context.compacted': z.object({
     beforeTokens: z.number().nonnegative(),
@@ -244,6 +279,8 @@ export interface NexusEvent<T extends NexusEventType = NexusEventType> {
   ts: number;
   payload: EventPayloadMap[T];
   persisted?: boolean;
+  /** 子代理事件所属的父 task/工具调用；主会话投影会跳过这些事件 */
+  parentToolCallId?: string;
 }
 
 /**
@@ -257,5 +294,6 @@ export const nexusEventEnvelopeSchema = z.object({
   type: z.string(),
   version: z.number().int().positive(),
   ts: z.number().int().nonnegative(),
-  payload: z.unknown()
+  payload: z.unknown(),
+  parentToolCallId: z.string().optional()
 });

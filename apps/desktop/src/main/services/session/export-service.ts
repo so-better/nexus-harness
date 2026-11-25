@@ -58,6 +58,8 @@ const collectBlocks = (events: readonly NexusEvent[]): ExportBlock[] => {
       .filter((id): id is string => Boolean(id))
   );
   for (const event of events) {
+    // 子代理事件不进入父会话导出正文；用量仍由 metadata 统计
+    if (event.parentToolCallId) continue;
     if (event.type === 'message.completed') {
       const payload = event.payload as {
         messageId?: string;

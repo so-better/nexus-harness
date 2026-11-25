@@ -11,6 +11,7 @@ export interface CreateEventInput<T extends NexusEventType> {
   seq: number;
   type: T;
   payload: EventPayloadMap[T];
+  parentToolCallId?: string;
 }
 
 /**
@@ -29,5 +30,8 @@ export const createNexusEvent = <T extends NexusEventType>(
     payload: input.payload
   };
 
-  return input.runId === undefined ? base : { ...base, runId: input.runId };
+  const withRun = input.runId === undefined ? base : { ...base, runId: input.runId };
+  return input.parentToolCallId === undefined
+    ? withRun
+    : { ...withRun, parentToolCallId: input.parentToolCallId };
 };

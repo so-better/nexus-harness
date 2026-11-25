@@ -348,6 +348,15 @@ const migrate = (db: DatabaseSync): void => {
     }
     db.exec('PRAGMA user_version = 19');
   }
+
+  if (version < 20) {
+    // 子代理事件归属：指向父会话的 task 工具调用
+    const columns = db.prepare('PRAGMA table_info(events)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'parent_tool_call_id')) {
+      db.exec('ALTER TABLE events ADD COLUMN parent_tool_call_id TEXT');
+    }
+    db.exec('PRAGMA user_version = 20');
+  }
 };
 
 /**

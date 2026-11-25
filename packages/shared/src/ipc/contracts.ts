@@ -730,7 +730,8 @@ export const workspaceAuthorizationRequestSchema = z.object({
   sessionId: z.string().min(1),
   suggestedPath: z.string().min(1),
   toolName: z.string().optional(),
-  toolCallId: z.string().optional()
+  toolCallId: z.string().optional(),
+  parentToolCallId: z.string().optional()
 });
 
 export const workspaceAuthorizationResolveInputSchema = z.object({

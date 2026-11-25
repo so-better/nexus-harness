@@ -254,6 +254,7 @@ describe('AgentService', () => {
       'grep',
       'ask_user',
       'read_artifact',
+      'task',
       'open_url',
       'save_file',
       'save_word',
@@ -712,7 +713,7 @@ describe('AgentService', () => {
       protocol: 'openai' as const,
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
-      models: [{ id: 'mock-model', contextWindow: 4_096, maxOutputTokens: 1_024 }],
+      models: [{ id: 'mock-model', contextWindow: 5_120, maxOutputTokens: 1_024 }],
       defaultModelId: 'mock-model',
       apiKey: 'secret',
       enabled: true
@@ -762,7 +763,7 @@ describe('AgentService', () => {
       protocol: 'openai' as const,
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
-      models: [{ id: 'mock-model', contextWindow: 5_120, maxOutputTokens: 1_024 }],
+      models: [{ id: 'mock-model', contextWindow: 6_144, maxOutputTokens: 1_024 }],
       defaultModelId: 'mock-model',
       apiKey: 'secret',
       enabled: true
@@ -792,6 +793,406 @@ describe('AgentService', () => {
       true
     );
     expect((await readdir(join(root, 'artifacts', 'session-1'))).length).toBeGreaterThan(0);
+  });
+
+  it('runs an explore subagent and returns only its summary', async () => {
+    const provider = new MockProvider([
+      {
+        toolCalls: [
+          {
+            id: 'task-1',
+            name: 'task',
+            arguments: { prompt: '读取 a.txt 并总结', agent: 'explore' }
+          }
+        ],
+        finishReason: 'tool_calls'
+      },
+      {
+        toolCalls: [{ id: 'child-1', name: 'read_file', arguments: { path: 'a.txt' } }],
+        finishReason: 'tool_calls'
+      },
+      { text: 'a.txt 的内容是 hello', finishReason: 'stop' },
+      { text: '完成', finishReason: 'stop' }
+    ]);
+    const service = new AgentService({ createProvider: () => provider });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+    const events: NexusEvent[] = [];
+    await service.run(
+      {
+        sessionId: 'session-subagent',
+        prompt: '探索 a.txt',
+        rootPaths: [root],
+        providerId: providerConfig.id,
+        modelId: 'mock-model'
+      },
+      providerConfig,
+      { onEvent: (event) => events.push(event) }
+    );
+
+    const taskCompleted = events.find(
+      (event) =>
+        event.type === 'tool.completed' &&
+        (event.payload as { toolCallId?: string }).toolCallId === 'task-1'
+    );
+    expect((taskCompleted?.payload as { output?: string } | undefined)?.output).toContain('hello');
+    expect(events.some((event) => event.type === 'subagent.started')).toBe(true);
+    expect(events.some((event) => event.type === 'subagent.progress')).toBe(true);
+    expect(events.some((event) => event.type === 'subagent.completed')).toBe(true);
+  });
+
+  it('forwards child approvals with parentToolCallId and resumes after approval', async () => {
+    const provider = new MockProvider([
+      {
+        toolCalls: [
+          {
+            id: 'task-approve',
+            name: 'task',
+            arguments: { prompt: '写 b.txt', agent: 'general' }
+          }
+        ],
+        finishReason: 'tool_calls'
+      },
+      {
+        toolCalls: [
+          {
+            id: 'child-write',
+            name: 'write_file',
+            arguments: { path: 'b.txt', content: 'approved' }
+          }
+        ],
+        finishReason: 'tool_calls'
+      },
+      { text: '子代理完成', finishReason: 'stop' },
+      { text: '父完成', finishReason: 'stop' }
+    ]);
+    const service = new AgentService({ createProvider: () => provider });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+    let releaseApproval: ((approved: boolean) => void) | undefined;
+    const approvalGate = new Promise<boolean>((resolve) => {
+      releaseApproval = resolve;
+    });
+    const events: NexusEvent[] = [];
+    await service.run(
+      {
+        sessionId: 'session-subagent-approval',
+        prompt: '写文件',
+        rootPaths: [root],
+        providerId: providerConfig.id,
+        modelId: 'mock-model'
+      },
+      providerConfig,
+      {
+        onEvent: (event) => {
+          events.push(event);
+          if (event.type === 'approval.requested') releaseApproval?.(true);
+        },
+        approveTool: async () => approvalGate,
+        autoApprove: async () => false
+      }
+    );
+
+    const approval = events.find(
+      (event) => event.type === 'approval.requested' && event.parentToolCallId
+    );
+    expect(approval?.parentToolCallId).toBe('task-approve');
+    expect((approval?.payload as { toolCallId?: string } | undefined)?.toolCallId).toBe(
+      'child-write'
+    );
+    await expect(readFile(join(root, 'b.txt'), 'utf8')).resolves.toBe('approved');
+  });
+
+  it('tags child workspace authorization requests with the parent task call', async () => {
+    const provider = new MockProvider([
+      {
+        toolCalls: [
+          {
+            id: 'task-ws',
+            name: 'task',
+            arguments: { prompt: '写 c.txt', agent: 'general' }
+          }
+        ],
+        finishReason: 'tool_calls'
+      },
+      {
+        toolCalls: [
+          {
+            id: 'child-write-c',
+            name: 'write_file',
+            arguments: { path: 'c.txt', content: 'x' }
+          }
+        ],
+        finishReason: 'tool_calls'
+      },
+      { text: '子代理结束', finishReason: 'stop' },
+      { text: '父结束', finishReason: 'stop' }
+    ]);
+    const service = new AgentService({ createProvider: () => provider });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+    const workspaceRequests: Array<{ name: string; parentToolCallId?: string }> = [];
+    await service.run(
+      {
+        sessionId: 'session-subagent-workspace',
+        prompt: '写文件',
+        rootPaths: [],
+        providerId: providerConfig.id,
+        modelId: 'mock-model'
+      },
+      providerConfig,
+      {
+        requestWorkspace: async (call) => {
+          workspaceRequests.push(call);
+          return undefined;
+        },
+        autoApprove: async () => true
+      }
+    );
+
+    expect(workspaceRequests[0]).toMatchObject({
+      name: 'write_file',
+      parentToolCallId: 'task-ws'
+    });
+  });
+
+  it('runs parallel explore subagents and merges their summaries', async () => {
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
+      async *stream(request) {
+        const system = request.messages.find((message) => message.role === 'system')?.content ?? '';
+        if (request.messages.some((message) => message.role === 'tool')) {
+          yield { type: 'text-delta', text: '完成' };
+          yield { type: 'finish', reason: 'stop' };
+          return;
+        }
+        if (system.includes('只读探索子代理')) {
+          const user =
+            [...request.messages].reverse().find((message) => message.role === 'user')?.content ??
+            '';
+          yield { type: 'text-delta', text: `结论:${user}` };
+          yield { type: 'finish', reason: 'stop' };
+          return;
+        }
+        yield {
+          type: 'tool-call-end',
+          toolCall: { id: 'tasks-1', name: 'task', arguments: { prompts: ['方向A', '方向B'] } }
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+      }
+    };
+    const service = new AgentService({
+      createProvider: () => provider,
+      artifactBaseDir: join(root, 'artifacts')
+    });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+    const events: NexusEvent[] = [];
+    await service.run(
+      {
+        sessionId: 'session-tasks',
+        prompt: '并行探索',
+        rootPaths: [root],
+        providerId: providerConfig.id,
+        modelId: 'mock-model'
+      },
+      providerConfig,
+      { onEvent: (event) => events.push(event) }
+    );
+
+    const completed = events.find(
+      (event) =>
+        event.type === 'tool.completed' &&
+        (event.payload as { toolCallId?: string }).toolCallId === 'tasks-1'
+    );
+    const output = (completed?.payload as { output?: string } | undefined)?.output ?? '';
+    expect(output).toContain('方向A');
+    expect(output).toContain('方向B');
+    const subagentDone = events.find((event) => event.type === 'subagent.completed');
+    const transcripts =
+      (subagentDone?.payload as { transcripts?: Array<{ index: number; ref: string }> } | undefined)
+        ?.transcripts ?? [];
+    expect(transcripts).toHaveLength(2);
+    expect(transcripts[0]).toMatchObject({ index: 0, ref: expect.any(String) });
+  });
+
+  it('runs parallel general subagents', async () => {
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
+      async *stream(request) {
+        const system = request.messages.find((message) => message.role === 'system')?.content ?? '';
+        if (request.messages.some((message) => message.role === 'tool')) {
+          yield { type: 'text-delta', text: '完成' };
+          yield { type: 'finish', reason: 'stop' };
+          return;
+        }
+        if (system.includes('你是子代理')) {
+          const user =
+            [...request.messages].reverse().find((message) => message.role === 'user')?.content ??
+            '';
+          yield { type: 'text-delta', text: `通用:${user}` };
+          yield { type: 'finish', reason: 'stop' };
+          return;
+        }
+        yield {
+          type: 'tool-call-end',
+          toolCall: {
+            id: 'tasks-general',
+            name: 'task',
+            arguments: { prompts: ['任务A', '任务B'], agent: 'general' }
+          }
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+      }
+    };
+    const service = new AgentService({
+      createProvider: () => provider,
+      artifactBaseDir: join(root, 'artifacts')
+    });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+    const events: NexusEvent[] = [];
+    await service.run(
+      {
+        sessionId: 'session-tasks-general',
+        prompt: '并行通用任务',
+        rootPaths: [root],
+        providerId: providerConfig.id,
+        modelId: 'mock-model'
+      },
+      providerConfig,
+      { onEvent: (event) => events.push(event) }
+    );
+
+    const completed = events.find(
+      (event) =>
+        event.type === 'tool.completed' &&
+        (event.payload as { toolCallId?: string }).toolCallId === 'tasks-general'
+    );
+    const output = (completed?.payload as { output?: string } | undefined)?.output ?? '';
+    expect(output).toContain('通用:任务A');
+    expect(output).toContain('通用:任务B');
+    const subagentDone = events.find((event) => event.type === 'subagent.completed');
+    expect((subagentDone?.payload as { agent?: string } | undefined)?.agent).toBe('general');
+  });
+
+  it('detects parallel general subagents writing the same file', async () => {
+    let callId = 0;
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
+      async *stream(request) {
+        const system = request.messages.find((message) => message.role === 'system')?.content ?? '';
+        const hasToolResult = request.messages.some((message) => message.role === 'tool');
+        if (system.includes('你是子代理')) {
+          if (hasToolResult) {
+            yield { type: 'text-delta', text: '完成' };
+            yield { type: 'finish', reason: 'stop' };
+            return;
+          }
+          const user =
+            [...request.messages].reverse().find((message) => message.role === 'user')?.content ??
+            '';
+          yield {
+            type: 'tool-call-end',
+            toolCall: {
+              id: `write-${(callId += 1)}`,
+              name: 'write_file',
+              arguments: {
+                path: user.includes('写A') ? './conflict.txt' : 'conflict.txt',
+                content: 'x'
+              }
+            }
+          };
+          yield { type: 'finish', reason: 'tool_calls' };
+          return;
+        }
+        if (hasToolResult) {
+          yield { type: 'text-delta', text: '完成' };
+          yield { type: 'finish', reason: 'stop' };
+          return;
+        }
+        yield {
+          type: 'tool-call-end',
+          toolCall: {
+            id: 'tasks-conflict',
+            name: 'task',
+            arguments: { prompts: ['写A', '写B'], agent: 'general' }
+          }
+        };
+        yield { type: 'finish', reason: 'tool_calls' };
+      }
+    };
+    const service = new AgentService({ createProvider: () => provider });
+    const providerConfig = {
+      id: 'provider-1',
+      protocol: 'openai' as const,
+      name: 'Mock Provider',
+      baseUrl: 'https://example.com/v1',
+      models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
+      defaultModelId: 'mock-model',
+      apiKey: 'secret',
+      enabled: true
+    };
+    const events: NexusEvent[] = [];
+    await service.run(
+      {
+        sessionId: 'session-conflict',
+        prompt: '并行写同一文件',
+        rootPaths: [root],
+        providerId: providerConfig.id,
+        modelId: 'mock-model'
+      },
+      providerConfig,
+      { onEvent: (event) => events.push(event), autoApprove: async () => true }
+    );
+
+    const conflicts = events.filter((event) => {
+      if (event.type !== 'subagent.progress') return false;
+      const payload = event.payload as { name?: string; ok?: boolean };
+      return payload.ok === false && (payload.name ?? '').includes('write_file');
+    });
+    expect(conflicts.length).toBeGreaterThan(0);
+    await expect(readFile(join(root, 'conflict.txt'), 'utf8')).resolves.toBe('x');
   });
 
   it('runs a tool call and returns the final messages', async () => {

@@ -16,6 +16,7 @@ interface EventRow {
   version: number;
   ts: number;
   payload: string;
+  parent_tool_call_id: string | null;
 }
 
 const toEvent = (row: EventRow): NexusEvent => {
@@ -31,10 +32,12 @@ const toEvent = (row: EventRow): NexusEvent => {
   };
 
   // 事件 payload 已由写入方生成，这里按事件类型恢复为联合类型
-  const event = (row.run_id === null
-    ? base
-    : { ...base, runId: row.run_id }) as unknown as NexusEvent;
-  return event;
+  const withRun = (row.run_id === null ? base : { ...base, runId: row.run_id }) as Record<
+    string,
+    unknown
+  >;
+  if (row.parent_tool_call_id !== null) withRun.parentToolCallId = row.parent_tool_call_id;
+  return withRun as unknown as NexusEvent;
 };
 
 export class EventStore {
@@ -56,8 +59,8 @@ export class EventStore {
 
     this.db
       .prepare(
-        `INSERT INTO events (id, session_id, run_id, seq, type, version, ts, payload)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO events (id, session_id, run_id, seq, type, version, ts, payload, parent_tool_call_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         stored.id,
@@ -67,7 +70,8 @@ export class EventStore {
         stored.type,
         stored.version,
         stored.ts,
-        payload
+        payload,
+        stored.parentToolCallId ?? null
       );
 
     this.syncSearchIndex(stored);
@@ -79,6 +83,8 @@ export class EventStore {
    */
   private syncSearchIndex(event: NexusEvent): void {
     try {
+      // 子代理消息不进入父会话搜索索引
+      if (event.parentToolCallId) return;
       if (event.type === 'message.completed') {
         const payload = event.payload as { messageId?: unknown; role?: unknown; content?: unknown };
         if (

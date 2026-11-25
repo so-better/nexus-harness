@@ -380,7 +380,9 @@ export const registerAgentIpc = (): void => {
               const stored = events.append(agentEvent);
               applyTerminalState(stored);
               sendEvent(stored);
-              notifyAgentEvent(stored, sessions.get(stored.sessionId)?.title ?? 'Nexus');
+              if (!stored.parentToolCallId || stored.type.startsWith('approval.')) {
+                notifyAgentEvent(stored, sessions.get(stored.sessionId)?.title ?? 'Nexus');
+              }
               getPluginHost()?.emitEvent(stored);
             } catch (error) {
               console.error('Agent 事件持久化失败', error);
@@ -391,6 +393,20 @@ export const registerAgentIpc = (): void => {
         };
 
         const applyTerminalState = (agentEvent: NexusEvent): void => {
+          // 子代理消息与工具事件不能覆盖父 Run/会话状态；审批仍需让父会话感知阻塞
+          if (agentEvent.parentToolCallId) {
+            if (agentEvent.type === 'approval.requested') {
+              runs.updateStatus(runId, 'waiting_approval');
+              sessions.setStatus(parsed.data.sessionId, 'waiting_approval');
+            } else if (
+              agentEvent.type === 'approval.resolved' &&
+              !approvalService.hasPendingForRun(runId)
+            ) {
+              runs.updateStatus(runId, 'running');
+              sessions.setStatus(parsed.data.sessionId, 'running');
+            }
+            return;
+          }
           if (agentEvent.type === 'run.completed') {
             runs.updateStatus(runId, 'succeeded');
             sessions.setStatus(parsed.data.sessionId, 'completed');
@@ -491,7 +507,8 @@ export const registerAgentIpc = (): void => {
                   sessionId: session.id,
                   suggestedPath,
                   toolName: call.name,
-                  ...(call.id ? { toolCallId: call.id } : {})
+                  ...(call.id ? { toolCallId: call.id } : {}),
+                  ...(call.parentToolCallId ? { parentToolCallId: call.parentToolCallId } : {})
                 });
                 try {
                   const path = await workspaceAuthService.request(
@@ -513,6 +530,11 @@ export const registerAgentIpc = (): void => {
                 }
               },
               onEvent: (agentEvent) => {
+                // 子代理事件只持久化并推给 UI 嵌套渲染，不影响父级标题/失败/终止状态
+                if (agentEvent.parentToolCallId) {
+                  enqueueEvent(agentEvent);
+                  return;
+                }
                 if (
                   !titleGenerationStarted &&
                   (agentEvent.type === 'message.delta' ||
