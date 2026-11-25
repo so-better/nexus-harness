@@ -17,7 +17,7 @@
       <div class="nh-authorization__actions-right">
         <NButton
           size="medium"
-          secondary
+          type="error"
           :disabled="Boolean(submitting)"
           :loading="submitting === 'reject'"
           @click="submit('reject')"
@@ -28,7 +28,6 @@
         <NButton
           size="medium"
           type="primary"
-          secondary
           :disabled="Boolean(submitting)"
           :loading="submitting === 'approve'"
           @click="submit('approve')"

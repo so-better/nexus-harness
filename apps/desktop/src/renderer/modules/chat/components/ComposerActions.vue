@@ -22,7 +22,7 @@
       />
       <NButton
         type="primary"
-        tertiary
+        secondary
         attr-type="button"
         :disabled="!canAttach"
         :title="t('chat.attachmentAdd')"
@@ -31,7 +31,7 @@
         <template #icon><AppIcon name="upload" :size="14" /></template>
         {{ t('chat.attachmentAdd') }}
       </NButton>
-      <NButton v-if="running" type="error" secondary @click="emit('stop')">
+      <NButton v-if="running" type="error" @click="emit('stop')">
         <template #icon>
           <AppIcon name="stop" />
         </template>

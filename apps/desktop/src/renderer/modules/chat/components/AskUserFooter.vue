@@ -9,17 +9,19 @@
     />
     <div class="nh-ask-user__actions">
       <span v-if="showError" class="nh-ask-user__error">{{ t('chat.askUserRequired') }}</span>
-      <NButton quaternary @click="emit('cancel')">
+      <NButton secondary @click="emit('cancel')">
         {{ t('chat.askUserCancel') }}
       </NButton>
-      <NButton v-if="total > 1" secondary :disabled="index === 0" @click="emit('prev')">
+      <NButton
+        v-if="total > 1"
+        type="primary"
+        secondary
+        :disabled="index === 0"
+        @click="emit('prev')"
+      >
         {{ t('chat.askUserPrev') }}
       </NButton>
-      <NButton
-        :type="isLast ? 'primary' : 'default'"
-        secondary
-        @click="isLast ? emit('submit') : emit('next')"
-      >
+      <NButton type="primary" :secondary="!isLast" @click="isLast ? emit('submit') : emit('next')">
         {{ isLast ? t('chat.askUserSubmit') : t('chat.askUserNext') }}
       </NButton>
     </div>
