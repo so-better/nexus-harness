@@ -2,30 +2,43 @@
   <div class="nh-plugin-settings">
     <p class="nh-plugin-settings__title">{{ t('plugins.settings') }}</p>
     <div class="nh-plugin-settings__fields">
-      <label v-for="setting in settings" :key="setting.key" class="nh-plugin-settings__field">
-        <span class="nh-plugin-settings__label">{{ setting.title ?? setting.key }}</span>
-        <NInput
-          v-if="setting.type === 'string'"
-          :value="stringValue(setting.key)"
-          size="small"
-          @update:value="(value) => update(setting.key, value)"
-        />
-        <NInputNumber
-          v-else-if="setting.type === 'number'"
-          :value="numberValue(setting.key)"
-          size="small"
-          @update:value="(value) => update(setting.key, value)"
-        />
-        <NSwitch
-          v-else
-          :value="booleanValue(setting.key)"
-          size="small"
-          @update:value="(value) => update(setting.key, value)"
-        />
-      </label>
+      <div v-for="setting in settings" :key="setting.key" class="nh-plugin-settings__field">
+        <span class="nh-plugin-settings__label" :title="setting.title ?? setting.key">
+          {{ setting.title ?? setting.key }}
+        </span>
+        <div class="nh-plugin-settings__control">
+          <NInput
+            v-if="setting.type === 'string'"
+            :value="stringValue(setting.key)"
+            size="small"
+            @update:value="(value) => update(setting.key, value)"
+          />
+          <NInputNumber
+            v-else-if="setting.type === 'number'"
+            :value="numberValue(setting.key)"
+            size="small"
+            :show-button="false"
+            @update:value="(value) => update(setting.key, value)"
+          />
+          <NSwitch
+            v-else
+            :value="booleanValue(setting.key)"
+            size="small"
+            @update:value="(value) => update(setting.key, value)"
+          />
+        </div>
+      </div>
     </div>
-    <div class="nh-plugin-settings__actions">
-      <NButton size="small" secondary :loading="saving" @click="save">
+    <div class="nh-plugin-settings__footer">
+      <NButton
+        class="nh-plugin-settings__save"
+        size="small"
+        type="primary"
+        secondary
+        :disabled="!isDirty"
+        :loading="saving"
+        @click="save"
+      >
         {{ t('plugins.saveSettings') }}
       </NButton>
     </div>
@@ -47,8 +60,11 @@ const props = defineProps<{ plugin: PluginPublic }>();
 const runtime = usePluginRuntimeStore();
 const message = useMessage();
 const values = ref<Record<string, PluginSettingValue>>({});
+/** 已保存的值，用于判断是否有未保存修改 */
+const baseline = ref<Record<string, PluginSettingValue>>({});
 const saving = ref(false);
 const settings = computed(() => props.plugin.contributes.settings);
+const isDirty = computed(() => JSON.stringify(values.value) !== JSON.stringify(baseline.value));
 
 const stringValue = (key: string): string => {
   const value = values.value[key];
@@ -71,7 +87,9 @@ const update = (key: string, value: string | number | boolean | null): void => {
  */
 const load = async (): Promise<void> => {
   try {
-    values.value = await runtime.loadSettings(props.plugin.id);
+    const loaded = await runtime.loadSettings(props.plugin.id);
+    values.value = { ...loaded };
+    baseline.value = { ...loaded };
   } catch (reason) {
     message.error(reason instanceof Error ? reason.message : t('plugins.settingsFailed'));
   }
@@ -81,6 +99,7 @@ const save = async (): Promise<void> => {
   saving.value = true;
   try {
     await runtime.saveSettings(props.plugin.id, { ...values.value });
+    baseline.value = { ...values.value };
     message.success(t('plugins.settingsSaved'));
   } catch (reason) {
     message.error(reason instanceof Error ? reason.message : t('plugins.settingsFailed'));
@@ -94,29 +113,34 @@ watch(() => [props.plugin.id, props.plugin.version], load, { immediate: true });
 
 <style scoped lang="less">
 .nh-plugin-settings {
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--nh-border-subtle);
 }
 
 .nh-plugin-settings__title {
-  margin: 0 0 8px;
+  margin: 0 0 4px;
   color: var(--nh-color-text-secondary);
   font-size: 12px;
   font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .nh-plugin-settings__fields {
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
 .nh-plugin-settings__field {
   display: grid;
-  grid-template-columns: minmax(120px, 180px) minmax(0, 1fr);
+  grid-template-columns: minmax(120px, 200px) minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 6px 16px;
+  padding: 8px 0;
+}
+
+.nh-plugin-settings__field + .nh-plugin-settings__field {
+  border-top: 1px solid color-mix(in srgb, var(--nh-border-subtle) 60%, transparent);
 }
 
 .nh-plugin-settings__label {
@@ -127,9 +151,23 @@ watch(() => [props.plugin.id, props.plugin.version], load, { immediate: true });
   white-space: nowrap;
 }
 
-.nh-plugin-settings__actions {
+.nh-plugin-settings__control {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 10px;
+  min-width: 0;
+  align-items: center;
+}
+
+.nh-plugin-settings__control :deep(.n-input),
+.nh-plugin-settings__control :deep(.n-input-number) {
+  max-width: 280px;
+}
+
+.nh-plugin-settings__footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--nh-border-subtle);
 }
 </style>
