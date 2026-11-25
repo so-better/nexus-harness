@@ -39,7 +39,7 @@ import { loadNotificationBadge } from './services/settings/notification-settings
 import { EventStore } from './services/session/event-store';
 import { RunStore } from './services/session/run-store';
 import { expirePendingApprovals } from './services/session/approval-recovery';
-import { SessionService } from './services/session/session-service';
+import { createSessionService } from './services/session/create-session-service';
 import { syncBuiltinPlugins } from './services/plugins/builtin-plugin-service';
 import { syncBuiltinMcpConfig } from './services/mcp/builtin-mcp-service';
 import { syncBuiltinSkills } from './services/skills/builtin-skill-service';
@@ -195,7 +195,7 @@ if (!hasSingleInstanceLock) {
       const db = initDatabase();
       const runStore = new RunStore(db);
       const eventStore = new EventStore(db);
-      const sessions = new SessionService(db, eventStore);
+      const sessions = createSessionService(db, eventStore);
       const pluginHost = new PluginHost({
         db,
         directory: getAppDataPaths().plugins,

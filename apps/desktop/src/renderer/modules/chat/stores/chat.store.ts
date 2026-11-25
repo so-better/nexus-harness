@@ -50,9 +50,11 @@ export const useChatStore = defineStore('chat', () => {
     if (initialized) return;
     initialized = true;
     await refreshProviders();
-    unsubscribe = subscribeAgentEvents((event) =>
-      appendAgentEvent(eventsBySession, runningBySession, runIds, event)
-    );
+    unsubscribe = subscribeAgentEvents((event) => {
+      appendAgentEvent(eventsBySession, runningBySession, runIds, event);
+      // 删除会话时同时清掉“已加载”标记，避免按 id 常驻
+      if (event.type === 'session.removed') delete loadedSessions[event.sessionId];
+    });
   };
 
   /**

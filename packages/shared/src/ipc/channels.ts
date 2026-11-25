@@ -28,6 +28,7 @@ export const IPC_CHANNELS = {
   pluginImport: 'plugin:import',
   pluginUninstall: 'plugin:uninstall',
   pluginChanged: 'plugin:changed',
+  pluginEvent: 'plugin:event',
   pluginStorageGet: 'plugin:storageGet',
   pluginStorageSet: 'plugin:storageSet',
   pluginStorageDelete: 'plugin:storageDelete',

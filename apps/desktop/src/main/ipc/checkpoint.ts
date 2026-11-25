@@ -19,7 +19,7 @@ import { fail, ok, type Result } from '@shared/ipc/result';
 import { CheckpointService } from '../services/checkpoint/checkpoint-service';
 import { EventStore } from '../services/session/event-store';
 import { getDatabase } from '../services/storage/database';
-import { SessionService } from '../services/session/session-service';
+import { createSessionService } from '../services/session/create-session-service';
 
 /**
  * 注册 checkpoint:restore。
@@ -28,7 +28,7 @@ export const registerCheckpointIpc = (): void => {
   const db = getDatabase();
   const checkpoints = new CheckpointService();
   const events = new EventStore(db);
-  const sessions = new SessionService(db, events);
+  const sessions = createSessionService(db, events);
 
   ipcMain.handle(
     IPC_CHANNELS.checkpointDiff,

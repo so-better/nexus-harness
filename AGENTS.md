@@ -940,7 +940,7 @@ metadata:
 #### 事件钩子
 
 - `ctx.events.on(event, handler)` 是插件订阅宿主事件的统一方式；payload 由 `packages/shared` 定义，第二个参数提供 `type`、`sessionId`、`runId`、`ts` 与可选 `parentToolCallId`（子代理事件）。
-- 可用于 session、message、tool、approval、usage、file、context、mcp 等领域事件。
+- 可用于 session、message、tool、approval、usage、file、context、mcp 等领域事件；session 转发创建、重命名、置顶/取消、模型/模式/审批策略切换、root 授权/撤销、删除与导出等生命周期事件。
 - 事件钩子是只读观察，不得修改、拦截或替代审批；需要拦截的能力必须单独评审并提升权限。
 - 高频事件 `message.delta` 默认不暴露；使用 `message.completed`、`usage.recorded` 等聚合事件。
 - 订阅必须返回 `Disposable`，插件停用时释放；`onEvent:<event>` 可按需激活。
@@ -1031,7 +1031,7 @@ interface SlotContext {
 
 `apps/desktop/resources/plugins/nexus.token-usage` 是插件开发的参考实现，随应用同步到 `<userData>/plugins`，必须持续保持可运行，并演示：
 
-- 通过 `messageSlots` 在会话标题栏和每条 AI 回复尾部分别显示会话与消息用量；消息尾部同时显示 token、耗时（秒）与字符数。
+- 通过 `messageSlots` 在会话标题栏和每条 AI 回复尾部分别显示会话与消息 token 用量；耗时（秒）与字符数通过插件设置 `showDuration` / `showChars` 控制，默认关闭。
 - 通过只读 `SlotContext.usage` 读取宿主投影的用量，不自行累计跨会话总量。
 - 通过 `usage:read` 和 `ctx.usage.getStats` 读取会话/全局统计，通过 `views` 与 `ctx.views.open` 打开看板。
 - 通过 `events:usage.recorded` 与事件元数据在看板打开时刷新。

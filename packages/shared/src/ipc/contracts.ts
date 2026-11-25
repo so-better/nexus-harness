@@ -344,6 +344,8 @@ export interface NexusBridge {
     importFromDirectory: () => Promise<Result<PluginPublic[] | null>>;
     uninstall: (id: string) => Promise<Result<PluginPublic[]>>;
     onChanged: (handler: (plugins: PluginPublic[]) => void) => Unsubscribe;
+    /** 订阅推送给插件的领域事件（独立于 agent 事件通道） */
+    onEvent: (handler: (event: NexusEvent) => void) => Unsubscribe;
     storageGet: (pluginId: string, key: string) => Promise<Result<unknown>>;
     storageSet: (pluginId: string, key: string, value: unknown) => Promise<Result<{ ok: boolean }>>;
     storageDelete: (pluginId: string, key: string) => Promise<Result<{ ok: boolean }>>;

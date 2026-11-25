@@ -7,6 +7,7 @@ import { realpath, stat } from 'node:fs/promises';
 import { createNexusEvent } from '@nexus/core';
 import { assertGrantableRoot } from '@nexus/runtime-utils';
 import type { DatabaseSync } from 'node:sqlite';
+import type { NexusEvent } from '@shared/events';
 import type {
   AgentMode,
   ApprovalPolicy,
@@ -78,8 +79,34 @@ const toSummary = (row: SessionRow): SessionSummary => ({
 export class SessionService {
   constructor(
     private readonly db: DatabaseSync,
-    private readonly events: EventStore
+    private readonly events: EventStore,
+    /** 事件追加后回调，用于把 session 生命周期事件转发给插件等观察者 */
+    private readonly onEvent?: (event: NexusEvent) => void
   ) {}
+
+  /** 事务内待转发事件；提交后统一通知，避免回滚时发出幻影事件 */
+  private pendingEvents: NexusEvent[] | undefined;
+
+  /**
+   * 追加事件；事务内先缓冲，提交后统一通知观察者。
+   */
+  private appendEvent(event: NexusEvent): NexusEvent {
+    const stored = this.events.append(event);
+    if (this.pendingEvents) this.pendingEvents.push(stored);
+    else this.notify(stored);
+    return stored;
+  }
+
+  /**
+   * 通知观察者（插件/渲染层）；观察者失败不能影响会话持久化。
+   */
+  private notify(event: NexusEvent): void {
+    try {
+      this.onEvent?.(event);
+    } catch {
+      // 观察者是尽力而为
+    }
+  }
 
   /**
    * 创建会话；标题暂用默认值，后续由 AI 摘要或用户重命名。
@@ -111,7 +138,7 @@ export class SessionService {
           now
         );
 
-      this.events.append(
+      this.appendEvent(
         createNexusEvent({
           sessionId: id,
           seq: 1,
@@ -164,7 +191,7 @@ export class SessionService {
         .all(sessionId) as unknown as SessionRootRow[];
       this.db.prepare('DELETE FROM session_roots WHERE session_id = ?').run(sessionId);
       for (const old of previous) {
-        this.events.append(
+        this.appendEvent(
           createNexusEvent({
             sessionId,
             seq: 1,
@@ -181,7 +208,7 @@ export class SessionService {
            VALUES (?, ?, ?, ?, ?, 'session', ?)`
         )
         .run(randomUUID(), sessionId, root.path, root.kind, root.access, now);
-      this.events.append(
+      this.appendEvent(
         createNexusEvent({
           sessionId,
           seq: 1,
@@ -210,7 +237,7 @@ export class SessionService {
 
     this.transaction(() => {
       this.db.prepare('DELETE FROM session_roots WHERE id = ?').run(rootId);
-      this.events.append(
+      this.appendEvent(
         createNexusEvent({
           sessionId,
           seq: 1,
@@ -266,7 +293,7 @@ export class SessionService {
         )
         .run(title.trim(), now, id, DEFAULT_SESSION_TITLE);
       if (Number(result.changes) === 0) return undefined;
-      this.events.append(
+      this.appendEvent(
         createNexusEvent({
           sessionId: id,
           seq: 1,
@@ -291,7 +318,7 @@ export class SessionService {
         )
         .run(input.title, now, now, input.id);
 
-      this.events.append(
+      this.appendEvent(
         createNexusEvent({
           sessionId: input.id,
           seq: 1,
@@ -311,7 +338,7 @@ export class SessionService {
     const now = Date.now();
 
     this.transaction(() => {
-      this.events.append(
+      this.appendEvent(
         createNexusEvent({ sessionId: id, seq: 1, type: 'session.removed', payload: {} })
       );
       this.db.prepare('DELETE FROM session_roots WHERE session_id = ?').run(id);
@@ -332,7 +359,7 @@ export class SessionService {
 
     return this.transaction(() => {
       for (const row of rows) {
-        this.events.append(
+        this.appendEvent(
           createNexusEvent({ sessionId: row.id, seq: 1, type: 'session.removed', payload: {} })
         );
         this.db.prepare('DELETE FROM session_roots WHERE session_id = ?').run(row.id);
@@ -356,7 +383,7 @@ export class SessionService {
           'UPDATE sessions SET pinned = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL'
         )
         .run(pinned ? 1 : 0, now, id);
-      this.events.append(
+      this.appendEvent(
         createNexusEvent({
           sessionId: id,
           seq: 1,
@@ -379,7 +406,7 @@ export class SessionService {
           'UPDATE sessions SET provider_id = ?, model_id = ?, updated_at = ?, last_active_at = ? WHERE id = ? AND deleted_at IS NULL'
         )
         .run(input.providerId, input.modelId, now, now, input.id);
-      this.events.append(
+      this.appendEvent(
         createNexusEvent({
           sessionId: input.id,
           seq: 1,
@@ -403,7 +430,7 @@ export class SessionService {
           'UPDATE sessions SET mode = ?, updated_at = ?, last_active_at = ? WHERE id = ? AND deleted_at IS NULL'
         )
         .run(input.mode, now, now, input.id);
-      this.events.append(
+      this.appendEvent(
         createNexusEvent({
           sessionId: input.id,
           seq: 1,
@@ -426,7 +453,7 @@ export class SessionService {
           'UPDATE sessions SET approval_policy = ?, updated_at = ?, last_active_at = ? WHERE id = ? AND deleted_at IS NULL'
         )
         .run(input.approvalPolicy, now, now, input.id);
-      this.events.append(
+      this.appendEvent(
         createNexusEvent({
           sessionId: input.id,
           seq: 1,
@@ -451,12 +478,19 @@ export class SessionService {
   }
 
   private transaction<T>(fn: () => T): T {
+    const previous = this.pendingEvents;
+    this.pendingEvents = [];
     this.db.exec('BEGIN');
     try {
       const result = fn();
       this.db.exec('COMMIT');
+      const events = this.pendingEvents;
+      this.pendingEvents = previous;
+      // 提交后再通知，保证观察者只看到已持久化的事件
+      for (const event of events) this.notify(event);
       return result;
     } catch (error) {
+      this.pendingEvents = previous;
       this.db.exec('ROLLBACK');
       throw error;
     }

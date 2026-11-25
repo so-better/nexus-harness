@@ -34,9 +34,10 @@ import { providerStore } from '../services/provider/provider-store';
 import { getDatabase } from '../services/storage/database';
 import { EventStore } from '../services/session/event-store';
 import { RunStore } from '../services/session/run-store';
-import { SessionService } from '../services/session/session-service';
+import { createSessionService } from '../services/session/create-session-service';
 import { generateSessionTitle } from '../services/session/session-title';
 import { getPluginHost } from '../services/plugins/plugin-host-instance';
+import { broadcastPluginEvent } from '../services/plugins/plugin-events';
 import { notifyAgentEvent } from '../services/notifications/notification-service';
 import { SessionHistoryService } from '../services/session/session-history';
 import { ArtifactService } from '../services/artifacts/artifact-service';
@@ -96,7 +97,7 @@ const cancelActiveRun = (active: ActiveRun): void => {
 export const registerAgentIpc = (): void => {
   const db = getDatabase();
   const events = new EventStore(db);
-  const sessions = new SessionService(db, events);
+  const sessions = createSessionService(db, events);
   const runs = new RunStore(db);
   const history = new SessionHistoryService(events, new ArtifactService(undefined, db));
   const attachments = new AttachmentService(db);
@@ -380,6 +381,7 @@ export const registerAgentIpc = (): void => {
               const stored = events.append(agentEvent);
               applyTerminalState(stored);
               sendEvent(stored);
+              broadcastPluginEvent(stored);
               if (!stored.parentToolCallId || stored.type.startsWith('approval.')) {
                 notifyAgentEvent(stored, sessions.get(stored.sessionId)?.title ?? 'Nexus');
               }

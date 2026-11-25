@@ -147,11 +147,16 @@ const mountUsage = (element, context, session, ctx) => {
   if (session) activeSessionId = context.sessionId;
   const text = labels();
   const tokenValue = usageText(context.usage, session, text);
-  // 消息尾部：token · 耗时 · 字符数；会话头仍只显示 token
+  // 耗时/字数默认关闭，由插件设置 showDuration / showChars 控制
+  const showDuration = ctx.settings?.showDuration === true;
+  const showChars = ctx.settings?.showChars === true;
+  // 消息尾部：token 始终显示；耗时与字数按设置追加；会话头仍只显示 token
   const inlineValue = [
     context.usage ? tokenValue : '',
-    typeof context.durationMs === 'number' ? formatDuration(context.durationMs) : '',
-    typeof context.contentChars === 'number'
+    showDuration && typeof context.durationMs === 'number'
+      ? formatDuration(context.durationMs)
+      : '',
+    showChars && typeof context.contentChars === 'number'
       ? `${formatNumber(context.contentChars)} ${isEnglish() ? 'chars' : '字'}`
       : ''
   ]
@@ -851,10 +856,13 @@ const mountDashboard = (element, ctx) => {
   range30.addEventListener('click', () => change({ days: 30 }));
   rangeAll.addEventListener('click', () => change({ days: 0 }));
 
-  const unsubscribe = ctx.events.on('usage.recorded', () => {
+  const scheduleRefresh = () => {
     clearTimeout(timer);
     timer = setTimeout(refreshStats, 500);
-  });
+  };
+  const unsubscribeUsage = ctx.events.on('usage.recorded', scheduleRefresh);
+  // 删除会话会改变聚合统计（deleted_at 过滤），需要刷新看板
+  const unsubscribeRemoved = ctx.events.on('session.removed', scheduleRefresh);
 
   setActive();
   refreshStats();
@@ -862,7 +870,8 @@ const mountDashboard = (element, ctx) => {
   return () => {
     disposed = true;
     clearTimeout(timer);
-    unsubscribe();
+    unsubscribeUsage();
+    unsubscribeRemoved();
     root.remove();
   };
 };

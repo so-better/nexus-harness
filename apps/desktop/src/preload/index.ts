@@ -198,6 +198,11 @@ const bridge: NexusBridge = {
       ipcRenderer.on(IPC_CHANNELS.pluginChanged, listener);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.pluginChanged, listener);
     },
+    onEvent: (handler) => {
+      const listener = (_event: IpcRendererEvent, event: NexusEvent): void => handler(event);
+      ipcRenderer.on(IPC_CHANNELS.pluginEvent, listener);
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.pluginEvent, listener);
+    },
     storageGet: (pluginId, key) =>
       ipcRenderer.invoke(IPC_CHANNELS.pluginStorageGet, { pluginId, key }),
     storageSet: (pluginId, key, value) =>

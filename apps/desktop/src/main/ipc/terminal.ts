@@ -20,7 +20,7 @@ import {
 import { fail, ok, type Result } from '@shared/ipc/result';
 import { getDatabase } from '../services/storage/database';
 import { EventStore } from '../services/session/event-store';
-import { SessionService } from '../services/session/session-service';
+import { createSessionService } from '../services/session/create-session-service';
 import { terminalService } from '../services/terminal/terminal-service';
 import { loadTerminalSettings } from '../services/settings/terminal-settings';
 import { applyTerminalSettings } from '../services/settings/terminal-settings-service';
@@ -32,7 +32,7 @@ import { resolveTerminalCwd } from '../services/terminal/terminal-cwd';
 export const registerTerminalIpc = (): void => {
   const db = getDatabase();
   const events = new EventStore(db);
-  const sessions = new SessionService(db, events);
+  const sessions = createSessionService(db, events);
 
   terminalService.onEvent((event: TerminalEvent) => {
     try {

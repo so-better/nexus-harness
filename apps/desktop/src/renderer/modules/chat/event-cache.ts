@@ -13,6 +13,14 @@ export const appendAgentEvent = (
   runIds: Record<string, string>,
   event: NexusEvent
 ): void => {
+  // 删除会话时清理其缓存，避免已删除会话的事件常驻内存
+  if (event.type === 'session.removed') {
+    delete eventsBySession[event.sessionId];
+    delete runningBySession[event.sessionId];
+    delete runIds[event.sessionId];
+    return;
+  }
+
   const list = eventsBySession[event.sessionId] ?? [];
   list.push(event);
   eventsBySession[event.sessionId] = list;

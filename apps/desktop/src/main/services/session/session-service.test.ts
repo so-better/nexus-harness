@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { createNexusEvent } from '@nexus/core';
+import type { NexusEvent } from '@shared/events';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDatabase } from '../storage/database';
 import { EventStore } from './event-store';
@@ -19,12 +20,14 @@ describe('session storage', () => {
   let sessions: SessionService;
   let events: EventStore;
   let runs: RunStore;
+  let forwarded: NexusEvent[];
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'nexus-session-'));
     db = createDatabase(join(directory, 'nexus.db'));
     events = new EventStore(db);
-    sessions = new SessionService(db, events);
+    forwarded = [];
+    sessions = new SessionService(db, events, (event) => forwarded.push(event));
     runs = new RunStore(db);
   });
 
@@ -174,6 +177,17 @@ describe('session storage', () => {
 
     expect(sessions.get(session.id)).toBeUndefined();
     expect(events.list(session.id).some((event) => event.type === 'session.removed')).toBe(true);
+  });
+
+  it('notifies observers of session lifecycle events', () => {
+    const session = sessions.create();
+    sessions.rename({ id: session.id, title: '改名' });
+    sessions.remove(session.id);
+
+    const types = forwarded.map((event) => event.type);
+    expect(types).toContain('session.created');
+    expect(types).toContain('session.renamed');
+    expect(types).toContain('session.removed');
   });
 
   it('clears all sessions while keeping audit events', () => {

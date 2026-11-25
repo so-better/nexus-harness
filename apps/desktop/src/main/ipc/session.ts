@@ -30,12 +30,14 @@ import { hasRunForSession } from '../services/agent/run-registry';
 import { FileService } from '../services/files/file-service';
 import { createNexusEvent } from '@nexus/core';
 import { EventStore } from '../services/session/event-store';
-import { SessionService } from '../services/session/session-service';
+import { createSessionService } from '../services/session/create-session-service';
 import { AttachmentService } from '../services/attachments/attachment-service';
 import { searchSessions } from '../services/session/session-search';
 import { getDatabase } from '../services/storage/database';
 import { buildSessionHtml, buildSessionMarkdown } from '../services/session/export-service';
 import { terminalService } from '../services/terminal/terminal-service';
+import { getPluginHost } from '../services/plugins/plugin-host-instance';
+import { broadcastPluginEvent } from '../services/plugins/plugin-events';
 
 const exportMime = (format: 'markdown' | 'html' | 'pdf'): string => {
   if (format === 'markdown') return 'text/markdown';
@@ -49,7 +51,7 @@ const exportMime = (format: 'markdown' | 'html' | 'pdf'): string => {
 export const registerSessionIpc = (): void => {
   const db = getDatabase();
   const events = new EventStore(db);
-  const sessions = new SessionService(db, events);
+  const sessions = createSessionService(db, events);
   const attachments = new AttachmentService(db);
   const files = new FileService(db);
 
@@ -366,7 +368,7 @@ export const registerSessionIpc = (): void => {
           source: 'generated'
         });
         await files.saveAs(stored.id, session.id, result.filePath);
-        events.append(
+        const exportedEvent = events.append(
           createNexusEvent({
             sessionId: session.id,
             seq: 1,
@@ -378,6 +380,8 @@ export const registerSessionIpc = (): void => {
             }
           })
         );
+        getPluginHost()?.emitEvent(exportedEvent);
+        broadcastPluginEvent(exportedEvent);
         return ok({ saved: true, path: result.filePath, fileId: stored.id });
       } catch (error) {
         return fail(

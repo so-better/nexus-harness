@@ -18,7 +18,7 @@ import {
   workspaceImageReadInputSchema
 } from '@shared/ipc/contracts';
 import { EventStore } from '../services/session/event-store';
-import { SessionService } from '../services/session/session-service';
+import { createSessionService } from '../services/session/create-session-service';
 import { getDatabase } from '../services/storage/database';
 import { searchWorkspaceFiles } from '../services/workspace/file-search-service';
 import { fail, ok, type Result } from '@shared/ipc/result';
@@ -32,7 +32,7 @@ import { isSensitivePath } from '@nexus/runtime-utils';
 export const registerWorkspaceIpc = (): void => {
   const db = getDatabase();
   const events = new EventStore(db);
-  const sessions = new SessionService(db, events);
+  const sessions = createSessionService(db, events);
 
   ipcMain.handle(
     IPC_CHANNELS.workspaceSearchFiles,
@@ -61,7 +61,8 @@ export const registerWorkspaceIpc = (): void => {
       if (!parsed.success) return fail('WORKSPACE_INVALID_INPUT', '图片预览参数不合法');
       const session = sessions.get(parsed.data.sessionId);
       if (!session) return fail('SESSION_NOT_FOUND', '会话不存在');
-      if (!isAbsolute(parsed.data.path)) return fail('WORKSPACE_PATH_INVALID', '图片路径必须是绝对路径');
+      if (!isAbsolute(parsed.data.path))
+        return fail('WORKSPACE_PATH_INVALID', '图片路径必须是绝对路径');
       try {
         const real = await realpath(parsed.data.path);
         const roots = await Promise.all(

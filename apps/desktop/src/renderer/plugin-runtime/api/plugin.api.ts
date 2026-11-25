@@ -79,7 +79,7 @@ export const reportPluginError = async (pluginId: string, error: string): Promis
 };
 
 export const subscribePluginEvents = (handler: (event: NexusEvent) => void): (() => void) =>
-  nexus.agent.onEvent(handler);
+  nexus.plugin.onEvent(handler);
 
 export const readPluginWorkspace = async (
   pluginId: string,
