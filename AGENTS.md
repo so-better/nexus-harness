@@ -303,32 +303,37 @@ nexus-harness/
 │     ├─ electron.vite.config.ts
 │     └─ src/
 │        ├─ main/                # Electron 主进程
-│        │  ├─ app/              # 生命周期、窗口、菜单、托盘、单实例
+│        │  ├─ app/              # 生命周期、窗口、菜单、托盘、单实例、原生主题
 │        │  ├─ ipc/              # 按域拆分的 IPC handler
-│        │  ├─ services/
-│        │  │  ├─ agent/         # 会话循环、上下文、检查点
-│        │  │  ├─ provider/      # 模型提供商适配器管理
-│        │  │  ├─ tool/          # 工具执行与审批
-│        │  │  ├─ workspace/     # 工作区、scope 与 root 授权
-│        │  │  ├─ skill/         # Skill 目录扫描与解析
-│        │  │  ├─ mcp/           # MCP 配置扫描、进程与工具注册
-│        │  │  ├─ plugin-host/   # 插件发现、加载、权限、事件分发
-│        │  │  ├─ storage/       # 持久化（会话、设置、工作区索引）
-│        │  │  ├─ files/         # AI 输出文件存储与另存为
-│        │  │  ├─ knowledge/     # 知识库来源、切分与检索
-│        │  │  ├─ search/        # 跨会话全文索引与查询
-│        │  │  ├─ export/        # 会话导出（Markdown/HTML/PDF）
-│        │  └─ security/         # 沙箱、路径白名单、命令拦截
+│        │  ├─ security/         # 权限网关、沙箱、路径白名单、命令拦截
+│        │  └─ services/
+│        │     ├─ agent/         # 会话循环、上下文、工具编排、子代理、审批
+│        │     ├─ provider/      # 模型提供商适配器管理
+│        │     ├─ workspace/     # 工作区、scope 与 root 授权
+│        │     ├─ skills/        # Skill 目录扫描与解析
+│        │     ├─ mcp/           # MCP 配置扫描、进程与工具注册
+│        │     ├─ plugins/       # 插件发现、加载、权限、事件分发
+│        │     ├─ storage/       # SQLite 主库、持久化与路径
+│        │     ├─ session/       # 会话元数据、事件存储、跨会话搜索与导出
+│        │     ├─ settings/      # 主题、语言、终端、通知、图片、备份等设置服务
+│        │     ├─ files/         # AI 输出文件存储与另存为
+│        │     ├─ attachments/   # 上传附件与图片降采样
+│        │     ├─ artifacts/     # 工具产物落盘与读取
+│        │     ├─ checkpoint/    # 逐文件检查点快照
+│        │     ├─ knowledge/     # 知识库来源、切分与检索
+│        │     ├─ memory/        # 全局长期记忆
+│        │     ├─ terminal/      # 内置终端 PTY 管理
+│        │     ├─ usage/         # 用量统计
+│        │     ├─ cache/         # 缓存统计与清理
+│        │     └─ notifications/ # 系统通知与 Dock/托盘提醒
 │        ├─ preload/             # contextBridge 唯一入口
 │        └─ renderer/
-│           ├─ app/              # 启动、全局 provider、导航状态
-│           ├─ layouts/          # 主布局、侧栏、面板容器
-│           ├─ modules/          # 功能模块（chat、workspace、extensions 等，见 3.4）
+│           ├─ app/              # 启动、全局 provider、导航状态、主题、命令注册、IPC 桥
+│           ├─ layouts/          # 主布局、侧栏、面板容器、标题栏
+│           ├─ modules/          # 功能模块（chat、knowledge、session、settings、terminal，见 3.4）
 │           ├─ components/       # 跨模块通用原子组件
-│           ├─ plugin-runtime/   # 插件宿主、贡献点渲染、权限提示
 │           ├─ composables/      # 跨模块通用逻辑
-│           ├─ stores/           # 仅全局 store（theme / app / layout）
-│           ├─ platform/         # macOS / Windows 平台差异适配
+│           ├─ plugin-runtime/   # 插件宿主、贡献点渲染、权限提示
 │           ├─ styles/           # tokens、主题、mixins
 │           └─ types/            # 全局类型声明
 ├─ packages/
@@ -633,11 +638,12 @@ interface ProviderCapabilities {
 | `run_command` | execute | 是 |
 | `ask_user` | read | 否（等待用户） |
 | `open_url` | network | 是 |
-| `memory_search` | read | 否 |
+| `memory_search` / `memory_read` | read | 否 |
 | `search_knowledge` | read | 否 |
 | `search_skills` | read | 否（系统内部） |
 | `read_skill` | read | 否（系统内部） |
-| `checkpoint` | write | 否（系统内部） |
+| `read_skill_file` | read | 否（读取 Skill 目录内资源文件） |
+| `run_skill_script` | execute | 是（执行 Skill 脚本，按命令审批） |
 | `save_file` | write | 否（写入 `files`） |
 | `save_word` / `save_excel` / `save_ppt` / `save_pdf` | write | 否（写入 `files`） |
 | `search_images` / `search_videos` | network | 是 |
@@ -654,6 +660,8 @@ interface ProviderCapabilities {
 | `theme_update` / `skin_apply` / `terminal_update_settings` / `terminal_create` / `terminal_write` / `terminal_close` / `terminal_request_access` | write | 是 |
 | `cache_clear` / `backup_export` / `backup_import` / `general_settings_update` | write | 是 |
 | `image_config_save` / `image_config_toggle` / `image_config_delete` | write | 是 |
+
+`checkpoint` 不是 Agent 可调用的工具：宿主在工作区文件写入前自动创建逐文件检查点。
 
 `save_*` 工具写入 `<userData>/files`，不触发工作区写审批，但必须记录 `file.created` 并受大小与类型限制。`save_file` 支持文本与 Base64 二进制内容；`save_word` / `save_pdf` 使用 Markdown，`save_ppt` 支持模板化版式。
 
@@ -1424,7 +1432,7 @@ interface AskUserAnswer {
 - 类名遵循 BEM，禁止无意义类名（`box1`、`red`）。
 - 字体、动效、阴影、层级同样必须使用 token，禁止在组件内写 `transition: all 0.3s` 之类的魔法值。
 - 尺寸、间距、字号、圆角与行高使用偶数，禁止 `13px`、`15px`、`7px` 等奇数数值；`1px` 边框与发丝线例外，统一使用 border token。
-- 平台材质与窗口差异统一收敛到 `platform/` 适配层，业务样式不得直接判断操作系统。
+- 平台材质与窗口差异统一收敛到渲染层 `app/`（`platform` 参数由主进程注入）与 `styles/themes/`，业务样式不得直接判断操作系统。
 
 插件主题：
 
@@ -1451,7 +1459,7 @@ interface AskUserAnswer {
 - **macOS 为主**：隐藏式标题栏与原生红绿灯、原生菜单、Dock 行为、全屏、窗口状态记忆、系统文件对话框与拖放。
 - **Windows 兼容**：遵循 Windows 窗口控件与字体习惯，使用 Mica 或纯色回退；不强行复制 macOS 控件。
 - 字体优先系统栈（macOS `-apple-system` / SF Pro，Windows `Segoe UI Variable`），不把第三方字体作为默认。
-- 平台差异集中封装在 `renderer/platform/` 与主进程 `app/` 层，业务组件不得散落 `process.platform` 判断。
+- 平台差异集中封装在渲染层 `app/` 与主进程 `app/` 层，业务组件不得散落 `process.platform` 判断。
 
 ### 5.5 性能预算
 
@@ -1808,15 +1816,15 @@ pnpm dist:win      # 构建 Windows NSIS 安装包
 
 ### 8.1 许可证
 
-- 项目确定开源，许可证尚未最终确定。
-- 推荐 **Apache-2.0**（含专利授权，适合平台型项目与插件生态）；若追求最简，可选 MIT。
-- 许可证确定后必须新增 `LICENSE` 文件，并在 README 中声明。
+- 项目开源，许可证为 **Apache-2.0**（含专利授权，适合平台型项目与插件生态）。
+- 仓库根目录提供 `LICENSE` 文件，README 中声明许可证。
+- 新增依赖必须兼容 Apache-2.0；引入其他许可证的依赖需在评审中说明。
 
 ### 8.2 仓库必备文件
 
 ```text
 README.md            # 产品介绍、安装、快速开始
-LICENSE              # 开源许可证
+LICENSE              # Apache-2.0
 CONTRIBUTING.md      # 贡献流程、开发环境、提交规范
 CODE_OF_CONDUCT.md   # 社区行为准则
 SECURITY.md          # 漏洞报告方式与安全策略
@@ -1838,8 +1846,8 @@ CHANGELOG.md         # 版本变更记录
 | 决策 | 当前状态 | 建议 |
 | --- | --- | --- |
 | 产品名与包 scope | 已定 | Nexus / `@nexus/*` |
-| 开源许可证 | 待定 | Apache-2.0 |
-| 应用 appId / bundle id | 待定 | `com.nexus.harness` 占位，确定域名后替换 |
+| 开源许可证 | 已定 | Apache-2.0 |
+| 应用 appId / bundle id | 已用占位 | `com.nexus.harness` 占位，确定域名后替换 |
 | SQLite 实现 | 待定 | 优先 `node:sqlite`，M0 验证 Electron 运行时；不可用则 `better-sqlite3` |
 | 默认提供商 | 待定 | 首次启动引导选择，不写死默认模型 |
 | 插件加载 | 目录扫描 | `<userData>/plugins`，启动与目录变化时注册 |
@@ -1967,62 +1975,51 @@ CHANGELOG.md         # 版本变更记录
 
 | 事件 | 关键 payload | 触发时机 |
 | --- | --- | --- |
-| `workspace.opened` | `workspaceId`、`root` | 打开工作区 |
-| `workspace.trusted` | `workspaceId`、`trustLevel` | 用户确认信任 |
-| `session.created` | `sessionId`、`workspaceId` | 新建会话 |
-| `session.workspace.bound` | `sessionId`、`workspaceId` | 临时会话绑定工作区 |
-| `session.mode.changed` | `sessionId`、`mode` | Plan / Build 模式切换 |
-| `session.approvalPolicy.changed` | `sessionId`、`approvalPolicy` | 会话审批策略切换 |
-| `session.model.changed` | `sessionId`、`providerId`、`modelId` | 会话切换服务商或模型 |
-| `session.renamed` | `sessionId`、`title`、`source` | 自动标题或用户重命名 |
-| `session.pinned` | `sessionId` | 置顶会话 |
-| `session.unpinned` | `sessionId` | 取消置顶 |
-| `session.exported` | `sessionId`、`format`、`fileId` | 导出会话 |
-| `scope.granted` | `sessionId`、`path`、`kind`、`access`、`source` | 新增 root 授权 |
-| `scope.revoked` | `sessionId`、`path` | 移除 root 授权 |
-| `session.completed` | `sessionId`、`summary` | 会话结束 |
-| `session.failed` | `sessionId`、`error` | 会话失败 |
-| `session.archived` | `sessionId` | 归档会话 |
-| `run.started` | `runId`、`model`、`budget` | 开始执行 |
-| `run.completed` | `runId`、`durationMs` | 执行成功 |
-| `run.failed` | `runId`、`error` | 执行失败 |
-| `run.cancelled` | `runId`、`reason` | 用户取消 |
-| `run.interrupted` | `runId`、`reason` | 应用中断或崩溃后恢复 |
-| `run.budget.exceeded` | `runId`、`budget`、`threshold`、`action` | 预算触发，记录继续或停止 |
-| `run.no_progress` | `runId`、`reason` | 连续无进展，暂停等待用户 |
-| `subagent.started` | `parentToolCallId`、`agent`、`description?` | 子代理开始 |
-| `subagent.progress` | `parentToolCallId`、`name`、`ok?` | 子代理工具进度 |
-| `subagent.completed` | `parentToolCallId`、`agent`、`ok`、`summary`、`steps`、`toolCalls`、`usage?`、`transcriptRef?`、`transcripts?` | 子代理结束并回填结论与用量 |
+| `session.created` | `workspaceId?`、`title?` | 新建会话 |
+| `session.mode.changed` | `mode` | Plan / Build 模式切换 |
+| `session.approvalPolicy.changed` | `approvalPolicy` | 会话审批策略切换 |
+| `session.model.changed` | `providerId`、`modelId` | 会话切换服务商或模型 |
+| `scope.granted` | `path`、`kind`、`access`、`source` | 新增 root 授权 |
+| `scope.revoked` | `path` | 移除 root 授权 |
+| `session.renamed` | `title`、`source` | 自动标题或用户重命名 |
+| `session.pinned` | （无） | 置顶会话 |
+| `session.unpinned` | （无） | 取消置顶 |
+| `session.removed` | （无） | 删除会话 |
+| `session.exported` | `sessionId`、`format`、`fileId?`、`path?` | 导出会话 |
+| `run.started` | `model` | 开始执行 |
+| `run.completed` | `durationMs` | 执行成功 |
+| `run.failed` | `error` | 执行失败 |
+| `run.cancelled` | `reason?` | 用户取消 |
+| `run.interrupted` | `reason` | 应用中断或崩溃后恢复 |
 | `message.reasoning.delta` | `messageId`、`text` | 推理内容增量，仅用于展示与导出 |
 | `message.delta` | `messageId`、`text` | 流式文本增量 |
-| `message.completed` | `messageId`、`content`、`reasoning` | 消息完成 |
-| `message.edited` | `messageId`、`content` | 用户编辑消息 |
+| `message.completed` | `messageId`、`role`、`content`、`reasoning?`、`error?`、`images?`、`references?`、`attachments?` | 消息完成 |
+| `message.edited` | `messageId`、`content`、`references?`、`attachments?` | 用户编辑消息 |
 | `message.regenerated` | `messageId`、`sourceMessageId` | 重新生成回复 |
 | `message.superseded` | `messageId`、`reason` | 旧回复被编辑或重生成替代 |
-| `context.compacted` | `beforeTokens`、`afterTokens`、`strategy`、`summaryRef`、`snapshotRef`、`artifactIds` | 上下文自动或手动压缩，含工具输出、摘要与历史快照引用 |
 | `tool.requested` | `toolCallId`、`name`、`input` | 发起工具调用 |
-| `tool.completed` | `toolCallId`、`ok`、`output`、`artifactId?`、`bytes?` | 工具执行完成，`output` 为完整内容；压缩产物引用记录在 `context.compacted` |
+| `tool.completed` | `toolCallId`、`ok`、`output?`、`artifactId?`、`bytes?` | 工具执行完成，`output` 为完整内容；压缩产物引用记录在 `context.compacted` |
 | `tool.failed` | `toolCallId`、`error` | 工具执行失败 |
-| `approval.requested` | `approvalId`、`toolCallId`、`scope` | 请求审批 |
-| `approval.resolved` | `approvalId`、`decision` | 审批完成 |
-| `approval.auto_approved` | `approvalId`、`toolCallId`、`scope` | 策略自动放行审批 |
-| `ask_user.requested` | `requestId`、`questions` | Agent 请求澄清 |
+| `checkpoint.created` | `checkpointId`、`label`、`path?`、`existed?`、`toolCallId?`、`parentToolCallId?` | 工作区写入前创建检查点 |
+| `checkpoint.restored` | `checkpointId` | 回滚到检查点 |
+| `subagent.started` | `parentToolCallId`、`agent`、`description?` | 子代理开始 |
+| `subagent.progress` | `parentToolCallId`、`name`、`ok?` | 子代理工具进度 |
+| `subagent.completed` | `parentToolCallId`、`agent`、`ok`、`summary`、`steps`、`toolCalls`、`transcriptRef?`、`transcripts?`、`usage?` | 子代理结束并回填结论与用量 |
+| `ask_user.requested` | `requestId`、`questions`、`toolCallId?` | Agent 请求澄清 |
 | `ask_user.resolved` | `requestId`、`answers`、`cancelled` | 用户回答或取消 |
-| `checkpoint.created` | `checkpointId`、`runId`、`label` | 创建检查点 |
-| `checkpoint.restored` | `checkpointId`、`runId` | 回滚到检查点 |
-| `file.created` | `fileId`、`runId`、`name`、`mime`、`bytes`、`source` | 生成或下载的文件保存到 `files` |
-| `usage.recorded` | `provider`、`model`、`messageId?`、`inputTokens`、`outputTokens`、`cacheReadTokens?`、`cacheWriteTokens?`、`cost?` | 模型调用结束 |
-| `plugin.activated` | `pluginId`、`version` | 插件激活 |
-| `plugin.deactivated` | `pluginId` | 插件停用 |
-| `plugin.discovered` | `pluginId`、`version`、`path` | 扫描到插件 |
-| `plugin.error` | `pluginId`、`error` | 插件加载或运行失败 |
-| `skill.activated` | `skillId`、`trigger`、`runId` | Skill 被显式或自动激活 |
-| `memory.proposed` | `candidateId` | 模型生成待确认记忆候选 |
-| `mcp.connected` | `serverId`、`tools` | MCP Server 连接成功 |
-| `mcp.disconnected` | `serverId`、`reason` | MCP Server 断开 |
+| `approval.requested` | `approvalId`、`toolCallId`、`scope`、`toolName?`、`input?` | 请求审批 |
+| `approval.resolved` | `approvalId`、`decision`、`reason?` | 审批完成 |
+| `approval.auto_approved` | `approvalId`、`toolCallId`、`scope` | 策略自动放行审批 |
 | `terminal.opened` | `terminalId`、`sessionId`、`cwd`、`pid`、`shell` | 用户或 AI 创建内置终端；AI 命令保留标签但不主动打开面板 |
 | `terminal.closed` | `terminalId`、`sessionId` | 关闭内置终端 |
 | `terminal.started` | `terminalId`、`command`、`cwd`、`pid` | AI 命令创建内置终端 |
+| `usage.recorded` | `messageId?`、`provider`、`model`、`inputTokens`、`outputTokens`、`cacheWriteTokens?`、`cacheReadTokens?`、`cost?` | 模型调用结束 |
+| `file.created` | `fileId`、`name`、`mime`、`bytes`、`source`、`parentToolCallId?` | 生成或下载的文件保存到 `files` |
+| `context.compacted` | `beforeTokens`、`afterTokens`、`strategy`、`summaryRef?`、`snapshotRef?`、`artifactIds?` | 上下文自动或手动压缩 |
+| `skill.activated` | `skillId`、`trigger` | Skill 被显式或自动激活 |
+| `memory.proposed` | `candidateId` | 模型生成待确认记忆候选 |
+
+规划中、尚未实现与持久化的事件：`workspace.opened`、`workspace.trusted`、`session.workspace.bound`、`session.completed`、`session.failed`、`session.archived`、`run.budget.exceeded`、`run.no_progress`、`plugin.activated`、`plugin.deactivated`、`plugin.discovered`、`plugin.error`、`mcp.connected`、`mcp.disconnected`。实现前不要假定其存在。
 
 ### 附录 B：插件权限清单
 
@@ -2049,7 +2046,11 @@ CHANGELOG.md         # 版本变更记录
 | --- | --- |
 | `AGENTS.md` | 唯一强制性开发规范与索引 |
 | `README.md` | 产品介绍、安装与快速开始 |
-| `docs/decisions/` | 架构与产品决策记录（ADR） |
+| `CONTRIBUTING.md` | 贡献流程、开发环境、提交规范 |
+| `CODE_OF_CONDUCT.md` | 社区行为准则 |
+| `SECURITY.md` | 漏洞报告方式与安全策略 |
+| `CHANGELOG.md` | 版本变更记录 |
+| `docs/decisions/` | 架构与产品决策记录（ADR），含模板与索引 |
 | `docs/` 其他 | 详细设计、协议说明与评测报告 |
 
 新增文档必须在本文档索引中登记，避免规范与实现脱节。
