@@ -136,6 +136,51 @@ describe('AnthropicProvider', () => {
     expect(usage?.usage.cacheReadTokens).toBe(7);
   });
 
+  it('marks the last user message with a cache breakpoint', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const encoder = new TextEncoder();
+          for (const chunk of [
+            sse({ type: 'message_start', message: { usage: { input_tokens: 3 } } }),
+            sse({
+              type: 'message_delta',
+              delta: { stop_reason: 'end_turn' },
+              usage: { output_tokens: 1 }
+            }),
+            sse({ type: 'message_stop' })
+          ]) {
+            controller.enqueue(encoder.encode(chunk));
+          }
+          controller.close();
+        }
+      });
+      return new Response(body, { status: 200 });
+    });
+
+    const provider = new AnthropicProvider({
+      baseUrl: 'https://example.com/v1',
+      apiKey: 'key',
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+    for await (const event of provider.stream({
+      model: 'claude',
+      messages: [
+        { role: 'system', content: '规则' },
+        { role: 'user', content: 'hi' }
+      ]
+    })) {
+      if (event.type === 'finish') break;
+    }
+
+    const messages = requestBody?.['messages'] as Array<{ content: unknown }> | undefined;
+    expect(messages?.[0]?.content).toEqual([
+      { type: 'text', text: 'hi', cache_control: { type: 'ephemeral' } }
+    ]);
+  });
+
   it('retries without cache control when the endpoint rejects it', async () => {
     const bodies: Array<Record<string, unknown>> = [];
     let call = 0;

@@ -40,6 +40,7 @@ interface AnthropicContentBlock {
   tool_use_id?: string;
   content?: string;
   source?: { type: 'base64'; media_type: string; data: string };
+  cache_control?: { type: 'ephemeral' };
 }
 
 interface AnthropicMessage {
@@ -119,6 +120,39 @@ export const toAnthropicMessages = (messages: readonly ChatMessage[]): Anthropic
   return { system: system.join('\n\n'), messages: result };
 };
 
+/**
+ * 在最后一条 user 消息的最后一个内容块打 cache_control，让多步工具循环复用会话前缀缓存。
+ */
+const withMessageCacheBreakpoint = (messages: AnthropicMessage[]): AnthropicMessage[] => {
+  let index = -1;
+  for (let cursor = messages.length - 1; cursor >= 0; cursor -= 1) {
+    if (messages[cursor]?.role === 'user') {
+      index = cursor;
+      break;
+    }
+  }
+  if (index < 0) return messages;
+
+  const target = messages[index];
+  if (!target) return messages;
+
+  const marker = { cache_control: { type: 'ephemeral' as const } };
+  let content: AnthropicMessage['content'] | undefined;
+  if (Array.isArray(target.content)) {
+    if (target.content.length === 0) return messages;
+    content = target.content.map((block, blockIndex) =>
+      blockIndex === target.content.length - 1 ? { ...block, ...marker } : block
+    );
+  } else if (target.content) {
+    content = [{ type: 'text', text: target.content, ...marker }];
+  }
+  if (content === undefined) return messages;
+
+  return messages.map((message, messageIndex) =>
+    messageIndex === index ? { ...target, content } : message
+  );
+};
+
 const toAnthropicTool = (tool: ToolSchema): Record<string, unknown> => ({
   name: tool.name,
   description: tool.description,
@@ -161,7 +195,8 @@ export class AnthropicProvider implements ChatProvider {
       ...this.config.headers
     };
 
-    // 稳定前缀缓存：system 与工具块加 ephemeral 断点；不支持缓存的代理可去掉后重试
+    // 稳定前缀缓存：system、工具块与最后一条 user 消息加 ephemeral 断点；
+    // 多步工具循环下，上一步的消息前缀可被下一步复用。
     const buildBody = (usePromptCache: boolean): string => {
       const tools = request.tools?.map((tool, index) => ({
         ...toAnthropicTool(tool),
@@ -180,7 +215,9 @@ export class AnthropicProvider implements ChatProvider {
                 : converted.system
             }
           : {}),
-        messages: converted.messages,
+        messages: usePromptCache
+          ? withMessageCacheBreakpoint(converted.messages)
+          : converted.messages,
         ...(tools?.length ? { tools } : {}),
         ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
         ...sanitizeProviderParams(request.extraParams)
