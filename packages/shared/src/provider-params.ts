@@ -38,6 +38,17 @@ export const findSensitiveProviderParams = (params: Record<string, unknown>): st
   Object.keys(params).filter((key) => SENSITIVE_KEY.test(key));
 
 /**
+ * 移除由思考开关/强度接管的字段；用于摘要、标题、记忆抽取等辅助调用，避免无谓的 reasoning token。
+ */
+export const stripManagedThinkingParams = (
+  params: Record<string, unknown> | undefined
+): Record<string, unknown> | undefined => {
+  if (!params) return undefined;
+  const entries = Object.entries(params).filter(([key]) => !MANAGED_THINKING_PARAMS.has(key));
+  return entries.length ? Object.fromEntries(entries) : undefined;
+};
+
+/**
  * 过滤保留字段；用于手动编辑 providers.json 等绕过 UI 的情况。
  */
 export const sanitizeProviderParams = (

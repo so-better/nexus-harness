@@ -241,6 +241,39 @@ describe('AgentContextService', () => {
 
     expect(requests[0]?.messages[1]?.content).toContain('path=a.txt');
     expect(requests[0]?.messages[1]?.content).toContain('审批：已批准');
+    // 摘要体积受控且不使用思考
+    expect(requests[0]?.maxTokens).toBe(512);
+    expect(requests[0]?.temperature).toBe(0);
+  });
+
+  it('strips thinking params from summary requests', async () => {
+    const requests: ProviderRequest[] = [];
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
+      async *stream(request) {
+        requests.push(request);
+        yield { type: 'text-delta', text: '摘要内容' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const service = new AgentContextService({
+      provider,
+      model: 'mock-model',
+      contextWindow: 4_096,
+      maxOutputTokens: 1_024,
+      artifacts: new ArtifactService(directory),
+      sessionId: 'session-1',
+      extraParams: { thinking: { type: 'enabled' }, reasoning_effort: 'high', custom: 1 }
+    });
+    const messages: ChatMessage[] = [
+      user('目标：完成一个很长的任务'),
+      ...Array.from({ length: 8 }, (_, index) => assistant(`${index}`.repeat(1_000)))
+    ];
+
+    await service.prepare(messages);
+
+    expect(requests[0]?.temperature).toBe(0);
+    expect(requests[0]?.extraParams).toEqual({ custom: 1 });
   });
 
   it('degrades to a short preview when artifact writing fails', async () => {

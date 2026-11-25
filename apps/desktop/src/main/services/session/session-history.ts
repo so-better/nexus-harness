@@ -7,22 +7,24 @@ import type { ChatImage, ChatMessage, ProviderToolCall } from '@nexus/providers'
 import type { EventPayloadMap } from '@shared/events';
 import { appendFileReferences } from '@shared/files';
 import type { ArtifactService } from '../artifacts/artifact-service';
+import { downscaleImage } from '../attachments/image-downscale';
 import type { EventStore } from './event-store';
 
 const MAX_HISTORY_IMAGE_BYTES = 8 * 1024 * 1024;
 
 /**
- * 从事件中的本地图片引用重新读取视觉内容；缺失或超限时跳过。
+ * 从事件中的本地图片引用重新读取视觉内容；缺失或超限时跳过，并按最大边长降采样。
  */
-const loadHistoryImages = (
+const loadHistoryImages = async (
   refs: Array<{ path: string; mime: string }> | undefined
-): ChatImage[] => {
+): Promise<ChatImage[]> => {
   if (!refs?.length) return [];
   const images: ChatImage[] = [];
   for (const ref of refs.slice(0, 4)) {
     try {
       if (statSync(ref.path).size > MAX_HISTORY_IMAGE_BYTES) continue;
-      images.push({ mimeType: ref.mime, data: readFileSync(ref.path).toString('base64') });
+      const scaled = await downscaleImage(readFileSync(ref.path), ref.mime);
+      images.push({ mimeType: scaled.mimeType, data: scaled.data });
     } catch {
       // 文件被移动或删除时省略该图片，不阻断历史恢复
     }
@@ -133,7 +135,7 @@ export class SessionHistoryService {
           continue;
         }
         if (payload.role === 'user') {
-          const images = loadHistoryImages(payload.images);
+          const images = await loadHistoryImages(payload.images);
           messages.push({
             role: 'user',
             content: `${appendFileReferences(payload.content, payload.references)}${payload.attachments?.length ? `\n\n${payload.attachments.map((item) => `[附件] ${item.name}`).join('\n')}` : ''}`,

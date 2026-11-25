@@ -10,7 +10,7 @@ import {
   type ContextPreparation
 } from '@nexus/core';
 import type { ChatMessage, ChatProvider, ProviderRequest, ToolSchema } from '@nexus/providers';
-import type { UsageSummary } from '@nexus/shared';
+import { stripManagedThinkingParams, type UsageSummary } from '@nexus/shared';
 import type { ArtifactService } from '../artifacts/artifact-service';
 
 /**
@@ -32,7 +32,8 @@ const KEEP_RECENT_MESSAGES = 6;
 /**
  * 摘要调用的输出 token 上限。
  */
-const SUMMARY_MAX_TOKENS = 1_024;
+// 摘要会留在上下文并随后续每一步重发，控制在 512 token；关键路径/命令/错误码由提示词要求保留
+const SUMMARY_MAX_TOKENS = 512;
 
 /**
  * 上下文服务依赖：同一 Run 内复用 Provider 与产物存储。
@@ -313,10 +314,12 @@ export class AgentContextService {
     let summary = '';
     let usage: UsageSummary | undefined;
 
+    const utilityExtraParams = stripManagedThinkingParams(this.options.extraParams);
     try {
       const request: ProviderRequest = {
         model: this.options.model,
         maxTokens: SUMMARY_MAX_TOKENS,
+        temperature: 0,
         messages: [
           {
             role: 'system',
@@ -328,7 +331,7 @@ export class AgentContextService {
             content: split.middle.map((message) => this.formatForSummary(message)).join('\n\n')
           }
         ],
-        ...(this.options.extraParams ? { extraParams: this.options.extraParams } : {}),
+        ...(utilityExtraParams ? { extraParams: utilityExtraParams } : {}),
         ...(this.options.signal ? { signal: this.options.signal } : {})
       };
 

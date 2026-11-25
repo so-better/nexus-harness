@@ -54,6 +54,7 @@ import {
 import { executeSearchKnowledgeTool, searchKnowledgeToolDefinition } from './knowledge-tools';
 import { FileService } from '../files/file-service';
 import { AttachmentService } from '../attachments/attachment-service';
+import { downscaleImage } from '../attachments/image-downscale';
 import { CheckpointService } from '../checkpoint/checkpoint-service';
 import type { SkillService } from '../skills/skill-service';
 import type { McpService } from '../mcp/mcp-service';
@@ -686,8 +687,11 @@ const loadImages = async (
     if (!mime) throw new Error(`IMAGE_TYPE_UNSUPPORTED: ${path}`);
     const info = await stat(real);
     if (info.size > MAX_IMAGE_BYTES) throw new Error(`IMAGE_TOO_LARGE: ${path}`);
-    const data = (await readFile(real)).toString('base64');
-    images.push({ image: { mimeType: mime, data }, reference: { path: real, mime } });
+    const scaled = await downscaleImage(await readFile(real), mime);
+    images.push({
+      image: { mimeType: scaled.mimeType, data: scaled.data },
+      reference: { path: real, mime }
+    });
   }
   return images;
 };
@@ -767,7 +771,8 @@ const loadAttachmentContext = async (
         try {
           const stored = await service?.read(attachment.id, sessionId);
           if (stored) {
-            images.push({ mimeType: imageMime, data: stored.base64 });
+            const scaled = await downscaleImage(Buffer.from(stored.base64, 'base64'), imageMime);
+            images.push({ mimeType: scaled.mimeType, data: scaled.data });
             continue;
           }
         } catch (error) {
