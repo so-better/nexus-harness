@@ -79,6 +79,67 @@ describe('OpenAICompatibleProvider', () => {
     expect(sentBody.tools[0].function.name).toBe('read_file');
   });
 
+  it('records cached prompt tokens from OpenAI and DeepSeek usage shapes', async () => {
+    const bodies = [
+      streamBody([
+        {
+          choices: [],
+          usage: {
+            prompt_tokens: 20,
+            completion_tokens: 4,
+            prompt_tokens_details: { cached_tokens: 12 }
+          }
+        }
+      ]),
+      streamBody([
+        {
+          choices: [],
+          usage: {
+            prompt_tokens: 30,
+            completion_tokens: 6,
+            prompt_cache_hit_tokens: 18,
+            prompt_cache_miss_tokens: 12
+          }
+        }
+      ])
+    ];
+
+    let call = 0;
+    const fetchImpl: typeof fetch = async () =>
+      new Response(bodies[call++], {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      });
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: 'https://example.com/v1',
+      apiKey: 'secret',
+      fetchImpl
+    });
+
+    const collect = async (): Promise<ProviderStreamEvent[]> => {
+      const events: ProviderStreamEvent[] = [];
+      for await (const event of provider.stream({
+        model: 'mock-model',
+        messages: [{ role: 'user', content: 'hi' }]
+      })) {
+        events.push(event);
+      }
+      return events;
+    };
+
+    const openai = await collect();
+    expect(openai).toContainEqual({
+      type: 'usage',
+      usage: { inputTokens: 20, outputTokens: 4, cacheReadTokens: 12 }
+    });
+
+    const deepseek = await collect();
+    expect(deepseek).toContainEqual({
+      type: 'usage',
+      usage: { inputTokens: 30, outputTokens: 6, cacheReadTokens: 18 }
+    });
+  });
+
   it('passes assistant reasoning_content back when the provider requires it', async () => {
     let sentBody: Record<string, unknown> | undefined;
     const fetchImpl: typeof fetch = async (_input, init) => {

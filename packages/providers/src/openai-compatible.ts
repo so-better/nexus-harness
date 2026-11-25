@@ -258,9 +258,17 @@ export class OpenAICompatibleProvider implements ChatProvider {
       const events: ProviderStreamEvent[] = [];
 
       if (chunk.usage) {
+        const details = chunk.usage['prompt_tokens_details'] as
+          { cached_tokens?: number } | undefined;
+        // OpenAI 用 prompt_tokens_details.cached_tokens，DeepSeek 用 prompt_cache_hit_tokens；
+        // 版本/代理差异下两者都可能缺失，缺失时视为 0。
+        const cacheReadTokens = Number(
+          details?.cached_tokens ?? chunk.usage['prompt_cache_hit_tokens'] ?? 0
+        );
         const usage: UsageSummary = {
           inputTokens: Number(chunk.usage['prompt_tokens'] ?? 0),
           outputTokens: Number(chunk.usage['completion_tokens'] ?? 0),
+          ...(cacheReadTokens > 0 ? { cacheReadTokens } : {}),
           ...(typeof chunk.usage['cost'] === 'number' ? { cost: chunk.usage['cost'] } : {})
         };
         events.push({ type: 'usage', usage });
