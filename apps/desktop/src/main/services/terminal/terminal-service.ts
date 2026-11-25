@@ -38,6 +38,8 @@ interface TerminalRecord {
   idle: boolean;
   /** 用户手动重命名过标题，后续命令与 shell 切换不再覆盖 */
   userTitle: boolean;
+  /** 用户亲自输入过；Run 结束时保留该终端，避免清理用户正在使用的 shell */
+  userTouched: boolean;
   createdAt: number;
   cols: number;
   rows: number;
@@ -374,6 +376,27 @@ export class TerminalService {
     return undefined;
   }
 
+  /**
+   * Run 结束后清理 AI 终端：关闭空闲且用户未输入过的终端，保留常驻命令、
+   * 前台仍在运行的进程，以及用户亲自操作过的终端。
+   */
+  async closeIdleAiTerminals(sessionId: string, ownerId?: number): Promise<string[]> {
+    const closed: string[] = [];
+    for (const record of [...this.records.values()]) {
+      if (record.sessionId !== sessionId) continue;
+      if (ownerId !== undefined && record.ownerId !== ownerId) continue;
+      if (record.source !== 'ai' || record.detached || record.userTouched) continue;
+      // 未收到输入的空闲终端不会有前台命令，跳过昂贵的进程探测（Windows 上尤其明显）
+      if (record.status === 'running' && !record.command && !record.idle) {
+        if (await this.isBusy(record.id)) continue;
+      }
+      // isBusy 是异步的，期间可能已经开始了新命令或被用户输入，关闭前再校验一次
+      if (record.detached || record.userTouched || record.command) continue;
+      if (this.close(record.id)) closed.push(record.id);
+    }
+    return closed;
+  }
+
   private canReuseCommandTerminal(
     record: TerminalRecord,
     options: CreateTerminalOptions & { command: string }
@@ -435,7 +458,7 @@ export class TerminalService {
       record.customTitle = Boolean(options.title);
     }
     this.bind(record, child, true);
-    this.emit({ type: 'created', terminal: this.toPublic(record) });
+    this.emit({ type: 'updated', terminal: this.toPublic(record) });
     try {
       previous.kill();
     } catch {
@@ -444,11 +467,12 @@ export class TerminalService {
     return { terminal: this.toPublic(record), done };
   }
 
-  write(id: string, data: string): boolean {
+  write(id: string, data: string, fromUser = false): boolean {
     const record = this.records.get(id);
     if (!record || record.status !== 'running') return false;
     // 任何输入都让终端不再被视为空闲，避免后续命令替换用户正在操作的 shell
     record.idle = false;
+    if (fromUser) record.userTouched = true;
     record.pty.write(data);
     return true;
   }
@@ -523,6 +547,7 @@ export class TerminalService {
       commandTerminal: Boolean(options.command),
       idle: !options.command,
       userTitle: false,
+      userTouched: false,
       openView: options.openView !== false,
       detached: options.detached === true,
       aiAccess: options.aiAccess ?? options.source === 'ai',
@@ -628,7 +653,7 @@ export class TerminalService {
         record.customTitle = false;
       }
       this.bind(record, child, false);
-      this.emit({ type: 'created', terminal: this.toPublic(record) });
+      this.emit({ type: 'updated', terminal: this.toPublic(record) });
     } catch {
       record.status = 'exited';
       record.exitCode = null;

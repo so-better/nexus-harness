@@ -361,6 +361,8 @@ onMounted(() => {
   resizeObserver = new ResizeObserver(fit);
   resizeObserver.observe(container.value);
   requestAnimationFrame(fit);
+  // 等字体加载完成后再 fit 一次，避免用回退字体算出的行列裁掉最后一行
+  document.fonts?.ready.then(() => fit()).catch(() => undefined);
 });
 
 watch(
@@ -413,13 +415,13 @@ onBeforeUnmount(() => {
   position: relative;
   width: 100%;
   height: 100%;
+  padding: 8px 10px;
   background: var(--terminal-bg);
 }
 
 .nh-terminal-view {
   width: 100%;
   height: 100%;
-  padding: 8px 10px;
   background: var(--terminal-bg);
 }
 

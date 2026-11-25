@@ -66,6 +66,7 @@ export const useTerminalStore = defineStore('terminal', () => {
     delete outputs[id];
     controllers.delete(id);
     if (activeId.value === id) activeId.value = tabs.value.at(-1)?.id;
+    if (!tabs.value.length) open.value = false;
   };
 
   const pushData = (id: string, data: string): void => {
@@ -87,6 +88,10 @@ export const useTerminalStore = defineStore('terminal', () => {
           activeId.value = event.terminal.id;
         }
       }
+      return;
+    }
+    if (event.type === 'updated') {
+      upsert(event.terminal);
       return;
     }
     if (event.type === 'data') {

@@ -376,6 +376,7 @@ const {
 .nh-composer {
   display: flex;
   flex: none;
+  container-type: inline-size;
   flex-direction: column;
   gap: 6px;
   width: calc(100% - 32px);

@@ -520,6 +520,7 @@ export type TerminalBusyResult = z.infer<typeof terminalBusyResultSchema>;
 
 export type TerminalEvent =
   | { type: 'created'; terminal: TerminalSessionPublic }
+  | { type: 'updated'; terminal: TerminalSessionPublic }
   | { type: 'data'; id: string; data: string }
   | { type: 'exit'; id: string; exitCode: number | null; status: 'exited' }
   | { type: 'closed'; id: string; sessionId: string };

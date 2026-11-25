@@ -427,12 +427,25 @@ const stopResize = (): void => {
   display: flex;
   flex: none;
   min-width: 280px;
-  max-width: none;
+  max-width: max(280px, calc(100vw - 288px - 480px));
   height: 100%;
   flex-direction: column;
   border-left: 1px solid var(--terminal-border);
   background: var(--terminal-bg);
   color: var(--terminal-text);
+}
+
+@media (width <= 880px) {
+  /* 窄窗口下改为浮层，避免终端停靠把对话区压到不可用 */
+  .nh-terminal-panel {
+    position: absolute;
+    z-index: var(--nh-z-overlay);
+    top: 0;
+    right: 0;
+    bottom: 0;
+    max-width: min(520px, calc(100vw - 268px));
+    box-shadow: var(--nh-shadow-float);
+  }
 }
 
 .nh-terminal-panel__resize {

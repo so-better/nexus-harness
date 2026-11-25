@@ -586,6 +586,12 @@ export const registerAgentIpc = (): void => {
             askUserService.cancelRun(runId);
             workspaceAuthService.cancelRun(runId);
             unregisterRun(runId);
+            try {
+              const { terminalService } = await import('../services/terminal/terminal-service');
+              await terminalService.closeIdleAiTerminals(parsed.data.sessionId, senderId);
+            } catch (error) {
+              console.error('清理 AI 终端失败', error);
+            }
           });
 
         return ok({ runId });

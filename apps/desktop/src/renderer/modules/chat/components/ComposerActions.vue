@@ -112,4 +112,23 @@ const emit = defineEmits<{
   color: var(--nh-color-text-disabled);
   font-size: 12px;
 }
+
+@container (width <= 620px) {
+  .nh-composer__hint-row {
+    display: none;
+  }
+
+  .nh-composer__actions,
+  .nh-composer__send-group {
+    gap: 6px;
+  }
+}
+
+@container (width <= 460px) {
+  .nh-composer__send-group {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: 6px;
+  }
+}
 </style>

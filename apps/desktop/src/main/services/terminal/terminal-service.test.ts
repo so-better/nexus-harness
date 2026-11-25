@@ -70,7 +70,7 @@ describe('TerminalService', () => {
       exitCode: 0,
       closed: false
     });
-    expect(events.map((event) => event.type)).toEqual(['created', 'data', 'created']);
+    expect(events.map((event) => event.type)).toEqual(['created', 'data', 'updated']);
     expect(service.list()[0]?.pid).toBe(shellPty.pid);
     expect(service.list()[0]?.status).toBe('running');
   });
@@ -95,7 +95,7 @@ describe('TerminalService', () => {
     commandPty.emitExit(0);
 
     await expect(task.done).resolves.toMatchObject({ output: 'quiet\n', exitCode: 0 });
-    expect(events.map((event) => event.type)).toEqual(['created', 'data', 'created']);
+    expect(events.map((event) => event.type)).toEqual(['created', 'data', 'updated']);
     expect(service.list()[0]).toMatchObject({ openView: false, status: 'running' });
   });
 
@@ -140,7 +140,8 @@ describe('TerminalService', () => {
     expect(second.terminal.pid).toBe(secondCommand.pid);
     expect(service.list()).toHaveLength(1);
     expect(idleShell.kill).toHaveBeenCalled();
-    expect(events.filter((event) => event.type === 'created')).toHaveLength(3);
+    expect(events.filter((event) => event.type === 'created')).toHaveLength(1);
+    expect(events.filter((event) => event.type === 'updated')).toHaveLength(2);
 
     secondCommand.emitData('two\n');
     secondCommand.emitExit(0);
@@ -209,6 +210,68 @@ describe('TerminalService', () => {
     expect(second.terminal.title).toBe('我的终端');
     secondCommand.emitExit(0);
     await second.done;
+  });
+
+  it('closes idle AI terminals when the run ends', async () => {
+    const commandPty = makePty();
+    const shellPty = makePty();
+    shellPty.pid = 999_998;
+    spawnMock.mockReturnValueOnce(commandPty).mockReturnValueOnce(shellPty);
+    const service = new TerminalService();
+    const task = service.startCommand({
+      sessionId: 'session-1',
+      cwd: '/tmp',
+      command: 'echo hi',
+      openView: false
+    });
+    commandPty.emitExit(0);
+    await task.done;
+
+    await expect(service.closeIdleAiTerminals('session-1')).resolves.toEqual([task.terminal.id]);
+    expect(service.list()).toEqual([]);
+  });
+
+  it('keeps user-touched, busy and detached AI terminals after the run', async () => {
+    const commandPty = makePty();
+    const shellPty = makePty();
+    shellPty.pid = 999_998;
+    spawnMock.mockReturnValueOnce(commandPty).mockReturnValueOnce(shellPty);
+    const service = new TerminalService();
+    const busy = vi.spyOn(service, 'isBusy').mockResolvedValue(true);
+    const task = service.startCommand({
+      sessionId: 'session-1',
+      cwd: '/tmp',
+      command: 'echo hi',
+      openView: false
+    });
+    commandPty.emitExit(0);
+    await task.done;
+    expect(service.write(task.terminal.id, 'ls\r', true)).toBe(true);
+    await service.closeIdleAiTerminals('session-1');
+    expect(service.list().some((terminal) => terminal.id === task.terminal.id)).toBe(true);
+
+    const busyShell = makePty();
+    busyShell.pid = 999_997;
+    spawnMock.mockReturnValueOnce(busyShell);
+    const busyTerminal = service.create({ sessionId: 'session-1', cwd: '/tmp', source: 'ai' });
+    expect(service.write(busyTerminal.id, 'npm run dev\r')).toBe(true);
+    await service.closeIdleAiTerminals('session-1');
+    expect(service.list().some((terminal) => terminal.id === busyTerminal.id)).toBe(true);
+
+    const detachedPty = makePty();
+    spawnMock.mockReturnValueOnce(detachedPty);
+    const detached = service.startCommand({
+      sessionId: 'session-1',
+      cwd: '/tmp',
+      command: 'npm run dev',
+      detached: true,
+      openView: false
+    });
+    detachedPty.emitExit(0);
+    await detached.done;
+    busy.mockResolvedValue(false);
+    await service.closeIdleAiTerminals('session-1');
+    expect(service.list().some((terminal) => terminal.id === detached.terminal.id)).toBe(true);
   });
 
   it('runs detached commands without timeout and keeps an exited tab', async () => {

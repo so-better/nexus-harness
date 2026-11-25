@@ -5,7 +5,7 @@
 
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TerminalSessionPublic } from '@shared/ipc/contracts';
+import type { TerminalEvent, TerminalSessionPublic } from '@shared/ipc/contracts';
 
 const reorderTerminals = vi.hoisted(() => vi.fn());
 vi.mock('../api/terminal.api', () => ({
@@ -24,6 +24,12 @@ vi.mock('../api/terminal.api', () => ({
   reorderTerminals
 }));
 
+import {
+  getTerminalSettings,
+  listTerminals,
+  subscribeTerminalEvents,
+  subscribeTerminalSettings
+} from '../api/terminal.api';
 import { useTerminalStore } from './terminal.store';
 
 const terminal = (id: string): TerminalSessionPublic => ({
@@ -53,6 +59,37 @@ describe('terminal store', () => {
     await expect(store.setTabOrder([terminal('b'), terminal('a')])).resolves.toBe(true);
     expect(store.tabs.map((item) => item.id)).toEqual(['b', 'a']);
     expect(reorderTerminals).toHaveBeenCalledWith(['b', 'a']);
+  });
+
+  it('applies updated terminal metadata and hides the panel when the last tab closes', () => {
+    const store = useTerminalStore();
+    let handler: ((event: TerminalEvent) => void) | undefined;
+    vi.mocked(subscribeTerminalEvents).mockImplementation(
+      (next: (event: TerminalEvent) => void) => {
+        handler = next;
+        return () => undefined;
+      }
+    );
+    vi.mocked(subscribeTerminalSettings).mockReturnValue(() => undefined);
+    vi.mocked(getTerminalSettings).mockResolvedValue({
+      shell: null,
+      fontSize: 12,
+      scrollback: 1000,
+      copyOnSelect: false,
+      webgl: false
+    });
+    vi.mocked(listTerminals).mockResolvedValue([]);
+    store.tabs = [terminal('a')];
+    store.open = true;
+    store.init();
+
+    handler?.({ type: 'updated', terminal: { ...terminal('a'), title: '新标题', pid: 200 } });
+    expect(store.tabs[0]?.title).toBe('新标题');
+    expect(store.open).toBe(true);
+
+    handler?.({ type: 'closed', id: 'a', sessionId: 'session-1' });
+    expect(store.tabs).toEqual([]);
+    expect(store.open).toBe(false);
   });
 
   it('keeps the local order and reports an error when persistence fails', async () => {

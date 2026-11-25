@@ -5,7 +5,7 @@
 export const TERMINAL_DEFAULT_WIDTH = 600;
 export const TERMINAL_MIN_WIDTH = 280;
 export const TERMINAL_MAX_WIDTH = 720;
-export const TERMINAL_MIN_CHAT_WIDTH = 420;
+export const TERMINAL_MIN_CHAT_WIDTH = 480;
 export const TERMINAL_SIDEBAR_WIDTH = 288;
 
 /**

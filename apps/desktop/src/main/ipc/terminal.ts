@@ -65,7 +65,7 @@ export const registerTerminalIpc = (): void => {
       console.error('终端生命周期事件写入失败', error);
     }
 
-    const id = event.type === 'created' ? event.terminal.id : event.id;
+    const id = event.type === 'created' || event.type === 'updated' ? event.terminal.id : event.id;
     const ownerId = terminalService.ownerOf(id);
     for (const window of BrowserWindow.getAllWindows()) {
       if (window.isDestroyed()) continue;
@@ -293,7 +293,7 @@ export const registerTerminalIpc = (): void => {
         return fail('TERMINAL_ACCESS_DENIED', '无权操作该终端');
       }
       try {
-        return ok({ ok: terminalService.write(parsed.data.id, parsed.data.data) });
+        return ok({ ok: terminalService.write(parsed.data.id, parsed.data.data, true) });
       } catch (error) {
         return fail(
           'TERMINAL_OPERATION_FAILED',

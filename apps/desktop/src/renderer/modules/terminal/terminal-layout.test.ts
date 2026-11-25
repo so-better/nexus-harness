@@ -13,9 +13,9 @@ describe('terminal layout', () => {
   });
 
   it('reserves space for the chat area on smaller windows', () => {
-    expect(maxTerminalWidth(1440)).toBe(720);
-    expect(maxTerminalWidth(1200)).toBe(492);
-    expect(clampTerminalWidth(600, 1024)).toBe(316);
+    expect(maxTerminalWidth(1440)).toBe(672);
+    expect(maxTerminalWidth(1200)).toBe(432);
+    expect(clampTerminalWidth(600, 1024)).toBe(280);
     expect(maxTerminalWidth(800)).toBe(280);
   });
 });
