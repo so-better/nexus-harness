@@ -32,6 +32,21 @@ describe('grep', () => {
     expect(result.output).not.toContain('ignored.ts');
   });
 
+  it('defaults to a small page and exposes the next offset', async () => {
+    const content = Array.from({ length: 60 }, (_, index) => `needle-line ${index}`).join('\n');
+    await writeFile(join(root, 'many.txt'), content);
+
+    const result = await runGrepTool(
+      { roots: [root], primaryRoot: root },
+      { pattern: 'needle-line' }
+    );
+
+    expect(result.output).toContain('offset=50');
+    expect(result.output.split('\n').filter((line) => line.includes('needle-line')).length).toBe(
+      50
+    );
+  });
+
   it('paginates matches with offset and limit', async () => {
     await writeFile(join(root, 'multi.txt'), 'paginate-me 1\npaginate-me 2\npaginate-me 3\n');
 

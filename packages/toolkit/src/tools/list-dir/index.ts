@@ -7,7 +7,7 @@ import { z } from 'zod';
 import type { FileToolContext, FileToolDefinition, FileToolResult } from '../../internal';
 import { resolveWithinRoots, validateInput } from '../../internal';
 
-const MAX_LIST_ENTRIES = 500;
+const MAX_LIST_ENTRIES = 200;
 const inputSchema = z.object({
   path: z.string().optional(),
   offset: z.number().int().nonnegative().optional(),

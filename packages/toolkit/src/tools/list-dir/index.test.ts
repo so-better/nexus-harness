@@ -29,6 +29,21 @@ describe('list_dir', () => {
     expect(result.output.indexOf('a.txt')).toBeLessThan(result.output.indexOf('b-dir'));
   });
 
+  it('pages large directories with the default entry limit', async () => {
+    const dir = join(root, 'many');
+    await mkdir(dir);
+    await Promise.all(
+      Array.from({ length: 250 }, (_, index) =>
+        writeFile(join(dir, `f${String(index).padStart(3, '0')}.txt`), 'x')
+      )
+    );
+
+    const result = await runListDirTool({ roots: [root], primaryRoot: root }, { path: 'many' });
+
+    expect(result.output.split('\n').filter((line) => line.startsWith('file '))).toHaveLength(200);
+    expect(result.output).toContain('offset=200');
+  });
+
   it('paginates entries with offset and limit', async () => {
     await writeFile(join(root, 'c.txt'), 'c');
 

@@ -16,6 +16,11 @@ import {
   walkFiles
 } from '../../internal';
 
+/**
+ * 默认返回的匹配数：grep 主要用于定位，先给少量结果，更多用 offset 分页读取。
+ */
+const DEFAULT_GREP_LIMIT = 50;
+
 const inputSchema = z.object({
   pattern: z.string().min(1).max(2_000),
   path: z.string().optional(),
@@ -63,7 +68,7 @@ export const runGrepTool = async (
   }
   const fileMatcher = parsed.glob ? globToRegExp(parsed.glob) : undefined;
   const offset = parsed.offset ?? 0;
-  const limit = parsed.limit ?? MAX_SEARCH_RESULTS;
+  const limit = parsed.limit ?? DEFAULT_GREP_LIMIT;
   const lines: string[] = [];
   let bytes = 0;
   let matched = 0;
