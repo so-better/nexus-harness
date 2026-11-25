@@ -108,6 +108,7 @@ export const runReadArtifactTool = async (
   return {
     ok: true,
     output: JSON.stringify({
+      kind: 'artifact_slice',
       artifactId: slice.artifactId,
       label: slice.label,
       bytes: slice.bytes,

@@ -9,7 +9,7 @@
 - 调整前说明动机与影响范围，避免为了短期便利破坏分层原则。
 - 结构性变更与规范变更必须在同一次提交中同步更新本文件。
 - 若新结构与本文冲突，以更新后的本文为准，不得只改代码不改文档。
-- 产品定位、能力分层、设计原则等讨论结论也应沉淀到本文件，保持与实际代码一致。
+- 产品定位、能力分层、设计原则等讨论结论也应沉淀到本文件；内容过多时可拆分到 `docs/`，但本文件必须保留索引与结论。
 - 定期回顾本文件，删除已失效的约定，保持与实际代码一致。
 
 ### 目录
@@ -291,6 +291,9 @@ nexus-harness/
 ├─ package.json                  # workspace 根脚本与统一依赖版本
 ├─ pnpm-workspace.yaml
 ├─ tsconfig.base.json
+├─ docs/                         # 产品、架构与决策记录
+│  ├─ decisions/                 # ADR 决策记录
+│  └─ ...
 ├─ apps/
 │  └─ desktop/
 │     ├─ build/                  # 应用图标与打包资源
@@ -491,13 +494,14 @@ interface ProviderCapabilities {
 - 仅对瞬时错误重试：指数退避 + 抖动，遵守 `Retry-After`；认证失败、参数错误与内容策略拒绝不重试。
 - 分别设置连接、首字节与流空闲超时；取消通过 `AbortSignal` 传播，关闭流后不再发起工具调用。
 - 速率限制按 provider/model 维度执行；并发请求数与排队上限可配置。
-- token 优先使用 provider 返回的 usage；缺失时使用本地估算，并在 UI 标记为估算值。提示缓存的读写 token 单独记录（`cacheReadTokens` / `cacheWriteTokens`），`inputTokens` 仍为总输入。
-- 提示缓存：Anthropic 对 system 与工具块设置 `cache_control` 复用稳定前缀；OpenAI 兼容/DeepSeek 依赖自动前缀缓存，需保持前缀稳定。不支持缓存的 Anthropic 兼容代理会在 400/422 时自动去掉 `cache_control` 重试一次。
-- reasoning 回传：OpenAI 兼容协议只回传最近若干条 assistant 的 reasoning（默认 8 条），避免长会话历史 reasoning 无限累积。
+- token 优先使用 provider 返回的 usage；缺失时使用本地估算，并在 UI 标记为估算值。
 - 模型回退只能由用户配置触发，禁止静默切换；发生回退必须记录事件。
 - 上下文超限错误触发一次压缩后重试；仍失败则中止并提示。
 - 流中断时保留已生成内容并标记未完成；重试不得重复已执行的工具调用。
 - 错误统一映射为错误码，如 `PROVIDER_UNAUTHORIZED`、`PROVIDER_RATE_LIMITED`、`PROVIDER_TIMEOUT`。
+- Anthropic 在 system 与最后一个工具块打 `cache_control: ephemeral` 复用稳定前缀；仅在错误体明确提到 `cache_control` / `prompt cache` 时才去掉缓存重试，避免对无关 4xx 重复请求。
+- usage 记录 `cacheReadTokens` / `cacheWriteTokens`：Anthropic 从 `cache_read_input_tokens` / `cache_creation_input_tokens` 读取；OpenAI 兼容从 `prompt_tokens_details.cached_tokens`、DeepSeek 从 `prompt_cache_hit_tokens` 读取缓存读（缺失视为 0）。
+- OpenAI 兼容协议只回传最近 8 条 assistant 的 `reasoning_content`，避免历史 reasoning 无限累积。
 
 #### 模型角色与图像模型
 
@@ -520,18 +524,18 @@ interface ProviderCapabilities {
 
 思考能力通过模型级 `thinkingMode`、`reasoningEffort`、`reasoningPassback` 与 `extraParams` 表达。非 Anthropic 协议使用设置页的思考开关与强度，`thinking` / `reasoning_effort` 为受管字段，JSON 不得覆盖；Anthropic 使用原生 `thinking` JSON，不使用该开关。`reasoningPassback` 对 OpenAI 兼容协议（含 Ollama）生效，Anthropic 使用原生 thinking 参数。核心按显式协议字段处理，不按厂商名、域名或模型 ID 特判。`extraParams` 不得覆盖 `model`、`messages`、`stream`、`tools`、`max_tokens` 等协议保留字段，也不得写入密钥；reasoning 回传由模型级开关控制。
 
-系统提示保持稳定的静态前缀；平台、时间等动态上下文追加到最后一条用户消息，避免破坏 prompt cache。用户自定义提示词可追加，但与默认系统提示冲突时以默认提示为准；场景模式提示词按需追加。
+系统提示保持稳定的静态前缀；平台、时间、全局记忆等动态上下文追加到最后一条用户消息（`<environment>` 块），避免破坏 prompt cache。用户自定义提示词可追加，但与默认系统提示冲突时以默认提示为准；场景模式提示词按需追加。
 
 技能库只在系统提示中说明“存在可用技能”，不注入完整目录；Agent 通过 `search_skills` / `read_skill` 按需检索与读取。
 
-工具 schema 按当前模式与权限注入：计划模式只注入只读工具；MCP 工具只注入已启用且已连接的 Server。
+工具 schema 默认全量注入：Build 注入全部内置工具与已启用且已连接的 MCP 工具；Plan 只注入只读工具。可用性优先于工具 schema 的 token 成本。
 
 低 token 约束：
 
-- 只注入当前任务必要的信息；禁止把整个工作区、完整会话历史、重复静态规范或无差别工具清单塞进上下文。
+- 只注入当前任务必要的信息；禁止把整个工作区、完整会话历史或重复静态规范塞进上下文。工具 schema 虽全量注入，但新增工具仍必须评估 schema 的 token 成本。
 - 优先传递路径、ID、摘要与 Artifact 引用；需要细节时再按需读取，不直接发送全文。
 - 系统提示与工具 schema 保持精简且稳定；静态前缀与动态内容分离，避免破坏 prompt cache。
-- 工具输出与文件内容默认截断；完整内容落 Artifact，摘要只保留路径、命令、错误码、决策与待办。
+- 工具输出与文件内容按预算处理：超长工具输出在压缩时落 Artifact，预览只保留头尾与路径/命令/错误码，并附 `read_artifact` 回读提示；`read_artifact` 单次字符数按输入预算夹紧。
 - 新功能必须评估 token 成本，并纳入验收；能降低 token 的方案优先，不得因新功能让同类任务 token 明显回退。
 - 新增自动注入内容必须说明必要性，并提供关闭或按需加载路径。
 
@@ -547,12 +551,13 @@ interface ProviderCapabilities {
 自动压缩触发：
 
 - 每次调用模型前估算输入 token；预计超过输入预算 70% 时压缩。
+- 字符估算只计入最近 8 条会回传的 reasoning，并用上一轮真实 usage 校准估算系数（EMA，限制 0.5–4），修正不同分词器偏差。
 - 工具结果落回后如果再次超限，立即压缩。
 - 切换模型时按新窗口重新计算，必要时重新压缩。
 
 压缩顺序：
 
-1. 截断旧工具输出，完整内容落 Artifact，只保留摘要与引用。
+1. 优先截断旧工具输出并保留最近一轮；仍超预算时再压最近一轮。完整内容落 Artifact，预览附 `read_artifact` 回读提示，硬截断时同步处理 reasoning。
 2. 将较早轮次折叠为结构化摘要（目标、决策、已改文件、错误、待办），保留最近若干轮原文。
 3. 丢弃非必要的旧图片与长文本，只保留文件引用；图片仍按视觉内容处理，不转成文本。
 4. 仍超限时提示用户缩小任务或手动清理，不静默丢弃关键上下文。
@@ -567,7 +572,7 @@ interface ProviderCapabilities {
 - 摘要由当前对话模型生成，写入 `context.compacted` 事件，记录压缩前后 token、策略、摘要引用与历史快照引用；后续 Run 从快照恢复，避免重复压缩。
 - 压缩失败时降级为硬截断并提示用户，不能阻塞任务。
 - 用户可手动执行 `/compact` 触发一次压缩。
-- 工具输出超过阈值时截断，并把完整内容落为 Artifact，事件中保留引用。
+- 工具输出在压缩时按预算落 Artifact，`tool.completed` 事件保留完整 `output`；预览附 `read_artifact` 引用，产物引用记录在 `context.compacted`。
 - 优先按需读取文件，不把整个工作区或全部目录塞入上下文。
 - `@` 在当前工作区内检索，标注路径与行号；普通文件引用只插入路径，图片引用读取内容并作为视觉内容发送。
 - AI 输出文件默认放入元数据与文件引用；图片作为视觉内容发送，其他二进制内容只保留文件引用，由用户另存后用专业软件打开。
@@ -621,6 +626,7 @@ interface ProviderCapabilities {
 | `read_file` | read | 否 |
 | `list_dir` / `glob` | read | 否 |
 | `grep` | read | 否 |
+| `read_artifact` | read | 否（读取会话内 Artifact，支持字符 offset 分页） |
 | `write_file` | write | 是 |
 | `apply_patch` | write | 是 |
 | `run_command` | execute | 是 |
@@ -647,34 +653,14 @@ interface ProviderCapabilities {
 | `theme_update` / `skin_apply` / `terminal_update_settings` / `terminal_create` / `terminal_write` / `terminal_close` / `terminal_request_access` | write | 是 |
 | `cache_clear` / `backup_export` / `backup_import` / `general_settings_update` | write | 是 |
 | `image_config_save` / `image_config_toggle` / `image_config_delete` | write | 是 |
-| `search_tools` | read | 否（系统内部） |
-| `read_artifact` | read | 否（读取会话内 Artifact，支持 offset 分页） |
-
-`read_artifact` 用于读取上下文压缩时落盘的完整工具输出：产物按会话隔离、只读文本、不暴露真实路径，支持字符 `offset` / `maxChars` 分页；截断预览必须附带可回读提示。
-
-`read_file` 支持字节 `offset` / `maxBytes` 分页；`grep` / `glob` / `list_dir` 支持 `offset` / `limit` 分页，结果被截断时输出会给出继续读取的 offset。
-
-工具输出超过输入预算约 35% 时立即落 Artifact：`output` 保留全文供 UI 与审计，`modelOutput` 只含头尾预览与 `read_artifact` 引用；`read_artifact` 单次返回字符数按预算夹紧，避免小窗口一次取回过大的分片。
 
 `save_*` 工具写入 `<userData>/files`，不触发工作区写审批，但必须记录 `file.created` 并受大小与类型限制。`save_file` 支持文本与 Base64 二进制内容；`save_word` / `save_pdf` 使用 Markdown，`save_ppt` 支持模板化版式。
 
+`read_file` 支持字节 `offset` / `maxBytes` 分页；`grep` / `glob` / `list_dir` 支持 `offset` / `limit` 分页，结果被截断时输出会给出继续读取的 offset。二进制/抽取类文件不支持 `offset` 分页，需明确报错而不是静默忽略。
+
+`read_artifact` 读取上下文压缩时落盘的完整工具输出：产物按会话隔离、只读文本、不暴露真实路径，支持字符 `offset` / `maxChars` 分页；单次返回字符数由宿主按输入预算夹紧（约 35% 预算对应 token 折算），避免小窗口一次取回过大分片再次触发压缩。
+
 本地二进制读取已接入：按 MIME 与扩展名选择专用读取器；图片作为视觉内容发送，PDF/Office/文本等可抽取格式转文本，其他二进制只保存文件引用，原始内容不得直接进入上下文。
-
-#### 工具分组与按需加载
-
-- 工具按领域分组：`core`（文件/命令、ask_user、search_tools、read_artifact、open_url、save_file、技能检索、记忆、知识库）、`web`、`media`、`office`、`terminal`、`appearance`、`maintenance`、`extensions`、`mcp`。
-- 自动选择统一由 `tool-selector` 完成：对内置工具与 MCP 工具使用同一套 BM25 + IDF「名称 + 描述」算法召回 top-N（默认 24），默认直接取前 K 个（`MAX_AUTO_TOOLS`=10）。不写死任何具体工具名或领域关键词，重排候选描述截断到 100 字。
-- 条件重排：仅当 Top-K 边界分数接近（相对分差小于阈值）或并列，且候选数明显多于 K（余量 ≥ 4）时，才调用当前对话模型从候选中挑选最终 K 个；分差清晰或余量很小时不产生额外调用。
-- 重排调用失败、超时或输出非法时回退到 BM25 前 K 个，保证不因重排失败而丢工具；模型返回合法空数组时尊重“无需工具”的判断。重排调用记录 `usage.recorded`。候选不超过 K 时同样跳过重排。
-- 短指令（继续/再改）或空输入会把最近一条用户消息并入查询；MCP 与内置工具走同一条筛选流程。
-- 兜底：`search_tools(query)` 让模型随时按语义检索并加载内置或 MCP 工具，突破召回上限，是唯一的显式加载入口。
-- 默认注入 `core` 与 `web`（联网检索作为通用常驻能力，保证天气、新闻、实时数据等“当前信息”提问可直接联网）；其余内置工具与 MCP 工具默认不注入，由统一筛选按需加入，避免每次都注入整套工具 schema。
-- MCP：每 Run `listTools()` 取得全部真实工具后参与同一套筛选；模型可调用 `search_tools` 加载匹配的 MCP 工具。
-- 工具集每步动态读取；`search_tools` 加载后下一步请求即带上新 schema，并返回已加载的工具名。
-- 历史用过的工具按名称精确恢复（不整组加载），只恢复最近若干轮（默认 6）用过的工具，保证"继续/再改一下"同时避免长会话累积；不做会话级工具粘性。
-- 可选工具总量有上限（默认 24，常驻组除外），按自动筛选 → 历史用过 → `search_tools` 加载的优先级裁剪，防止历史或多次检索导致膨胀。
-- Plan 模式默认以只读组（`core`、`appearance`、`terminal`、`maintenance`、`extensions`）为基线，再与只读白名单求交。
-- 分组只影响 schema 注入，不改变执行、权限与审批；未注入工具调用返回 `TOOL_NOT_FOUND`（Plan 下已知写工具返回 `TOOL_MODE_DENIED`）。
 
 #### MCP 工具接入
 
@@ -683,7 +669,7 @@ interface ProviderCapabilities {
 - `stdio` Server 子进程的 `cwd` 固定为 `<userData>/mcp/workdir`，不得继承应用启动目录；MCP 自动产物统一落在该目录下。
 - 启动时从 `resources/mcp/mcp.json` 补齐 `userData/mcp` 中缺失的内置 Server；已存在的同名 Server 保持用户配置不变。内置模板默认 `enabled: true`，这是产品选择；Run 前可能启动 `npx`/`uvx` 等外部进程，首次使用可能下载依赖或失败，用户需在扩展页查看状态。已有配置的 `enabled` 不自动迁移。用户可通过 `enabled` 字段停用单个 Server，工具调用仍需审批。删除内置 Server 后下次启动会重新补齐，永久停用请设置 `enabled: false`。
 - Server 提供的工具以 `mcp_<serverId>_<toolName>` 命名注册，名称净化到 `[a-zA-Z0-9_-]{1,64}`，权限为 `execute`，始终审批。
-- 工具注册后参与正常工具选择，Agent 不需要了解 MCP 协议；调用时按普通工具走审批与事件流。
+- 工具注册后随 schema 注入，Agent 不需要了解 MCP 协议；调用时按普通工具走审批与事件流。
 - `mcp.json` 中 `enabled: false` 的 Server 不连接、不进入工具 schema；缺失 `enabled` 的旧配置按启用处理。
 - 内置模板默认启用；用户可在扩展页逐个关闭，关闭后不会启动对应进程。
 - 只有已启用、已信任且已连接的 Server 工具会进入工具 schema；未启用或断开时从 schema 移除。
@@ -721,7 +707,7 @@ interface ProviderCapabilities {
 1. 写入 `tool.requested`，记录完整输入。
 2. 需要审批时写入 `approval.requested`，会话进入 `waiting_approval`。
 3. 审批通过后执行；拒绝则写入结构化失败结果，交回 Agent。
-4. 写入 `tool.completed` 或 `tool.failed`，大输出落为 Artifact 并在事件中保留引用。
+4. 写入 `tool.completed`（`output` 保留完整内容）或 `tool.failed`；压缩时大输出落 Artifact，引用记录在 `context.compacted`。
 
 - 工具调用默认串行；同一批只读工具可并行，写与执行工具必须串行；并行上限可配置。
 - 同一批工具调用必须按顺序写入事件，结果按 `callId` 回填。
@@ -729,7 +715,7 @@ interface ProviderCapabilities {
 #### 工具结果归一化
 
 - 所有工具结果统一为 `{ ok, output, files, sources, error }`，禁止把二进制直接塞回上下文。
-- 文本超过阈值时截断，完整内容落 Artifact；图片、音视频与文件写入 `files` 并返回 fileId。
+- 文本按预算处理：压缩时完整内容落 Artifact，预览附 `read_artifact` 引用；图片、音视频与文件写入 `files` 并返回 fileId。
 - MCP 的 `content` 数组统一转换：文本保留，image/audio/video 落盘，resource/blob 落盘，resource_link 保留链接，`isError` 转为结构化错误。
 - 模型直接产出的文件同样由文件服务落盘并记录 `file.created`。
 - 工具返回的 URL/document 来源单独保留，并在会话流中展示为参考来源。
@@ -780,7 +766,7 @@ interface ProviderCapabilities {
 - AI 的 `run_command` 在独立终端标签中执行并捕获输出，不主动打开面板、不启动外部终端程序；用户可打开面板查看，命令仍受审批、危险命令拦截、超时与输出上限约束。常驻服务可传 `detach: true`，立即返回 terminalId，不设置超时，退出后标签保留为已退出状态。AI 可通过 `terminal_read` / `terminal_wait` 读取当前会话内已授予 AI 访问权限的用户终端或 AI 终端输出，通过 `terminal_write` 写入文本或按键；用户终端需在面板中显式授予 AI 访问，或由 AI 调用 `terminal_request_access` 发起审批；写入与关闭需要审批，终端内容可能包含敏感信息；未授权时工具返回 `TERMINAL_ACCESS_DENIED` 并提示用户在终端标签右键授权。AI 的 `terminal_create` 和 `terminal_write` 只能使用已授权工作区目录，并受危险命令拦截约束。
 - 关闭正在运行的终端必须二次确认；命令内不允许自行追加 `&` 或 `nohup`。
 - 超时后终止整个进程树；Windows 使用 ConPTY，macOS/Linux 使用 PTY。
-- 输出超过上限时截断处理，但不改变 UI 展示：`run_command` 的 `tool.completed.output` 仍是完整输出（前端无感），模型上下文改用 `modelOutput`（头部 + 尾部预览 + terminalId），完整内容保留在终端并可经 `terminal_read` 获取；默认上限可配置，避免一次命令撑爆上下文。
+- 输出超过上限时截断并标记；默认上限可配置，避免一次命令撑爆上下文。
 - 打包后的 GUI 进程需要补齐 PATH，确保能找到 `node`、`npx`、`python` 等运行时。
 - 工作区文件写入前必须展示 diff，并创建逐文件检查点；写入 `files` 内部存储不触发工作区写审批。
 
@@ -1840,7 +1826,7 @@ CHANGELOG.md         # 版本变更记录
 
 - 外部贡献遵循 Conventional Commits 与本文工程规范。
 - PR 必须包含测试或说明无法测试的原因。
-- 涉及架构、协议、权限模型的变更，必须在 AGENTS.md 中同步记录结论与理由。
+- 涉及架构、协议、权限模型的变更必须先在 `docs/decisions/` 提交 ADR。
 - 插件、技能与 MCP 通过目录安装；在线市场与自动下载后续再设计。
 
 ---
@@ -2010,7 +1996,7 @@ CHANGELOG.md         # 版本变更记录
 | `message.superseded` | `messageId`、`reason` | 旧回复被编辑或重生成替代 |
 | `context.compacted` | `beforeTokens`、`afterTokens`、`strategy`、`summaryRef`、`snapshotRef`、`artifactIds` | 上下文自动或手动压缩，含工具输出、摘要与历史快照引用 |
 | `tool.requested` | `toolCallId`、`name`、`input` | 发起工具调用 |
-| `tool.completed` | `toolCallId`、`ok`、`output`、`modelOutput`、`artifactId`、`bytes` | 工具执行完成；`output` 供 UI，长输出时 `modelOutput` 为模型侧截断预览与 terminalId |
+| `tool.completed` | `toolCallId`、`ok`、`output`、`artifactId?`、`bytes?` | 工具执行完成，`output` 为完整内容；压缩产物引用记录在 `context.compacted` |
 | `tool.failed` | `toolCallId`、`error` | 工具执行失败 |
 | `approval.requested` | `approvalId`、`toolCallId`、`scope` | 请求审批 |
 | `approval.resolved` | `approvalId`、`decision` | 审批完成 |
@@ -2020,7 +2006,7 @@ CHANGELOG.md         # 版本变更记录
 | `checkpoint.created` | `checkpointId`、`runId`、`label` | 创建检查点 |
 | `checkpoint.restored` | `checkpointId`、`runId` | 回滚到检查点 |
 | `file.created` | `fileId`、`runId`、`name`、`mime`、`bytes`、`source` | 生成或下载的文件保存到 `files` |
-| `usage.recorded` | `provider`、`model`、`messageId?`、`inputTokens`、`outputTokens`、`cost?` | 模型调用结束 |
+| `usage.recorded` | `provider`、`model`、`messageId?`、`inputTokens`、`outputTokens`、`cacheReadTokens?`、`cacheWriteTokens?`、`cost?` | 模型调用结束 |
 | `plugin.activated` | `pluginId`、`version` | 插件激活 |
 | `plugin.deactivated` | `pluginId` | 插件停用 |
 | `plugin.discovered` | `pluginId`、`version`、`path` | 扫描到插件 |
@@ -2058,5 +2044,7 @@ CHANGELOG.md         # 版本变更记录
 | --- | --- |
 | `AGENTS.md` | 唯一强制性开发规范与索引 |
 | `README.md` | 产品介绍、安装与快速开始 |
+| `docs/decisions/` | 架构与产品决策记录（ADR） |
+| `docs/` 其他 | 详细设计、协议说明与评测报告 |
 
 新增文档必须在本文档索引中登记，避免规范与实现脱节。

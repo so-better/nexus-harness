@@ -59,6 +59,34 @@ describe('AgentContextService', () => {
     expect(second.strategies).toContain('hard_truncated');
   });
 
+  it('does not re-compact read_artifact slice outputs', async () => {
+    const service = new AgentContextService({
+      provider: new MockProvider(),
+      model: 'mock-model',
+      contextWindow: 32_000,
+      maxOutputTokens: 4_096,
+      artifacts: new ArtifactService(directory),
+      sessionId: 'session-1'
+    });
+    const slice = JSON.stringify({
+      kind: 'artifact_slice',
+      artifactId: 'art-1',
+      content: 'x'.repeat(5_000),
+      truncated: true
+    });
+    const messages: ChatMessage[] = [
+      user('a'.repeat(80_000)),
+      { role: 'tool', toolCallId: 'call-1', content: slice },
+      assistant('ok')
+    ];
+
+    const result = await service.prepare(messages);
+
+    // 产物分片不再被落 Artifact 层层包裹
+    expect(result.messages.find((message) => message.toolCallId === 'call-1')?.content).toBe(slice);
+    expect(result.strategies ?? []).not.toContain('tool_output_truncated');
+  });
+
   it('moves oversized tool output to an artifact and keeps a preview', async () => {
     const service = createService();
     const messages: ChatMessage[] = [

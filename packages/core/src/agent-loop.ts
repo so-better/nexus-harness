@@ -19,8 +19,6 @@ import { ContextLimitError, type ContextPreparer } from './context';
 export interface ToolExecutionResult {
   ok: boolean;
   output: string;
-  /** 仅用于模型上下文的内容；缺省时使用 output。用于后端截断而不影响 UI 展示 */
-  modelOutput?: string;
   artifactId?: string;
   bytes?: number;
   error?: { code: string; message: string };
@@ -51,8 +49,6 @@ export interface AgentLoopOptions {
   model: string;
   messages: ChatMessage[];
   tools?: AgentToolDefinition[];
-  /** 每步动态返回当前可用工具；优先于 tools，用于按需加载 */
-  getTools?: () => AgentToolDefinition[];
   blockedTools?: string[];
   executeTool?: ToolExecutor;
   eventBus?: EventBus;
@@ -72,19 +68,6 @@ export interface AgentLoopOptions {
     approvalId: string
   ) => Promise<boolean>;
   autoApprove?: (call: ProviderToolCall, tool: AgentToolDefinition) => boolean | Promise<boolean>;
-  /**
-   * 已知但当前未注入的工具按需补齐；返回 true 表示已加入可见集。
-   * 用于按需加载场景下，模型直接调用历史工具时避免误报 TOOL_NOT_FOUND。
-   */
-  resolveMissingTool?: (call: ProviderToolCall) => boolean;
-  /**
-   * 工具执行后、写入事件前按宿主策略压缩“模型侧输出”。
-   * 只能修改 modelOutput / artifactId 等模型上下文相关字段，output 仍用于 UI 与审计。
-   */
-  compactToolResult?: (
-    call: ProviderToolCall,
-    result: ToolExecutionResult
-  ) => Promise<ToolExecutionResult>;
   signal?: AbortSignal;
 }
 
@@ -115,13 +98,6 @@ export class AgentLoop {
   constructor(options: AgentLoopOptions) {
     this.options = options;
     this.messages = [...options.messages];
-  }
-
-  /**
-   * 读取当前生效的工具集；优先使用动态提供器，其次回退到静态 tools。
-   */
-  private currentTools(): AgentToolDefinition[] {
-    return this.options.getTools ? this.options.getTools() : (this.options.tools ?? []);
   }
 
   private emit<T extends NexusEventType>(type: T, payload: EventPayloadMap[T]): void {
@@ -274,24 +250,13 @@ export class AgentLoop {
           continue;
         }
 
-        let toolResult = await this.executeTool(call);
-
-        if (toolResult.ok && this.options.compactToolResult) {
-          try {
-            toolResult = await this.options.compactToolResult(call, toolResult);
-          } catch {
-            // 压缩失败时保留完整输出，交由后续上下文压缩兜底
-          }
-        }
+        const toolResult = await this.executeTool(call);
 
         if (toolResult.ok) {
           this.emit('tool.completed', {
             toolCallId: call.id,
             ok: true,
             output: toolResult.output,
-            ...(toolResult.modelOutput === undefined
-              ? {}
-              : { modelOutput: toolResult.modelOutput }),
             ...(toolResult.artifactId === undefined ? {} : { artifactId: toolResult.artifactId }),
             ...(toolResult.bytes === undefined ? {} : { bytes: toolResult.bytes })
           });
@@ -307,9 +272,7 @@ export class AgentLoop {
         this.messages.push({
           role: 'tool',
           toolCallId: call.id,
-          content: toolResult.ok
-            ? (toolResult.modelOutput ?? toolResult.output)
-            : JSON.stringify(toolResult.error),
+          content: toolResult.ok ? toolResult.output : JSON.stringify(toolResult.error),
           ...(approvalStatus === undefined ? {} : { approvalStatus })
         });
       }
@@ -390,11 +353,10 @@ export class AgentLoop {
     reasoningLimit?: boolean;
     error?: { code: string; message: string };
   }> {
-    const tools = this.currentTools();
     const request: ProviderRequest = {
       model: this.options.model,
       messages: [...this.messages],
-      ...(tools.length ? { tools } : {}),
+      ...(this.options.tools ? { tools: this.options.tools } : {}),
       ...(this.options.extraParams ? { extraParams: this.options.extraParams } : {}),
       ...(this.options.maxTokens === undefined ? {} : { maxTokens: this.options.maxTokens }),
       ...(this.options.signal ? { signal: this.options.signal } : {})
@@ -534,18 +496,12 @@ export class AgentLoop {
   private async authorizeTool(
     call: ProviderToolCall
   ): Promise<{ code: string; message: string } | undefined> {
-    let tool = this.currentTools().find((item) => item.name === call.name);
+    const tool = this.options.tools?.find((item) => item.name === call.name);
     if (!tool) {
       if (this.options.blockedTools?.includes(call.name)) {
         return { code: 'TOOL_MODE_DENIED', message: `当前模式不可用工具：${call.name}` };
       }
-      // 已知工具可能因按需加载未注入：先让宿主补齐，再重新授权
-      if (this.options.resolveMissingTool?.(call)) {
-        tool = this.currentTools().find((item) => item.name === call.name);
-      }
-      if (!tool) {
-        return { code: 'TOOL_NOT_FOUND', message: `未注册工具：${call.name}` };
-      }
+      return { code: 'TOOL_NOT_FOUND', message: `未注册工具：${call.name}` };
     }
 
     const gateway = this.options.permissionGateway;

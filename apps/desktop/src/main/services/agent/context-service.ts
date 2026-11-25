@@ -102,7 +102,7 @@ export class AgentContextService {
   }
 
   /**
-   * 当前输入预算（已扣除输出预留与安全余量），供工具执行层判断单次输出是否需要提前压缩。
+   * 当前输入预算（已扣除输出预留与安全余量），供工具执行层按预算夹紧单次回读大小。
    */
   get inputBudget(): number {
     return this.budget.inputBudget;
@@ -256,7 +256,9 @@ export class AgentContextService {
         index >= protectFrom ||
         message.role !== 'tool' ||
         message.content.length <= TOOL_OUTPUT_ARTIFACT_CHAR_LIMIT ||
-        this.artifactized.has(message)
+        this.artifactized.has(message) ||
+        // read_artifact 的结果本身就是产物分片，再次压缩只会层层包裹
+        message.content.includes('"kind":"artifact_slice"')
       ) {
         if (message) next.push(message);
         continue;
