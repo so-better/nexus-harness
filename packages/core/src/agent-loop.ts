@@ -333,7 +333,7 @@ export class AgentLoop {
 
     const error = {
       code: 'RUN_MAX_STEPS',
-      message: `已达到最大执行步骤（${maxSteps} 步），本次执行已终止。如需继续，请重新发起对话。`
+      message: `已达到最大执行步骤（${maxSteps} 步），本次执行已终止。可继续执行，或发送新消息。`
     };
     this.emit('run.failed', { error });
     return {

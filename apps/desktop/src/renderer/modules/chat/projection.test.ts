@@ -495,6 +495,55 @@ describe('projectEvents', () => {
     });
   });
 
+  it('exposes the failure code and clears it on the next run', () => {
+    const failed = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'run.started',
+        payload: { model: 'mock-model' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'run.failed',
+        payload: { error: { code: 'RUN_MAX_STEPS', message: '已达最大执行步骤' } }
+      })
+    ]);
+
+    expect(failed.status).toBe('failed');
+    expect(failed.errorCode).toBe('RUN_MAX_STEPS');
+
+    const continued = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'run.started',
+        payload: { model: 'mock-model' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'run.failed',
+        payload: { error: { code: 'RUN_MAX_STEPS', message: '已达最大执行步骤' } }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-2',
+        seq: 3,
+        type: 'run.started',
+        payload: { model: 'mock-model' }
+      })
+    ]);
+
+    expect(continued.status).toBe('running');
+    expect(continued.errorCode).toBeUndefined();
+  });
+
   it('renders legacy run failures without message.completed', () => {
     const projection = projectEvents([
       event({

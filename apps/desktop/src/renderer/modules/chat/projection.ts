@@ -261,6 +261,8 @@ export const projectEvents = (
   let running = false;
   let status: ChatProjection['status'] = 'idle';
   let error: string | undefined;
+  /** 最近一次失败的错误码；用于区分“步数上限”等可继续的场景 */
+  let errorCode: string | undefined;
   let pendingFailure: { event: NexusEvent; error: { code: string; message: string } } | undefined;
   const pendingUsage = new Map<string, ChatUsage>();
   let compactionNoticeShown = false;
@@ -667,12 +669,14 @@ export const projectEvents = (
       running = true;
       status = 'running';
       error = undefined;
+      errorCode = undefined;
       continue;
     }
 
     if (event.type === 'run.completed') {
       running = false;
       status = 'completed';
+      errorCode = undefined;
       finishStreaming(messages);
       finishAskUsers(askUsers);
       finishApprovals(approvals, messages);
@@ -716,6 +720,7 @@ export const projectEvents = (
       running = false;
       status = 'failed';
       error = payload.error.message;
+      errorCode = payload.error.code;
       pendingFailure = { event, error: payload.error };
       finishStreaming(messages);
       finishAskUsers(askUsers);
@@ -726,6 +731,7 @@ export const projectEvents = (
     if (event.type === 'run.cancelled') {
       running = false;
       status = 'cancelled';
+      errorCode = undefined;
       finishStreaming(messages);
       finishAskUsers(askUsers);
       finishApprovals(approvals, messages);
@@ -735,6 +741,7 @@ export const projectEvents = (
     if (event.type === 'run.interrupted') {
       running = false;
       status = 'interrupted';
+      errorCode = undefined;
       finishStreaming(messages);
       finishAskUsers(askUsers);
       finishApprovals(approvals, messages);
@@ -843,7 +850,8 @@ export const projectEvents = (
     running,
     status,
     ...(runId === undefined ? {} : { runId }),
-    ...(error === undefined ? {} : { error })
+    ...(error === undefined ? {} : { error }),
+    ...(errorCode === undefined ? {} : { errorCode })
   };
 };
 

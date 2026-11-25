@@ -156,4 +156,6 @@ export interface ChatProjection {
     | 'cancelled'
     | 'interrupted';
   error?: string;
+  /** 最近一次失败的错误码；用于区分步数上限等可继续的场景 */
+  errorCode?: string;
 }

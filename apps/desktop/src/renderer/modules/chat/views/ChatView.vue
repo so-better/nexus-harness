@@ -96,6 +96,7 @@
 
       <div class="nh-chat__bottom">
         <MemoryCandidates :running="visualRunning" />
+        <ContinueRunBar v-if="canContinue" @resume="continueRun" />
         <div v-if="workspaceAuth || pendingApprovals.length" class="nh-chat__interruptions">
           <NButton
             v-if="workspaceAuth"
@@ -175,11 +176,13 @@ import { t } from '@/app/i18n';
 import { sessionStatusLabel, sessionStatusTagColor } from '@/app/session-status';
 import AppIcon from '@/components/AppIcon.vue';
 import ComposerBox from '../components/ComposerBox.vue';
+import ContinueRunBar from '../components/ContinueRunBar.vue';
 import MemoryCandidates from '../components/MemoryCandidates.vue';
 import MessageList from '../components/MessageList.vue';
 import SessionEmptyView from '../components/SessionEmptyView.vue';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import { isAgentThinking } from '../agent-generation';
+import { continuePromptFor, shouldOfferContinue } from '../continue-run';
 import type { ChatProjection } from '../types';
 
 const props = defineProps<{
@@ -235,6 +238,21 @@ const emit = defineEmits<{
 const visualRunning = computed(() => props.running || props.projection.running);
 const starting = computed(() => Boolean(props.running) && !props.projection.running);
 const isEmpty = computed(() => !props.session || props.projection.messages.length === 0);
+
+/**
+ * 步数上限导致的失败：提供「继续」入口，点击后发送一条“继续”用户消息续跑。
+ */
+const canContinue = computed(() =>
+  // hasModel 与发送链路一致：继续走普通 send，必须已选服务商与模型
+  shouldOfferContinue(props.projection, {
+    running: visualRunning.value,
+    hasModel: Boolean(props.providerId && props.modelId)
+  })
+);
+
+const continueRun = (): void => {
+  emit('send', continuePromptFor(props.projection.messages));
+};
 const pendingApprovals = computed(() =>
   props.projection.approvals.filter((approval) => approval.status === 'pending')
 );
