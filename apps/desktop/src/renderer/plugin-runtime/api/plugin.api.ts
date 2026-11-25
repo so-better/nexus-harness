@@ -11,7 +11,9 @@ import type {
   PluginSkinSelection,
   PluginStartupChangedPayload,
   PluginStartupSelection,
-  PluginWorkspaceEntry
+  PluginWorkspaceEntry,
+  PluginNetResponse,
+  PluginNetRequestInit
 } from '@shared/plugin';
 import type { UsageStats, UsageStatsInput } from '@shared/usage';
 import { unwrap } from '@/app/ipc';
@@ -93,6 +95,27 @@ export const listPluginWorkspace = async (
   path?: string
 ): Promise<PluginWorkspaceEntry[]> =>
   unwrap(await nexus.plugin.workspaceList(pluginId, sessionId, path));
+
+export const fetchPluginNetwork = async (
+  pluginId: string,
+  url: string,
+  init?: PluginNetRequestInit
+): Promise<PluginNetResponse> => unwrap(await nexus.plugin.netFetch(pluginId, url, init));
+
+export const getPluginSecret = async (pluginId: string, key: string): Promise<string | null> =>
+  unwrap(await nexus.plugin.secretsGet(pluginId, key)).value;
+
+export const setPluginSecret = async (
+  pluginId: string,
+  key: string,
+  value: string
+): Promise<void> => {
+  unwrap(await nexus.plugin.secretsSet(pluginId, key, value));
+};
+
+export const deletePluginSecret = async (pluginId: string, key: string): Promise<void> => {
+  unwrap(await nexus.plugin.secretsDelete(pluginId, key));
+};
 
 export const getUsageStats = async (input?: UsageStatsInput): Promise<UsageStats> =>
   unwrap(await nexus.usage.stats(input));

@@ -203,6 +203,14 @@ const bridge: NexusBridge = {
       ipcRenderer.on(IPC_CHANNELS.pluginEvent, listener);
       return () => ipcRenderer.removeListener(IPC_CHANNELS.pluginEvent, listener);
     },
+    netFetch: (pluginId, url, init) =>
+      ipcRenderer.invoke(IPC_CHANNELS.pluginNetFetch, { pluginId, url, ...init }),
+    secretsGet: (pluginId, key) =>
+      ipcRenderer.invoke(IPC_CHANNELS.pluginSecretsGet, { pluginId, key }),
+    secretsSet: (pluginId, key, value) =>
+      ipcRenderer.invoke(IPC_CHANNELS.pluginSecretsSet, { pluginId, key, value }),
+    secretsDelete: (pluginId, key) =>
+      ipcRenderer.invoke(IPC_CHANNELS.pluginSecretsDelete, { pluginId, key }),
     storageGet: (pluginId, key) =>
       ipcRenderer.invoke(IPC_CHANNELS.pluginStorageGet, { pluginId, key }),
     storageSet: (pluginId, key, value) =>

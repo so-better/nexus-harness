@@ -900,6 +900,7 @@ metadata:
 - `id` 必须全局唯一。
 - `engines.nexus` 声明兼容的宿主版本范围；宿主加载插件时校验，不兼容的插件禁用并显示错误，且不能通过启用开关恢复；修复 manifest 或升级宿主后重新扫描。
 - `activationEvents` 必须按需激活，禁止无条件在启动时加载所有插件。
+- `network.hosts` 声明受控网络白名单（精确主机或 `*.example.com`）；仅声明 `network` 权限后生效，未列入的域名被拒绝。
 - 权限必须最小化；未声明的能力调用会被宿主拒绝并记录日志。
 
 #### 4.5.4 贡献点
@@ -907,8 +908,9 @@ metadata:
 | 贡献点 | 用途 |
 | --- | --- |
 | `views` | 插件自定义视图，通过 `ctx.views.open` 打开，宿主不自动列出 |
+| `navigation` | 插件侧栏导航入口，指向已声明的 `view`（需 `ui.panel`） |
 | `messageSlots` | 会话流、输入区、工具调用与审批等插槽 |
-| `statusBar` | 状态栏条目 |
+| `statusBar` | 状态栏条目（可带图标） |
 | `commands` | 命令面板与快捷键绑定 |
 | `menus` | 不开放；使用标准插槽和 `commands` 提供操作入口 |
 | `settings` | 插件设置项 |
@@ -951,6 +953,7 @@ metadata:
 
 ```ts
 ctx.commands.register(id: string, handler: () => void | Promise<void>): Disposable;
+ctx.commands.registerProvider(id: string, provider: () => PluginQuickPickItem[] | Promise<PluginQuickPickItem[]>): Disposable;
 ctx.views.register(id: string, mount: (el: HTMLElement, ctx: PluginContext) => () => void): Disposable;
 ctx.views.open(id: string): Promise<void>;
 ctx.slots.register(id: string, mount: (el: HTMLElement, context: SlotContext) => () => void): Disposable;
@@ -969,11 +972,20 @@ ctx.storage.set<T>(key: string, value: T): Promise<void>;
 ctx.storage.delete(key: string): Promise<void>;
 ctx.settings: Record<string, string | number | boolean | null>;
 ctx.logger.info(message: string, meta?: unknown): void;
-ctx.notifications.show(message: string, level?: 'info' | 'warning' | 'error'): void;
+ctx.notifications.show(message: string, level?: 'info' | 'warning' | 'error'): void; // 系统通知
+ctx.notifications.message(message: string, level?: 'info' | 'warning' | 'error'): void; // 应用内消息
 ctx.workspace.readFile(path: string): Promise<string>;
 ctx.workspace.list(dir: string): Promise<WorkspaceEntry[]>;
 ctx.usage.getStats(query?: UsageStatsQuery): Promise<UsageStats>;
+ctx.net.fetch(url: string, init?: PluginNetRequestInit): Promise<PluginNetResponse>;
+ctx.jobs.every(intervalMs: number, handler: () => void | Promise<void>): Disposable;
+ctx.composer.insert(text: string): void;
+ctx.secrets.get(key: string): Promise<string | null>;
+ctx.secrets.set(key: string, value: string): Promise<void>;
+ctx.secrets.delete(key: string): Promise<void>;
 ```
+
+- `ctx.composer.insert` 追加文本到当前输入框末尾；`ctx.commands.registerProvider` 仅在插件已激活时生效，需配置 `activationEvents`。
 
 ```ts
 /**
@@ -1900,7 +1912,7 @@ CHANGELOG.md         # 版本变更记录
 | 发布 | 签名 + 自动更新 | stable / beta 双通道 |
 | 网络工具 | 内置媒体搜索 + 联网搜索/正文读取 | Pexels / AnySearch Key 本地配置；AnySearch 无 Key 时匿名限流；其他网络能力通过 MCP 或 Skill 扩展 |
 | MCP 接入时机 | M3 | 先支持本地 stdio Server |
-| 高风险插件权限 | 已定 | `workspace:write`、`network` 不开放；工作区写入走 Agent 工具与审批，外部网络统一通过 MCP |
+| 高风险插件权限 | 已定 | `workspace:write` 不开放（走 Agent 工具与审批）；`network` 受控开放（域名白名单 + SSRF/大小/超时限制）；`background` 受控开放（最小 5s、停用清理）；`tools:register` 不开放（外部工具走 MCP） |
 | 自动更新渠道 | M5 | stable / beta 双通道 |
 | 遥测与崩溃报告 | 默认关闭 | 仅显式 opt-in |
 | 国际化范围 | `zh-CN` 优先 | 结构预留 `en-US` |
@@ -2032,18 +2044,21 @@ CHANGELOG.md         # 版本变更记录
 | --- | --- | --- |
 | `storage` | 使用按插件隔离的键值存储 | 开放 |
 | `events:<event>` | 订阅指定领域事件 | 开放 |
+| `secrets` | 加密密钥存储（系统安全存储，按插件隔离） | 开放 |
+| `background` | 后台定时任务（`ctx.jobs.every`，最小 5s，停用清理） | 开放 |
 | `ui.panel` | 注册侧栏/主区面板 | 开放 |
 | `ui.slot` | 注册消息尾部/输入区等插槽 | 开放 |
 | `ui.skin` | 贡献全局背景皮肤，并通过代码绘制 | 开放 |
 | `ui.startup` | 贡献启动动画，并通过代码绘制 | 开放 |
 | `ui.statusbar` | 注册状态栏条目 | 开放 |
 | `ui.command` | 注册命令与快捷键 | 开放 |
-| `ui.notification` | 发送应用内通知 | 开放 |
+| `ui.notification` | 发送系统通知与应用内消息提示 | 开放 |
+| `ui.composer` | 向当前输入框插入文本 | 开放 |
 | `usage:read` | 只读查询本地用量统计 | 开放 |
 | `workspace:read` | 只读访问工作区文件 | 开放 |
 | `workspace:write` | 写入工作区文件 | 不开放 |
 | `tools:register` | 向 Agent 注册工具 | 不开放；外部工具使用 MCP |
-| `network` | 发起网络请求 | 不开放 |
+| `network` | 发起网络请求 | 开放（需 `manifest.network.hosts` 域名白名单，SSRF/大小/超时限制，不跟随重定向） |
 
 ### 附录 C：文档索引
 

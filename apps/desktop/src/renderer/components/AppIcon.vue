@@ -109,62 +109,67 @@
   </svg>
 </template>
 
+<script lang="ts">
+/** 图标名称清单；供插件等外部代码做运行时校验。 */
+export const APP_ICON_NAMES = [
+  'folder',
+  'plus',
+  'send',
+  'stop',
+  'spark',
+  'file',
+  'paperclip',
+  'image',
+  'eye',
+  'export',
+  'upload',
+  'download',
+  'terminal',
+  'edit',
+  'history',
+  'settings',
+  'sun',
+  'moon',
+  'monitor',
+  'chevron-down',
+  'chevron-up',
+  'arrow-up',
+  'arrow-down',
+  'chevron-left',
+  'chevron-right',
+  'globe',
+  'key',
+  'database',
+  'power',
+  'alert',
+  'bell',
+  'close',
+  'pin',
+  'play',
+  'message',
+  'search',
+  'more',
+  'info',
+  'trash',
+  'check',
+  'refresh',
+  'regenerate',
+  'copy',
+  'plug',
+  'minimize',
+  'maximize',
+  'restore',
+  'loader',
+  'brain',
+  'lightbulb'
+] as const;
+export type AppIconName = (typeof APP_ICON_NAMES)[number];
+</script>
+
 <script setup lang="ts">
 /**
  * 极简线性图标；只依赖 currentColor，跟随主题与按钮状态。
  */
-
-export type AppIconName =
-  | 'folder'
-  | 'plus'
-  | 'send'
-  | 'stop'
-  | 'spark'
-  | 'file'
-  | 'paperclip'
-  | 'image'
-  | 'eye'
-  | 'export'
-  | 'upload'
-  | 'download'
-  | 'terminal'
-  | 'edit'
-  | 'history'
-  | 'settings'
-  | 'sun'
-  | 'moon'
-  | 'monitor'
-  | 'chevron-down'
-  | 'chevron-up'
-  | 'arrow-up'
-  | 'arrow-down'
-  | 'chevron-left'
-  | 'chevron-right'
-  | 'globe'
-  | 'key'
-  | 'database'
-  | 'power'
-  | 'alert'
-  | 'bell'
-  | 'close'
-  | 'pin'
-  | 'play'
-  | 'message'
-  | 'search'
-  | 'more'
-  | 'info'
-  | 'trash'
-  | 'check'
-  | 'refresh'
-  | 'regenerate'
-  | 'copy'
-  | 'plug'
-  | 'minimize'
-  | 'maximize'
-  | 'restore'
-  | 'loader'
-  | 'brain'
-  | 'lightbulb';
 
 withDefaults(
   defineProps<{

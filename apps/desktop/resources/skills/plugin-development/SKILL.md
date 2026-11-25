@@ -16,7 +16,7 @@ metadata:
       usage,
       用户插件
     ]
-  version: 1.3.26
+  version: 1.3.30
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -127,20 +127,24 @@ export function deactivate() {
 
 ## 权限
 
-| 权限              | 能力                       |
-| ----------------- | -------------------------- |
-| `storage`         | 隔离的 `ctx.storage`       |
-| `ui.slot`         | 消息、输入区、会话头等插槽 |
-| `ui.panel`        | 插件视图                   |
-| `ui.statusbar`    | 状态栏条目                 |
-| `ui.command`      | 命令                       |
-| `ui.notification` | 应用内/系统通知            |
-| `ui.skin`         | 全局背景皮肤               |
-| `ui.startup`      | 启动动画                   |
-| `usage:read`      | 只读本地用量统计与历史     |
-| `workspace:read`  | 只读当前会话工作区         |
-| `events:<event>`  | 订阅指定事件               |
-| `events:*`        | 订阅全部公开事件           |
+| 权限              | 能力                                                           |
+| ----------------- | -------------------------------------------------------------- |
+| `storage`         | 隔离的 `ctx.storage`                                           |
+| `secrets`         | 加密密钥存储 `ctx.secrets`                                     |
+| `network`         | 受控网络 `ctx.net.fetch`（需 `manifest.network.hosts` 白名单） |
+| `background`      | 后台定时任务 `ctx.jobs.every`（最小 5s）                       |
+| `ui.composer`     | 向输入框插入文本 `ctx.composer.insert`                         |
+| `ui.slot`         | 消息、输入区、会话头等插槽                                     |
+| `ui.panel`        | 插件视图                                                       |
+| `ui.statusbar`    | 状态栏条目                                                     |
+| `ui.command`      | 命令                                                           |
+| `ui.notification` | 系统通知与应用内消息                                          |
+| `ui.skin`         | 全局背景皮肤                                                   |
+| `ui.startup`      | 启动动画                                                       |
+| `usage:read`      | 只读本地用量统计与历史                                         |
+| `workspace:read`  | 只读当前会话工作区                                             |
+| `events:<event>`  | 订阅指定事件                                                   |
+| `events:*`        | 订阅全部公开事件                                               |
 
 不申请不需要的权限。未声明能力会被宿主拒绝。
 
@@ -149,19 +153,25 @@ export function deactivate() {
 ```ts
 ctx.pluginId
 ctx.commands.register(id, handler): Disposable
+ctx.commands.registerProvider(id, provider): Disposable // 命令面板打开时收集动态条目
 ctx.views.register(id, mount): Disposable
 ctx.views.open(id): Promise<void>
 ctx.slots.register(id, mount): Disposable
 ctx.skins.register(id, mount): Disposable
 ctx.startup.register(id, mount): Disposable
-ctx.statusBar.add(item): Disposable
+ctx.statusBar.add({ id, text, align?, title?, icon?, onClick? }): Disposable
 ctx.events.on(event, (payload, meta) => void): Disposable
 ctx.storage.get/set/delete
 ctx.settings
 ctx.logger.debug/info/warn/error
-ctx.notifications.show
+ctx.notifications.show(message, level?) // 系统通知
+ctx.notifications.message(message, level?) // 应用内消息
 ctx.workspace.readFile/list
 ctx.usage.getStats(query): Promise<UsageStats>
+ctx.net.fetch(url, { method, headers, body, timeoutMs })
+ctx.secrets.get/set/delete
+ctx.jobs.every(intervalMs, handler) // 最小 5s，停用自动清理
+ctx.composer.insert(text) // 追加到当前输入框末尾
 ```
 
 使用 `ctx.settings` 读取 manifest 声明的设置；使用 `ctx.storage` 持久化插件数据，不能写入插件目录作为数据存储。
@@ -204,6 +214,11 @@ export function activate(ctx) {
 - 只允许写入图片或字体资源（png/jpg/webp/gif/svg/ico/woff/woff2/ttf/otf），单文件 20MB 上限。
 - `plugin_write` 一次审批覆盖 files、assets 与 delete；内置插件只读。
 
+## 贡献点
+
+- `views` / `messageSlots` / `statusBar` / `commands` / `settings` / `skins` / `startup` 见 manifest。
+- `navigation`：`[{ id, title, viewId }]`，在侧栏显示入口并打开已声明的 `view`（需 `ui.panel`）。
+
 ## 常用插槽
 
 | location                                                  | 用途          |
@@ -229,6 +244,7 @@ export function activate(ctx) {
 interface MainPluginContext {
   pluginId: string;
   storage: { get/set/delete };
+  secrets: { get/set/delete };
   settings: Record<string, string | number | boolean | null>;
   logger: { debug/info/warn/error };
   notifications: { show };
@@ -239,6 +255,8 @@ interface MainPluginContext {
 主进程入口不提供 DOM、插槽、视图或皮肤。启用第三方主进程插件等同于运行本地代码，必须告知用户来源与权限。
 
 ## 视图与用量
+
+- `ctx.commands.registerProvider` 注册的快速选择项仅在插件**已激活**时出现在命令面板；需要配置相应的 `activationEvents`（如 `onSlot`/`onCommand`/`onEvent`）。
 
 - 声明 `views` 贡献点并申请 `ui.panel`；`ctx.views.register` 挂载视图，`ctx.views.open(id)` 打开宿主大尺寸视图弹窗。视图的入口和展示位置由插件自行设计，宿主不自动列出。
 - 需要分析数据时申请 `usage:read`，调用 `ctx.usage.getStats({ sessionId?, from?, to?, bucket? })`；返回总量（含 `cacheReadTokens` / `cacheWriteTokens` 提示缓存读写的可选字段）、时间序列、会话、模型和 Provider 分布，不需要读取数据库。

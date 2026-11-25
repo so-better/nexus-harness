@@ -32,7 +32,11 @@ export const pluginSlotLocationSchema = z.enum(PLUGIN_SLOT_LOCATIONS);
 
 export const pluginPermissionSchema = z.enum([
   'storage',
+  'secrets',
+  'network',
+  'background',
   'ui.panel',
+  'ui.composer',
   'ui.slot',
   'ui.skin',
   'ui.startup',
@@ -86,6 +90,13 @@ const pluginStartupSchema = z.object({
   countdownMs: z.number().int().min(100).max(30_000)
 });
 
+const pluginNavigationSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  viewId: z.string().min(1),
+  icon: z.string().min(1).optional()
+});
+
 export const pluginManifestSchema = z.object({
   id: z.string().regex(/^[a-z0-9]+(?:\.[a-z0-9-]+)+$/, '插件 id 必须是反向域名'),
   name: z.string().min(1),
@@ -96,6 +107,8 @@ export const pluginManifestSchema = z.object({
   renderer: z.string().min(1).optional(),
   activationEvents: z.array(z.string().min(1)).default([]),
   permissions: z.array(z.union([pluginPermissionSchema, eventPermission])).default([]),
+  /** 受控网络：允许访问的域名白名单（精确或 *.example.com） */
+  network: z.object({ hosts: z.array(z.string().min(1).max(255)).max(50).default([]) }).optional(),
   contributes: z
     .object({
       views: z.array(pluginViewSchema).default([]),
@@ -104,7 +117,8 @@ export const pluginManifestSchema = z.object({
       commands: z.array(pluginCommandSchema).default([]),
       settings: z.array(pluginSettingSchema).default([]),
       skins: z.array(pluginSkinSchema).default([]),
-      startup: z.array(pluginStartupSchema).default([])
+      startup: z.array(pluginStartupSchema).default([]),
+      navigation: z.array(pluginNavigationSchema).default([])
     })
     .default({
       views: [],
@@ -113,7 +127,8 @@ export const pluginManifestSchema = z.object({
       commands: [],
       settings: [],
       skins: [],
-      startup: []
+      startup: [],
+      navigation: []
     })
 });
 export type PluginManifest = z.infer<typeof pluginManifestSchema>;
@@ -129,6 +144,7 @@ export const pluginPublicSchema = z.object({
   permissions: z.array(z.string()),
   activationEvents: z.array(z.string()),
   contributes: pluginManifestSchema.shape.contributes,
+  network: pluginManifestSchema.shape.network,
   rendererUrl: z.string().optional(),
   hasMain: z.boolean(),
   mainLoaded: z.boolean()
@@ -211,4 +227,41 @@ export const pluginNotifyInputSchema = z
   .strict();
 export const pluginReportErrorInputSchema = z
   .object({ pluginId: pluginIdSchema, error: z.string().min(1) })
+  .strict();
+
+/** 受控网络请求输入；仅允许白名单域名与常见方法。 */
+export const pluginNetFetchInputSchema = z
+  .object({
+    pluginId: pluginIdSchema,
+    url: z.string().url(),
+    method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD']).optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    body: z.string().optional(),
+    timeoutMs: z.number().int().positive().max(30_000).optional()
+  })
+  .strict();
+
+/** 受控网络响应；只返回文本，二进制由插件按需自处理。 */
+export interface PluginNetResponse {
+  ok: boolean;
+  status: number;
+  headers: Record<string, string>;
+  text: string;
+}
+
+/** 受控网络请求初始参数（插件侧）。 */
+export interface PluginNetRequestInit {
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD';
+  headers?: Record<string, string>;
+  body?: string;
+  timeoutMs?: number;
+}
+
+/** 读取/删除插件密钥。 */
+export const pluginSecretInputSchema = z
+  .object({ pluginId: pluginIdSchema, key: z.string().min(1) })
+  .strict();
+/** 写入插件密钥（字符串值，由宿主加密存储）。 */
+export const pluginSecretSetInputSchema = pluginSecretInputSchema
+  .extend({ value: z.string() })
   .strict();

@@ -12,7 +12,9 @@ import type {
   PluginSkinSelection,
   PluginSlotLocation,
   PluginStartupSelection,
-  PluginWorkspaceEntry
+  PluginWorkspaceEntry,
+  PluginNetRequestInit,
+  PluginNetResponse
 } from '@shared/plugin';
 import type { UsageStats, UsageStatsInput } from '@shared/usage';
 import {
@@ -39,9 +41,15 @@ import {
   subscribeStartupChanges,
   subscribePluginChanges,
   subscribePluginEvents,
+  fetchPluginNetwork,
+  getPluginSecret,
+  setPluginSecret,
+  deletePluginSecret,
   uninstallPlugin
 } from './api/plugin.api';
 import { slotRegistry, type SlotContext } from './slot-registry';
+import { requestComposerInsert } from '@/composables/composer-bus';
+import { showAppMessage } from '@/app/app-message';
 
 export interface PluginSkin {
   pluginId: string;
@@ -80,6 +88,7 @@ export interface PluginStatusItem {
   text: string;
   align: 'left' | 'right';
   title?: string;
+  icon?: string;
   onClick?: () => void;
 }
 
@@ -105,10 +114,20 @@ export interface PluginView {
   context: PluginContext;
 }
 
+export interface PluginQuickPickItem {
+  id: string;
+  title: string;
+  description?: string;
+  run: () => void | Promise<void>;
+}
+
+export type PluginQuickPickProvider = () => PluginQuickPickItem[] | Promise<PluginQuickPickItem[]>;
+
 export interface PluginContext {
   pluginId: string;
   commands: {
     register: (id: string, handler: () => void | Promise<void>) => () => void;
+    registerProvider: (id: string, provider: PluginQuickPickProvider) => () => void;
   };
   views: {
     register: (id: string, mount: PluginView['mount']) => () => void;
@@ -153,10 +172,27 @@ export interface PluginContext {
     warn: (message: string) => void;
     error: (message: string) => void;
   };
-  notifications: { show: (message: string, level?: 'info' | 'warning' | 'error') => void };
+  notifications: {
+    show: (message: string, level?: 'info' | 'warning' | 'error') => void;
+    message: (message: string, level?: 'info' | 'warning' | 'error') => void;
+  };
   workspace: {
     readFile: (path: string) => Promise<string>;
     list: (dir?: string) => Promise<PluginWorkspaceEntry[]>;
+  };
+  net: {
+    fetch: (url: string, init?: PluginNetRequestInit) => Promise<PluginNetResponse>;
+  };
+  jobs: {
+    every: (intervalMs: number, handler: () => void | Promise<void>) => () => void;
+  };
+  composer: {
+    insert: (text: string) => void;
+  };
+  secrets: {
+    get: (key: string) => Promise<string | null>;
+    set: (key: string, value: string) => Promise<void>;
+    delete: (key: string) => Promise<void>;
   };
 }
 
@@ -191,8 +227,26 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
   const plugins = ref<PluginPublic[]>([]);
   const statusItems = ref<PluginStatusItem[]>([]);
   const commands = ref(new Map<string, PluginCommand>());
+  /** 插件快速选择提供者：pluginId → providerId → provider */
+  const quickPickProviders = ref(new Map<string, Map<string, PluginQuickPickProvider>>());
   const views = ref(new Map<string, PluginView>());
   const openedView = ref<PluginView | null>(null);
+  /** 插件侧栏导航入口：来自启用且具备 ui.panel 的插件的 navigation 贡献 */
+  const navigationEntries = computed(() =>
+    plugins.value
+      .filter((plugin) => plugin.enabled && plugin.permissions.includes('ui.panel'))
+      .flatMap((plugin) =>
+        plugin.contributes.navigation
+          .filter((nav) => plugin.contributes.views.some((view) => view.id === nav.viewId))
+          .map((nav) => ({
+            pluginId: plugin.id,
+            id: nav.id,
+            title: nav.title,
+            ...(nav.icon ? { icon: nav.icon } : {}),
+            viewId: nav.viewId
+          }))
+      )
+  );
   const version = ref(0);
   const loading = ref(false);
   const error = ref<string>();
@@ -331,6 +385,7 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
       disposable = currentDisposable;
       const settings = await getPluginSettings(plugin.id);
       const manifest = plugin as unknown as PluginManifest;
+      let activeJobCount = 0;
       const ctx: PluginContext = {
         pluginId: plugin.id,
         commands: {
@@ -358,12 +413,32 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
             };
             currentDisposable.disposables.push(dispose);
             return dispose;
+          },
+          registerProvider: (id, provider) => {
+            if (!hasPermission(plugin, 'ui.command')) throw new Error('缺少 ui.command 权限');
+            const providers = new Map(quickPickProviders.value.get(plugin.id) ?? []);
+            providers.set(id, provider);
+            const next = new Map(quickPickProviders.value);
+            next.set(plugin.id, providers);
+            quickPickProviders.value = next;
+            bump();
+            const dispose = (): void => {
+              const current = new Map(quickPickProviders.value);
+              const list = new Map(current.get(plugin.id) ?? []);
+              list.delete(id);
+              if (list.size) current.set(plugin.id, list);
+              else current.delete(plugin.id);
+              quickPickProviders.value = current;
+              bump();
+            };
+            currentDisposable.disposables.push(dispose);
+            return dispose;
           }
         },
         views: {
           open: async (id) => {
             if (!hasPermission(plugin, 'ui.panel')) throw new Error('缺少 ui.panel 权限');
-            const view = views.value.get(id);
+            const view = views.value.get(`${plugin.id}:${id}`);
             if (!view || view.pluginId !== plugin.id) throw new Error(`未声明的视图：${id}`);
             openedView.value = view;
           },
@@ -371,7 +446,8 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
             if (!hasPermission(plugin, 'ui.panel')) throw new Error('缺少 ui.panel 权限');
             const contribution = manifest.contributes.views.find((item) => item.id === id);
             if (!contribution) throw new Error(`未声明的视图：${id}`);
-            views.value.set(id, {
+            const key = `${plugin.id}:${id}`;
+            views.value.set(key, {
               pluginId: plugin.id,
               id,
               title: contribution.title,
@@ -380,8 +456,10 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
             });
             bump();
             const dispose = (): void => {
-              views.value.delete(id);
-              if (openedView.value?.id === id) openedView.value = null;
+              views.value.delete(key);
+              if (openedView.value?.pluginId === plugin.id && openedView.value.id === id) {
+                openedView.value = null;
+              }
               bump();
             };
             currentDisposable.disposables.push(dispose);
@@ -508,11 +586,67 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
           error: (message) => logPlugin(plugin.id, 'error', message).catch(() => undefined)
         },
         notifications: {
-          show: (message, level = 'info') => {
+          show: (text, level = 'info') => {
             if (!hasPermission(plugin, 'ui.notification')) {
               throw new Error('缺少 ui.notification 权限');
             }
-            notifyPlugin(plugin.id, message, level).catch(() => undefined);
+            notifyPlugin(plugin.id, text, level).catch(() => undefined);
+          },
+          message: (text, level = 'info') => {
+            if (!hasPermission(plugin, 'ui.notification')) {
+              throw new Error('缺少 ui.notification 权限');
+            }
+            showAppMessage(text, level);
+          }
+        },
+        secrets: {
+          get: async (key) => {
+            if (!hasPermission(plugin, 'secrets')) throw new Error('缺少 secrets 权限');
+            return getPluginSecret(plugin.id, key);
+          },
+          set: async (key, value) => {
+            if (!hasPermission(plugin, 'secrets')) throw new Error('缺少 secrets 权限');
+            await setPluginSecret(plugin.id, key, value);
+          },
+          delete: async (key) => {
+            if (!hasPermission(plugin, 'secrets')) throw new Error('缺少 secrets 权限');
+            await deletePluginSecret(plugin.id, key);
+          }
+        },
+        jobs: {
+          every: (intervalMs, handler) => {
+            if (!hasPermission(plugin, 'background')) throw new Error('缺少 background 权限');
+            if (activeJobCount >= 20) throw new Error('后台任务数量已达上限（20）');
+            activeJobCount += 1;
+            const interval = Math.max(5_000, Math.floor(intervalMs));
+            const timer = setInterval(() => {
+              Promise.resolve()
+                .then(handler)
+                .catch((error: unknown) => {
+                  console.error(`插件后台任务失败：${plugin.id}`, error);
+                });
+            }, interval);
+            let cleared = false;
+            const dispose = (): void => {
+              if (cleared) return;
+              cleared = true;
+              clearInterval(timer);
+              activeJobCount = Math.max(0, activeJobCount - 1);
+            };
+            currentDisposable.disposables.push(dispose);
+            return dispose;
+          }
+        },
+        composer: {
+          insert: (text) => {
+            if (!hasPermission(plugin, 'ui.composer')) throw new Error('缺少 ui.composer 权限');
+            requestComposerInsert(text);
+          }
+        },
+        net: {
+          fetch: async (url, init) => {
+            if (!hasPermission(plugin, 'network')) throw new Error('缺少 network 权限');
+            return fetchPluginNetwork(plugin.id, url, init);
           }
         },
         workspace: {
@@ -911,6 +1045,51 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     }
   };
 
+  /**
+   * 收集已激活插件注册的快速选择项，供命令面板打开时合并。
+   */
+  const collectQuickPicks = async (): Promise<
+    Array<{
+      id: string;
+      title: string;
+      description?: string;
+      source: string;
+      pluginId: string;
+      run: () => void | Promise<void>;
+    }>
+  > => {
+    const results: Array<{
+      id: string;
+      title: string;
+      description?: string;
+      source: string;
+      pluginId: string;
+      run: () => void | Promise<void>;
+    }> = [];
+    for (const [pluginId, providers] of quickPickProviders.value) {
+      const plugin = plugins.value.find((item) => item.id === pluginId);
+      const source = plugin?.name ?? pluginId;
+      for (const [providerId, provider] of providers) {
+        try {
+          const items = await provider();
+          for (const item of items) {
+            results.push({
+              id: `pluginpick:${pluginId}:${providerId}:${item.id}`,
+              title: item.title,
+              ...(item.description ? { description: item.description } : {}),
+              source,
+              pluginId,
+              run: item.run
+            });
+          }
+        } catch (error) {
+          console.error(`插件快速选择失败：${pluginId}/${providerId}`, error);
+        }
+      }
+    }
+    return results;
+  };
+
   return {
     plugins,
     skins,
@@ -928,13 +1107,15 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     commands,
     views,
     openedView,
-    openView: async (id: string) => {
-      let view = views.value.get(id);
+    navigationEntries,
+    collectQuickPicks,
+    openView: async (pluginId: string, viewId: string) => {
+      let view = views.value.get(`${pluginId}:${viewId}`);
       if (!view) {
-        await activateForView(id);
-        view = views.value.get(id);
+        await activateForView(viewId);
+        view = views.value.get(`${pluginId}:${viewId}`);
       }
-      if (!view) throw new Error(`未声明的视图：${id}`);
+      if (!view) throw new Error(`未声明的视图：${viewId}`);
       openedView.value = view;
     },
     closeView: () => {

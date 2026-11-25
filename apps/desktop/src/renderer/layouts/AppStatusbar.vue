@@ -15,6 +15,9 @@
         :title="item.title ?? item.text"
         @click="item.onClick?.()"
       >
+        <template v-if="item.icon" #icon>
+          <AppIcon :name="iconName(item.icon)" :size="14" />
+        </template>
         {{ item.text }}
       </NButton>
     </div>
@@ -32,6 +35,9 @@
         :title="item.title ?? item.text"
         @click="item.onClick?.()"
       >
+        <template v-if="item.icon" #icon>
+          <AppIcon :name="iconName(item.icon)" :size="14" />
+        </template>
         {{ item.text }}
       </NButton>
       <NDropdown
@@ -90,7 +96,7 @@ import { computed, h, onMounted, watch } from 'vue';
 import { NButton, NDropdown, type DropdownOption } from 'naive-ui';
 import type { ThemeSource } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
-import AppIcon from '@/components/AppIcon.vue';
+import AppIcon, { APP_ICON_NAMES, type AppIconName } from '@/components/AppIcon.vue';
 import { dropdownMenuProps } from '@/app/menu-props';
 import { usePluginRuntimeStore } from '@/plugin-runtime/runtime.store';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
@@ -103,6 +109,12 @@ const props = defineProps<{
 }>();
 
 const pluginRuntime = usePluginRuntimeStore();
+
+/**
+ * 把插件声明的图标名转为 AppIcon 名称（未知名称会渲染为空）。
+ */
+const iconName = (name: string): AppIconName =>
+  (APP_ICON_NAMES as readonly string[]).includes(name) ? (name as AppIconName) : 'spark';
 const pluginItems = computed(() => ({
   left: pluginRuntime.statusItems.filter((item) => item.align === 'left'),
   right: pluginRuntime.statusItems.filter((item) => item.align === 'right')

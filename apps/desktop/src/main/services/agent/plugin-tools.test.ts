@@ -23,7 +23,8 @@ const manifest = {
     commands: [],
     settings: [],
     skins: [],
-    startup: []
+    startup: [],
+    navigation: []
   }
 };
 

@@ -12,7 +12,9 @@ import type {
   PluginSkinSelection,
   PluginStartupChangedPayload,
   PluginStartupSelection,
-  PluginWorkspaceEntry
+  PluginWorkspaceEntry,
+  PluginNetResponse,
+  PluginNetRequestInit
 } from '../plugin';
 import type { Result } from './result';
 import type { McpServerStatus, McpTestResult } from '../mcp';
@@ -346,6 +348,14 @@ export interface NexusBridge {
     onChanged: (handler: (plugins: PluginPublic[]) => void) => Unsubscribe;
     /** 订阅推送给插件的领域事件（独立于 agent 事件通道） */
     onEvent: (handler: (event: NexusEvent) => void) => Unsubscribe;
+    netFetch: (
+      pluginId: string,
+      url: string,
+      init?: PluginNetRequestInit
+    ) => Promise<Result<PluginNetResponse>>;
+    secretsGet: (pluginId: string, key: string) => Promise<Result<{ value: string | null }>>;
+    secretsSet: (pluginId: string, key: string, value: string) => Promise<Result<{ ok: boolean }>>;
+    secretsDelete: (pluginId: string, key: string) => Promise<Result<{ ok: boolean }>>;
     storageGet: (pluginId: string, key: string) => Promise<Result<unknown>>;
     storageSet: (pluginId: string, key: string, value: unknown) => Promise<Result<{ ok: boolean }>>;
     storageDelete: (pluginId: string, key: string) => Promise<Result<{ ok: boolean }>>;

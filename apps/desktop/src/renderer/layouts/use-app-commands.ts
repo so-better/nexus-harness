@@ -38,9 +38,27 @@ export const useAppCommands = (options: AppCommandOptions) => {
   const commandPaletteOpen = ref(false);
   const registry = new CommandRegistry();
   const recentCommands = new Map<string, number>();
+  const dynamicCommands = ref<PaletteCommand[]>([]);
+  const dynamicRuns = new Map<string, () => void | Promise<void>>();
 
   const openCommandPalette = async (): Promise<void> => {
     commandPaletteOpen.value = true;
+    try {
+      const picks = await options.pluginRuntime.collectQuickPicks();
+      dynamicRuns.clear();
+      dynamicCommands.value = picks.map((pick) => {
+        dynamicRuns.set(pick.id, pick.run);
+        return {
+          id: pick.id,
+          title: pick.title,
+          source: pick.source,
+          icon: 'spark' as const
+        };
+      });
+    } catch (error) {
+      dynamicCommands.value = [];
+      console.error('收集插件快速选择失败', error);
+    }
   };
 
   const toggleCommandPalette = (): void => {
@@ -72,6 +90,11 @@ export const useAppCommands = (options: AppCommandOptions) => {
         await options.pluginRuntime.activateForCommand(commandId);
         const command = options.pluginRuntime.commands.get(commandId);
         await command?.handler();
+        return;
+      }
+      const dynamic = dynamicRuns.get(id);
+      if (dynamic) {
+        await dynamic();
         return;
       }
       await registry.execute(id);
@@ -173,7 +196,8 @@ export const useAppCommands = (options: AppCommandOptions) => {
         ...(command.shortcut ? { shortcut: command.shortcut } : {}),
         source: t('commands.plugin'),
         icon: 'plug' as const
-      }))
+      })),
+      ...dynamicCommands.value
     ];
   });
 

@@ -124,6 +124,7 @@ import ChangelogModal from '@/components/ChangelogModal.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
 import PluginSkinLayer from '@/plugin-runtime/components/PluginSkinLayer.vue';
 import PluginViewModal from '@/plugin-runtime/components/PluginViewModal.vue';
+import { setAppMessageApi } from '@/app/app-message';
 import { usePluginRuntimeStore } from '@/plugin-runtime/runtime.store';
 import AppStatusbar from './AppStatusbar.vue';
 import AppTitleBar from './AppTitleBar.vue';
@@ -146,6 +147,7 @@ const TerminalPanel = defineAsyncComponent(
   () => import('@/modules/terminal/components/TerminalPanel.vue')
 );
 const message = useMessage();
+setAppMessageApi(message);
 const dialog = useDialog();
 const { sessions: sessionList, activeId } = storeToRefs(sessions);
 const { providers, providerId, modelId, models, roots, runningBySession } = storeToRefs(chat);
@@ -363,6 +365,7 @@ onBeforeUnmount(() => {
   unsubscribeGeneralSettings?.();
   unsubscribeGeneralSettings = undefined;
   delete document.documentElement.dataset.skin;
+  setAppMessageApi(undefined);
   chat.dispose();
   pluginRuntime.dispose().catch(() => undefined);
 });

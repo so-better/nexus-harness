@@ -10,7 +10,10 @@ import { IPC_CHANNELS } from '@shared/ipc/channels';
 import {
   pluginIdSchema,
   pluginLogInputSchema,
+  pluginNetFetchInputSchema,
   pluginNotifyInputSchema,
+  pluginSecretInputSchema,
+  pluginSecretSetInputSchema,
   pluginReportErrorInputSchema,
   pluginSetEnabledInputSchema,
   pluginSettingsSetInputSchema,
@@ -18,12 +21,14 @@ import {
   pluginStorageSetInputSchema,
   pluginWorkspaceListInputSchema,
   pluginWorkspaceReadInputSchema,
+  type PluginNetResponse,
   type PluginPublic,
   type PluginWorkspaceEntry
 } from '@shared/plugin';
 import { fail, ok, type Result } from '@shared/ipc/result';
 import { getPluginHost } from '../services/plugins/plugin-host-instance';
 import { importPluginDirectory } from '../services/plugins/plugin-import-service';
+import { pluginNetworkFetch } from '../services/plugins/plugin-net';
 import { getAppDataPaths } from '../services/storage/paths';
 import { getDatabase } from '../services/storage/database';
 
@@ -214,6 +219,76 @@ export const registerPluginIpc = (): void => {
         return fail('PLUGIN_PERMISSION_DENIED', '缺少 storage 权限');
       }
       host.deleteStorage(pluginId, key);
+      return ok({ ok: true });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.pluginNetFetch,
+    async (_event, rawInput: unknown): Promise<Result<PluginNetResponse>> => {
+      const parsed = pluginNetFetchInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '网络请求参数不合法');
+      const plugin = host.list().find((item) => item.id === parsed.data.pluginId);
+      try {
+        return ok(
+          await pluginNetworkFetch(plugin, {
+            url: parsed.data.url,
+            ...(parsed.data.method === undefined ? {} : { method: parsed.data.method }),
+            ...(parsed.data.headers === undefined ? {} : { headers: parsed.data.headers }),
+            ...(parsed.data.body === undefined ? {} : { body: parsed.data.body }),
+            ...(parsed.data.timeoutMs === undefined ? {} : { timeoutMs: parsed.data.timeoutMs })
+          })
+        );
+      } catch (error) {
+        return fail(
+          'PLUGIN_NETWORK_FAILED',
+          error instanceof Error ? error.message : '网络请求失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.pluginSecretsGet,
+    (_event, rawInput: unknown): Result<{ value: string | null }> => {
+      const parsed = pluginSecretInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '密钥参数不合法');
+      if (!canUsePermission(parsed.data.pluginId, 'secrets')) {
+        return fail('PLUGIN_PERMISSION_DENIED', '缺少 secrets 权限');
+      }
+      return ok({ value: host.getSecret(parsed.data.pluginId, parsed.data.key) });
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.pluginSecretsSet,
+    (_event, rawInput: unknown): Result<{ ok: boolean }> => {
+      const parsed = pluginSecretSetInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '密钥参数不合法');
+      if (!canUsePermission(parsed.data.pluginId, 'secrets')) {
+        return fail('PLUGIN_PERMISSION_DENIED', '缺少 secrets 权限');
+      }
+      try {
+        host.setSecret(parsed.data.pluginId, parsed.data.key, parsed.data.value);
+        return ok({ ok: true });
+      } catch (error) {
+        return fail(
+          'PLUGIN_SECRET_FAILED',
+          error instanceof Error ? error.message : '保存密钥失败'
+        );
+      }
+    }
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.pluginSecretsDelete,
+    (_event, rawInput: unknown): Result<{ ok: boolean }> => {
+      const parsed = pluginSecretInputSchema.safeParse(rawInput);
+      if (!parsed.success) return fail('PLUGIN_INVALID_INPUT', '密钥参数不合法');
+      if (!canUsePermission(parsed.data.pluginId, 'secrets')) {
+        return fail('PLUGIN_PERMISSION_DENIED', '缺少 secrets 权限');
+      }
+      host.deleteSecret(parsed.data.pluginId, parsed.data.key);
       return ok({ ok: true });
     }
   );

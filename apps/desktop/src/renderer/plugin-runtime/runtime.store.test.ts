@@ -33,7 +33,8 @@ const deniedPlugin: PluginPublic = {
     commands: [{ id: 'usage.denied', title: 'Denied usage' }],
     settings: [],
     skins: [],
-    startup: []
+    startup: [],
+    navigation: []
   },
   rendererUrl: `data:text/javascript,${encodeURIComponent(
     "export function activate(ctx) { ctx.commands.register('usage.denied', () => ctx.usage.getStats()); }\n"
@@ -57,7 +58,8 @@ const plugin: PluginPublic = {
     commands: [{ id: 'usage.check', title: 'Check usage' }],
     settings: [],
     skins: [{ id: 'paper', title: 'Paper' }],
-    startup: [{ id: 'intro', title: 'Intro', countdownMs: 2000 }]
+    startup: [{ id: 'intro', title: 'Intro', countdownMs: 2000 }],
+    navigation: []
   },
   rendererUrl: `data:text/javascript,${encodeURIComponent(
     "export function activate(ctx) { ctx.skins.register('paper', () => () => {}); ctx.startup.register('intro', (_el, _ctx, finish) => { finish(); return () => {}; }); ctx.views.register('usage.dashboard', () => () => {}); ctx.commands.register('usage.check', () => ctx.usage.getStats({ bucket: 'day' })); }\n"
@@ -193,7 +195,7 @@ describe('plugin runtime skin selection', () => {
   it('opens a declared plugin view through the host bridge', async () => {
     const runtime = usePluginRuntimeStore();
     await runtime.init();
-    await runtime.openView('usage.dashboard');
+    await runtime.openView('nexus.test-skin', 'usage.dashboard');
 
     expect(runtime.openedView?.id).toBe('usage.dashboard');
     runtime.closeView();

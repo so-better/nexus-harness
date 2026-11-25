@@ -5,7 +5,7 @@
 import { readdir, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { watch, type FSWatcher } from 'node:fs';
-import { Notification, app } from 'electron';
+import { Notification, app, safeStorage } from 'electron';
 import { satisfies } from 'semver';
 import type { DatabaseSync } from 'node:sqlite';
 import type { NexusEvent } from '@shared/events';
@@ -86,6 +86,11 @@ export interface MainPluginContext {
   };
   events: {
     on: (event: string, handler: (payload: unknown, meta: PluginEventMeta) => void) => () => void;
+  };
+  secrets: {
+    get: (key: string) => string | null;
+    set: (key: string, value: string) => void;
+    delete: (key: string) => void;
   };
 }
 
@@ -194,7 +199,8 @@ export class PluginHost {
               commands: [],
               settings: [],
               skins: [],
-              startup: []
+              startup: [],
+              navigation: []
             }
           },
           directory,
@@ -231,6 +237,7 @@ export class PluginHost {
       permissions: record.manifest.permissions,
       activationEvents: record.manifest.activationEvents,
       contributes: record.manifest.contributes,
+      ...(record.manifest.network ? { network: record.manifest.network } : {}),
       ...(record.enabled && record.manifest.renderer
         ? { rendererUrl: `nexus-plugin://${record.manifest.id}/${record.manifest.renderer}` }
         : {}),
@@ -317,6 +324,32 @@ export class PluginHost {
     this.options.db
       .prepare('DELETE FROM plugin_storage WHERE plugin_id = ? AND key = ?')
       .run(pluginId, key);
+  }
+
+  /** 密钥使用独立键前缀 + 系统安全存储加密。 */
+  private secretKey(key: string): string {
+    return `__secret__:${key}`;
+  }
+
+  getSecret(pluginId: string, key: string): string | null {
+    const raw = this.getStorage(pluginId, this.secretKey(key));
+    if (typeof raw !== 'string') return null;
+    try {
+      if (!safeStorage?.isEncryptionAvailable?.()) return null;
+      return safeStorage.decryptString(Buffer.from(raw, 'base64'));
+    } catch {
+      return null;
+    }
+  }
+
+  setSecret(pluginId: string, key: string, value: string): void {
+    if (!safeStorage?.isEncryptionAvailable?.()) throw new Error('系统不支持安全存储');
+    const encrypted = safeStorage.encryptString(value).toString('base64');
+    this.setStorage(pluginId, this.secretKey(key), encrypted);
+  }
+
+  deleteSecret(pluginId: string, key: string): void {
+    this.deleteStorage(pluginId, this.secretKey(key));
   }
 
   getSettings(pluginId: string): Record<string, PluginSettingValue> {
@@ -468,6 +501,23 @@ export class PluginHost {
             };
             record.disposables.push(dispose);
             return dispose;
+          }
+        },
+        secrets: {
+          get: (key) => {
+            if (!record.manifest.permissions.includes('secrets'))
+              throw new Error('缺少 secrets 权限');
+            return this.getSecret(record.manifest.id, key);
+          },
+          set: (key, value) => {
+            if (!record.manifest.permissions.includes('secrets'))
+              throw new Error('缺少 secrets 权限');
+            this.setSecret(record.manifest.id, key, value);
+          },
+          delete: (key) => {
+            if (!record.manifest.permissions.includes('secrets'))
+              throw new Error('缺少 secrets 权限');
+            this.deleteSecret(record.manifest.id, key);
           }
         }
       };

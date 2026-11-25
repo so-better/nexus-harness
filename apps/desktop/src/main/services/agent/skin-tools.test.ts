@@ -110,7 +110,8 @@ describe('skin tools', () => {
         commands: [],
         settings: [],
         skins: [{ id: 'aurora', title: 'Aurora' }],
-        startup: []
+        startup: [],
+        navigation: []
       }
     };
     pluginHost.plugins = [

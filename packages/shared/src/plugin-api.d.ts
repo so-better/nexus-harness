@@ -19,6 +19,29 @@ export interface PluginUsageSummary {
   cost?: number;
 }
 
+export interface PluginQuickPickItem {
+  id: string;
+  title: string;
+  description?: string;
+  run: () => void | Promise<void>;
+}
+
+export type PluginQuickPickProvider = () => PluginQuickPickItem[] | Promise<PluginQuickPickItem[]>;
+
+export interface PluginNetResponse {
+  ok: boolean;
+  status: number;
+  headers: Record<string, string>;
+  text: string;
+}
+
+export interface PluginNetRequestInit {
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD';
+  headers?: Record<string, string>;
+  body?: string;
+  timeoutMs?: number;
+}
+
 export interface PluginSlotContext {
   location: string;
   sessionId?: string;
@@ -41,6 +64,8 @@ export interface PluginStatusBarItem {
   text: string;
   align?: 'left' | 'right';
   title?: string;
+  /** AppIcon 名称（可选） */
+  icon?: string;
   onClick?: () => void;
 }
 
@@ -112,6 +137,8 @@ export interface PluginContext {
   pluginId: string;
   commands: {
     register: (id: string, handler: () => void | Promise<void>) => Disposable;
+    /** 命令面板打开时收集的动态条目 */
+    registerProvider: (id: string, provider: PluginQuickPickProvider) => Disposable;
   };
   views: {
     register: (id: string, mount: PluginViewMount) => Disposable;
@@ -148,11 +175,32 @@ export interface PluginContext {
     error: (message: string) => void;
   };
   notifications: {
+    /** 系统（桌面）通知 */
     show: (message: string, level?: 'info' | 'warning' | 'error') => void;
+    /** 应用内消息提示（toast） */
+    message: (message: string, level?: 'info' | 'warning' | 'error') => void;
   };
   workspace: {
     readFile: (path: string) => Promise<string>;
     list: (dir?: string) => Promise<PluginWorkspaceEntry[]>;
+  };
+  /** 受控网络；仅能访问 manifest.network.hosts 白名单域名 */
+  net: {
+    fetch: (url: string, init?: PluginNetRequestInit) => Promise<PluginNetResponse>;
+  };
+  /** 加密密钥存储（系统安全存储）；按插件隔离 */
+  secrets: {
+    get: (key: string) => Promise<string | null>;
+    set: (key: string, value: string) => Promise<void>;
+    delete: (key: string) => Promise<void>;
+  };
+  /** 后台任务：最小 5s 间隔，插件停用时清理 */
+  jobs: {
+    every: (intervalMs: number, handler: () => void | Promise<void>) => Disposable;
+  };
+  /** 输入区：插入文本到当前输入框 */
+  composer: {
+    insert: (text: string) => void;
   };
 }
 

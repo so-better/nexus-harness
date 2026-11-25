@@ -124,10 +124,11 @@
  * 输入区：消息发送、文件引用和模型/工作区选择。
  */
 
-import { computed, ref, toRef, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, toRef, watch } from 'vue';
 import { NInput, NPopover, type InputInst } from 'naive-ui';
 import type { MessageFileReference } from '@shared/events';
 import { buildSkillPrompt } from '@shared/skills';
+import { subscribeComposerInsert } from '@/composables/composer-bus';
 import type { SkillSummary } from '@shared/skills';
 import type {
   AgentMode,
@@ -191,6 +192,19 @@ const inputRef = ref<InputInst | null>(null);
 const selectedSkill = ref<SkillSummary>();
 const fileInput = ref<HTMLInputElement | null>(null);
 const placeholder = computed(() => t('chat.composerPlaceholder'));
+
+let unsubscribeInsert: (() => void) | undefined;
+onMounted(() => {
+  unsubscribeInsert = subscribeComposerInsert((text) => {
+    if (!text) return;
+    draft.value = draft.value ? `${draft.value} ${text}` : text;
+    inputRef.value?.focus();
+  });
+});
+onBeforeUnmount(() => {
+  unsubscribeInsert?.();
+  unsubscribeInsert = undefined;
+});
 
 const { attachments, uploading, hasAttachments, addFiles, remove, clear } = useComposerAttachments({
   sessionId: computed(() => props.sessionId),
