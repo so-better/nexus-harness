@@ -80,6 +80,22 @@ export interface AgentLoopResult {
 
 const DEFAULT_MAX_STEPS = 10;
 const DEFAULT_REASONING_BUDGET_CHARS = 12_000;
+/**
+ * 连续“同一工具 + 同一参数 + 同一结果”达到该次数即终止，避免无进展烧 token。
+ * 只比较结果，不中途跳过，避免误伤 terminal_wait 之类的轮询调用。
+ */
+const REPEAT_ABORT_THRESHOLD = 6;
+
+/**
+ * 稳定序列化：对对象键排序，避免同义参数因键顺序不同而漏判重复调用。
+ */
+const stableStringify = (value: unknown): string => {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`;
+};
 const REASONING_CORRECTION_PROMPT =
   '你刚才在 reasoning 中起草了完整实现并触及预算。停止在思考中展开完整代码或文件内容；根据任务需要继续：需要工具时调用合适的工具，不需要工具时直接给出结果或执行下一步。';
 
@@ -94,6 +110,10 @@ export class AgentLoop {
   private readonly approvalStatuses = new Map<string, 'approved' | 'rejected'>();
   /** 上一次模型调用返回的真实输入 token，用于下一步校准上下文估算 */
   private lastInputTokens: number | undefined;
+  /** 上一次工具调用的签名、结果与连续次数，用于无进展检测 */
+  private lastCallSignature: string | undefined;
+  private lastCallOutcome: string | undefined;
+  private repeatCount = 0;
 
   constructor(options: AgentLoopOptions) {
     this.options = options;
@@ -244,9 +264,27 @@ export class AgentLoop {
           input: this.options.sanitizeToolInput?.(call) ?? call.arguments
         });
 
+        // 无进展检测：同一工具+参数且返回结果长期不变才终止，避免误伤轮询类工具
+        const signature = `${call.name}\u0000${stableStringify(call.arguments)}`;
+        if (this.shouldAbortForNoProgress(signature)) {
+          const error = {
+            code: 'AGENT_NO_PROGRESS',
+            message: `检测到重复的相同工具调用（${call.name}）且结果未变化，已终止本次执行；请调整方法或提供更多信息。`
+          };
+          this.recordToolFailure(call, error);
+          this.emit('run.failed', { error });
+          return {
+            messages: this.messages,
+            steps: step,
+            toolCalls: this.toolCallCount,
+            finishReason: 'no_progress'
+          };
+        }
+
         const denied = await this.authorizeTool(call);
         if (denied) {
           this.recordToolFailure(call, denied);
+          this.noteOutcome(signature, `denied:${denied.code}`);
           continue;
         }
 
@@ -266,6 +304,11 @@ export class AgentLoop {
             error: toolResult.error ?? { code: 'TOOL_FAILED', message: '工具执行失败' }
           });
         }
+
+        const outcome = toolResult.ok
+          ? toolResult.output
+          : JSON.stringify(toolResult.error ?? { code: 'TOOL_FAILED' });
+        this.noteOutcome(signature, outcome);
 
         const approvalStatus = this.approvalStatuses.get(call.id);
         this.approvalStatuses.delete(call.id);
@@ -488,6 +531,26 @@ export class AgentLoop {
       ...(reasoningLimit ? { reasoningLimit: true } : {}),
       ...(error ? { error } : {})
     };
+  }
+
+  /**
+   * 同一调用且结果已连续相同达到阈值时才终止；结果在变化时视为有进展。
+   */
+  private shouldAbortForNoProgress(signature: string): boolean {
+    return signature === this.lastCallSignature && this.repeatCount >= REPEAT_ABORT_THRESHOLD;
+  }
+
+  /**
+   * 记录本次调用签名与结果；只有签名和结果都与上次相同时才累加重复次数。
+   */
+  private noteOutcome(signature: string, outcome: string): void {
+    if (signature === this.lastCallSignature && outcome === this.lastCallOutcome) {
+      this.repeatCount += 1;
+      return;
+    }
+    this.lastCallSignature = signature;
+    this.lastCallOutcome = outcome;
+    this.repeatCount = 1;
   }
 
   /**

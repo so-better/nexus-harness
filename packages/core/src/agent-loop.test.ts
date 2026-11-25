@@ -368,6 +368,83 @@ describe('AgentLoop', () => {
     expect(calls[1]).toBe(1234);
   });
 
+  it('stops repeated identical tool calls to avoid no progress', async () => {
+    const executeTool = vi.fn(async () => ({ ok: true, output: 'ok' }));
+    const call = (id: string) => ({
+      id,
+      name: 'read_file',
+      arguments: { path: 'a.txt' }
+    });
+    const provider = new MockProvider([
+      { toolCalls: [call('c1')], finishReason: 'tool_calls' },
+      { toolCalls: [call('c2')], finishReason: 'tool_calls' },
+      { toolCalls: [call('c3')], finishReason: 'tool_calls' },
+      { toolCalls: [call('c4')], finishReason: 'tool_calls' },
+      { toolCalls: [call('c5')], finishReason: 'tool_calls' },
+      { toolCalls: [call('c6')], finishReason: 'tool_calls' },
+      { toolCalls: [call('c7')], finishReason: 'tool_calls' },
+      { text: '完成', finishReason: 'stop' }
+    ]);
+    const { bus, events } = createCollector();
+    const loop = new AgentLoop({
+      provider,
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '任务' }],
+      tools: [readTool],
+      permissionGateway: new PermissionGateway(['read']),
+      executeTool,
+      eventBus: bus
+    });
+
+    const result = await loop.run();
+
+    // 前 6 次执行且结果相同；第 7 次在写入前终止
+    expect(executeTool).toHaveBeenCalledTimes(6);
+    expect(result.finishReason).toBe('no_progress');
+    expect(events.find((event) => event.type === 'tool.failed')?.payload).toMatchObject({
+      error: { code: 'AGENT_NO_PROGRESS' }
+    });
+    expect(events.find((event) => event.type === 'run.failed')?.payload).toMatchObject({
+      error: { code: 'AGENT_NO_PROGRESS' }
+    });
+  });
+
+  it('does not stop repeated calls whose output keeps changing', async () => {
+    let polls = 0;
+    const executeTool = vi.fn(async () => ({ ok: true, output: `poll-${(polls += 1)}` }));
+    const call = (id: string) => ({
+      id,
+      name: 'read_file',
+      arguments: { path: 'a.txt' }
+    });
+    const provider = new MockProvider([
+      { toolCalls: [call('c1')], finishReason: 'tool_calls' },
+      { toolCalls: [call('c2')], finishReason: 'tool_calls' },
+      { toolCalls: [call('c3')], finishReason: 'tool_calls' },
+      { toolCalls: [call('c4')], finishReason: 'tool_calls' },
+      { toolCalls: [call('c5')], finishReason: 'tool_calls' },
+      { toolCalls: [call('c6')], finishReason: 'tool_calls' },
+      { toolCalls: [call('c7')], finishReason: 'tool_calls' },
+      { text: '完成', finishReason: 'stop' }
+    ]);
+    const loop = new AgentLoop({
+      provider,
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '任务' }],
+      tools: [readTool],
+      permissionGateway: new PermissionGateway(['read']),
+      executeTool
+    });
+
+    const result = await loop.run();
+
+    // 结果在变化，视为仍有进展，不触发无进展终止
+    expect(executeTool).toHaveBeenCalledTimes(7);
+    expect(result.finishReason).toBe('stop');
+  });
+
   it('fails the run when context preparation fails', async () => {
     const { bus, events } = createCollector();
     const loop = new AgentLoop({
