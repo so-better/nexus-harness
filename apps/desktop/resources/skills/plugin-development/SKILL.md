@@ -16,7 +16,7 @@ metadata:
       usage,
       用户插件
     ]
-  version: 1.3.21
+  version: 1.3.22
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -239,7 +239,7 @@ interface MainPluginContext {
 ## 视图与用量
 
 - 声明 `views` 贡献点并申请 `ui.panel`；`ctx.views.register` 挂载视图，`ctx.views.open(id)` 打开宿主大尺寸视图弹窗。视图的入口和展示位置由插件自行设计，宿主不自动列出。
-- 需要分析数据时申请 `usage:read`，调用 `ctx.usage.getStats({ sessionId?, from?, to?, bucket? })`；返回总量、时间序列、会话、模型和 Provider 分布，不需要读取数据库。
+- 需要分析数据时申请 `usage:read`，调用 `ctx.usage.getStats({ sessionId?, from?, to?, bucket? })`；返回总量（含 `cacheReadTokens` / `cacheWriteTokens` 提示缓存读写的可选字段）、时间序列、会话、模型和 Provider 分布，不需要读取数据库。
 - 视图与命令可按需激活；视图打开失败应给出可诊断错误，不要静默失败。
 
 ## 事件

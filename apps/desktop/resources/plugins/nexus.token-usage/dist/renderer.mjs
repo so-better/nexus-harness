@@ -35,6 +35,8 @@ const labels = () =>
         allTime: 'All time',
         input: 'Input',
         output: 'Output',
+        cacheRead: 'Cache read',
+        cacheWrite: 'Cache write',
         total: 'Total',
         calls: 'Calls',
         byModel: 'By model',
@@ -55,6 +57,8 @@ const labels = () =>
         allTime: '全部时间',
         input: '输入',
         output: '输出',
+        cacheRead: '缓存读',
+        cacheWrite: '缓存写',
         total: '总计',
         calls: '调用',
         byModel: '按模型',
@@ -445,9 +449,18 @@ const buildMetrics = (totals, text) => {
   const metrics = [
     [text.total, formatCompact(totals.totalTokens), formatNumber(totals.totalTokens)],
     [text.input, formatCompact(totals.inputTokens), formatNumber(totals.inputTokens)],
-    [text.output, formatCompact(totals.outputTokens), formatNumber(totals.outputTokens)],
-    [text.calls, formatNumber(totals.calls), formatNumber(totals.calls)]
+    [text.output, formatCompact(totals.outputTokens), formatNumber(totals.outputTokens)]
   ];
+  // 仅在存在缓存用量时展示，避免常见的 0 值占位
+  const cacheRead = totals.cacheReadTokens ?? 0;
+  const cacheWrite = totals.cacheWriteTokens ?? 0;
+  if (cacheRead) {
+    metrics.push([text.cacheRead, formatCompact(cacheRead), formatNumber(cacheRead)]);
+  }
+  if (cacheWrite) {
+    metrics.push([text.cacheWrite, formatCompact(cacheWrite), formatNumber(cacheWrite)]);
+  }
+  metrics.push([text.calls, formatNumber(totals.calls), formatNumber(totals.calls)]);
   for (const [label, value, title] of metrics) {
     const card = create('article', 'nh-token-usage__metric');
     const body = create('div', 'nh-token-usage__metric-body');
@@ -592,7 +605,7 @@ const injectStyles = (element) => {
     .nh-token-usage__hero-stat strong { color: var(--nh-color-text-primary); font-family: var(--nh-font-mono); font-size: 20px; font-weight: 600; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
     .nh-token-usage__metrics {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       gap: 20px;
     }
     .nh-token-usage__metric {
