@@ -1318,7 +1318,7 @@ ${assistant.slice(0, 3_000)}`;
             runId
           });
         }
-        if (call.name.startsWith('terminal_')) {
+        if (call.name.startsWith('terminal_') || call.name === 'open_system_terminal') {
           return executeTerminalTool(call.name, call.arguments, {
             sessionId: input.sessionId,
             ...(hooks.signal ? { signal: hooks.signal } : {}),

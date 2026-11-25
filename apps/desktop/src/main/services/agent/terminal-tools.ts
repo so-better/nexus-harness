@@ -12,6 +12,7 @@ import {
   type TerminalSettings
 } from '@shared/ipc/contracts';
 import { terminalService } from '../terminal/terminal-service';
+import { openSystemTerminal } from '../terminal/open-system-terminal';
 import { loadTerminalSettings } from '../settings/terminal-settings';
 import { applyTerminalSettings } from '../settings/terminal-settings-service';
 
@@ -37,6 +38,12 @@ const createSchema = z
   })
   .strict();
 const closeSchema = z.object({ terminalId: z.string().min(1) }).strict();
+const openSystemTerminalSchema = z
+  .object({
+    cwd: z.string().min(1).optional(),
+    command: z.string().min(1).max(10_000).optional()
+  })
+  .strict();
 const readSchema = z
   .object({
     terminalId: z.string().min(1),
@@ -178,7 +185,19 @@ export const terminalToolDefinitions: AgentToolDefinition[] = [
     { terminalId: { type: 'string' } },
     ['terminalId'],
     true
-  )
+  ),
+  {
+    name: 'open_system_terminal',
+    description:
+      '在系统终端（macOS Terminal / Windows 命令提示符）打开已授权目录并可选执行命令；不捕获输出，仅在用户明确要求时使用。',
+    permission: 'execute',
+    requiresApproval: true,
+    inputSchema: {
+      type: 'object',
+      properties: { cwd: { type: 'string' }, command: { type: 'string' } },
+      additionalProperties: false
+    }
+  }
 ];
 
 const success = (value: unknown): ToolExecutionResult => ({
@@ -279,6 +298,39 @@ export const executeTerminalTool = async (
       return failure('TERMINAL_INVALID_INPUT', '参数不合法');
     }
     return success({ terminals: listForSession(options) });
+  }
+
+  if (name === 'open_system_terminal') {
+    const parsed = openSystemTerminalSchema.safeParse(input);
+    if (!parsed.success) {
+      return failure('TERMINAL_INVALID_INPUT', '系统终端参数不合法');
+    }
+    const requested = parsed.data.cwd ?? (await resolveDefaultCwd(options.rootPaths));
+    if (!requested) {
+      return failure('TERMINAL_WORKSPACE_REQUIRED', '请先选择工作区后再打开系统终端');
+    }
+    const cwdResult = await resolveAuthorizedCwd(requested, options.rootPaths);
+    if ('error' in cwdResult) return failure('TERMINAL_INVALID_CWD', cwdResult.error);
+    if (parsed.data.command) {
+      const danger = detectDangerousCommand(parsed.data.command);
+      if (danger) return failure('COMMAND_BLOCKED', danger);
+    }
+    try {
+      await openSystemTerminal({
+        cwd: cwdResult.cwd,
+        ...(parsed.data.command ? { command: parsed.data.command } : {})
+      });
+    } catch (error) {
+      return failure(
+        'TERMINAL_OPEN_FAILED',
+        error instanceof Error ? error.message : '打开系统终端失败'
+      );
+    }
+    return success({
+      opened: true,
+      cwd: cwdResult.cwd,
+      ...(parsed.data.command ? { command: parsed.data.command } : {})
+    });
   }
 
   if (name === 'terminal_update_settings') {

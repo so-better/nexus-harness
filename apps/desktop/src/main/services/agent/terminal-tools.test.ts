@@ -8,6 +8,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TerminalSessionPublic } from '@shared/ipc/contracts';
 
+const openSystemTerminal = vi.hoisted(() => vi.fn(async () => undefined));
+
 const mocks = vi.hoisted(() => ({
   list: vi.fn<() => TerminalSessionPublic[]>(() => []),
   create: vi.fn(),
@@ -27,6 +29,8 @@ vi.mock('electron', () => ({
   app: { getPath: () => '' },
   BrowserWindow: { getAllWindows: () => mocks.windows }
 }));
+
+vi.mock('../terminal/open-system-terminal', () => ({ openSystemTerminal }));
 
 vi.mock('../terminal/terminal-service', () => ({
   terminalService: {
@@ -71,6 +75,8 @@ describe('terminal tools', () => {
     mocks.write.mockReturnValue(true);
     mocks.setAiAccess.mockReset();
     mocks.setAiAccess.mockReturnValue(true);
+    openSystemTerminal.mockReset();
+    openSystemTerminal.mockResolvedValue(undefined);
   });
 
   afterEach(async () => {
@@ -88,7 +94,8 @@ describe('terminal tools', () => {
       { name: 'terminal_read', requiresApproval: false, permission: 'read' },
       { name: 'terminal_wait', requiresApproval: false, permission: 'read' },
       { name: 'terminal_write', requiresApproval: true, permission: 'write' },
-      { name: 'terminal_close', requiresApproval: true, permission: 'write' }
+      { name: 'terminal_close', requiresApproval: true, permission: 'write' },
+      { name: 'open_system_terminal', requiresApproval: true, permission: 'execute' }
     ]);
   });
 
@@ -333,5 +340,45 @@ describe('terminal tools', () => {
       { sessionId: 'session-1', settingsDir }
     );
     expect(foreign).toMatchObject({ ok: false, error: { code: 'TERMINAL_NOT_FOUND' } });
+  });
+
+  it('opens the system terminal in an authorized directory', async () => {
+    const result = await executeTerminalTool(
+      'open_system_terminal',
+      { command: 'npm run dev' },
+      { sessionId: 'session-1', rootPaths: [cwd] }
+    );
+    expect(result.ok).toBe(true);
+    expect(openSystemTerminal).toHaveBeenCalledWith({
+      cwd: await realpath(cwd),
+      command: 'npm run dev'
+    });
+  });
+
+  it('rejects system terminal requests outside roots or with dangerous commands', async () => {
+    const outside = await executeTerminalTool(
+      'open_system_terminal',
+      { cwd: '/' },
+      { sessionId: 'session-1', rootPaths: [cwd] }
+    );
+    expect(outside).toMatchObject({ ok: false, error: { code: 'TERMINAL_INVALID_CWD' } });
+
+    const noWorkspace = await executeTerminalTool(
+      'open_system_terminal',
+      { command: 'ls' },
+      { sessionId: 'session-1' }
+    );
+    expect(noWorkspace).toMatchObject({
+      ok: false,
+      error: { code: 'TERMINAL_WORKSPACE_REQUIRED' }
+    });
+
+    const dangerous = await executeTerminalTool(
+      'open_system_terminal',
+      { command: 'rm -rf /' },
+      { sessionId: 'session-1', rootPaths: [cwd] }
+    );
+    expect(dangerous).toMatchObject({ ok: false, error: { code: 'COMMAND_BLOCKED' } });
+    expect(openSystemTerminal).not.toHaveBeenCalled();
   });
 });

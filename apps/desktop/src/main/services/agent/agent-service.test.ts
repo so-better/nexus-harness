@@ -276,6 +276,7 @@ describe('AgentService', () => {
       'terminal_wait',
       'terminal_write',
       'terminal_close',
+      'open_system_terminal',
       'cache_get_info',
       'cache_clear',
       'backup_status',

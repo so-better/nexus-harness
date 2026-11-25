@@ -129,7 +129,7 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 - 审批在会话流内联展示，不弹网页式模态框。
 - 状态栏提供终端入口，打开右侧终端面板；默认宽度 600px、最大 720px 且保证对话区至少 480px，可拖拽调整，终端固定深色。
 - 终端支持多标签；关闭运行中的终端需二次确认；标签右键支持关闭当前/其他/右侧与重命名。
-- AI 执行命令时使用独立终端标签，不主动打开面板、不启动外部终端程序；用户可自行打开面板查看，命令结束后同一标签切换为交互式 shell。Run 结束后自动关闭未被用户输入且无前台进程的 AI 终端，`detach` 与用户操作过的终端保留。无工作区时终端默认位于文件系统根目录。
+- AI 执行命令时使用独立终端标签，不主动打开面板、不主动启动外部终端程序；用户可自行打开面板查看，命令结束后同一标签切换为交互式 shell。仅在用户明确要求时，经审批可调用 `open_system_terminal` 打开系统终端并投递命令（不捕获输出）。Run 结束后自动关闭未被用户输入且无前台进程的 AI 终端，`detach` 与用户操作过的终端保留。无工作区时终端默认位于文件系统根目录。
 - 会话头展示当前工作区，支持选择、替换或移除工作区。
 - 支持同时打开多个会话标签；切换标签不中断后台 Run。
 - 会话支持重命名、置顶、导出与跨会话搜索；搜索入口在侧栏与命令面板。
@@ -635,7 +635,7 @@ interface ProviderCapabilities {
 | `task` | read | 否（子代理；`general` 内的写/执行仍需审批） |
 | `write_file` | write | 是 |
 | `apply_patch` | write | 是 |
-| `run_command` | execute | 是 |
+| `run_command` / `open_system_terminal` | execute | 是 |
 | `ask_user` | read | 否（等待用户） |
 | `open_url` | network | 是 |
 | `memory_search` / `memory_read` | read | 否 |
@@ -772,7 +772,7 @@ interface ProviderCapabilities {
 - AI 命令必须在已授权目录内执行，`cwd` 必须来自目录 root；用户显式打开的终端可位于工作区，无工作区时为根目录；AI 命令环境变量做白名单清理，禁止继承无关密钥。
 - 危险命令必须拦截：提权、关机/重启、格式化磁盘、`rm -rf` 根目录或通配符、`curl | sh`、fork 炸弹等；解释器 `-c` 内嵌命令递归检查。
 - 内置终端由 node-pty 持有 PTY，支持多标签与进程组终止；macOS 支持 `Cmd+K` 清屏；用户终端默认 cwd 为当前工作区，无工作区时为文件系统根目录。
-- AI 的 `run_command` 在终端标签中执行并捕获输出；连续命令复用同一空闲命令标签（用户输入过或终端有前台进程时不复用），`detach: true` 才新建独立标签；复用标签时 `terminal_read` 只返回当前命令输出，面板保留历史。不主动打开面板、不启动外部终端程序；用户可打开面板查看，命令仍受审批、危险命令拦截、超时与输出上限约束。常驻服务可传 `detach: true`，立即返回 terminalId，不设置超时，退出后标签保留为已退出状态。AI 可通过 `terminal_read` / `terminal_wait` 读取当前会话内已授予 AI 访问权限的用户终端或 AI 终端输出，通过 `terminal_write` 写入文本或按键；用户终端需在面板中显式授予 AI 访问，或由 AI 调用 `terminal_request_access` 发起审批；写入与关闭需要审批，终端内容可能包含敏感信息；未授权时工具返回 `TERMINAL_ACCESS_DENIED` 并提示用户在终端标签右键授权。AI 的 `terminal_create` 和 `terminal_write` 只能使用已授权工作区目录，并受危险命令拦截约束。
+- AI 的 `run_command` 在终端标签中执行并捕获输出；连续命令复用同一空闲命令标签（用户输入过或终端有前台进程时不复用），`detach: true` 才新建独立标签；复用标签时 `terminal_read` 只返回当前命令输出，面板保留历史。不主动打开面板、不主动启动外部终端程序；用户可打开面板查看，命令仍受审批、危险命令拦截、超时与输出上限约束。常驻服务可传 `detach: true`，立即返回 terminalId，不设置超时，退出后标签保留为已退出状态。AI 可通过 `terminal_read` / `terminal_wait` 读取当前会话内已授予 AI 访问权限的用户终端或 AI 终端输出，通过 `terminal_write` 写入文本或按键；用户终端需在面板中显式授予 AI 访问，或由 AI 调用 `terminal_request_access` 发起审批；写入与关闭需要审批，终端内容可能包含敏感信息；未授权时工具返回 `TERMINAL_ACCESS_DENIED` 并提示用户在终端标签右键授权。AI 的 `terminal_create` 和 `terminal_write` 只能使用已授权工作区目录，并受危险命令拦截约束。仅在用户明确要求时，可经审批调用 `open_system_terminal` 打开系统终端（macOS Terminal / Windows 命令提示符）并投递命令；不捕获输出、不接管后续交互，结果由用户在系统终端查看。
 - 关闭正在运行的终端必须二次确认；命令内不允许自行追加 `&` 或 `nohup`。
 - 超时后终止整个进程树；Windows 使用 ConPTY，macOS/Linux 使用 PTY。
 - 输出超过上限时截断并标记；默认上限可配置，避免一次命令撑爆上下文。
@@ -1299,7 +1299,7 @@ export function activate(ctx) {
 - 终端支持指定目录新建、当前目录新建、内容搜索、右键复制/粘贴/全选/清空、URL 与路径链接、拖入文件、`Cmd+K` 清屏；终端设置包含 shell、字体、字号、滚回与选中即复制。
 - 终端有前台命令或后台子进程运行时，关闭前必须通过 popover 二次确认并终止其进程组；空闲 shell 直接关闭；终端固定深色，颜色取自应用深色调色板。
 - 终端按窗口和会话归属；窗口销毁或会话删除时必须终止关联 PTY，避免孤儿进程。
-- AI 在需要执行命令时创建终端标签但不主动打开面板；命令结束后同一标签切换为交互式 shell，用户可打开面板查看和继续操作；Run 结束后未被用户输入且无前台进程的 AI 终端自动关闭，`detach` 与用户操作过的保留。
+- AI 在需要执行命令时创建终端标签但不主动打开面板；命令结束后同一标签切换为交互式 shell，用户可打开面板查看和继续操作；Run 结束后未被用户输入且无前台进程的 AI 终端自动关闭，`detach` 与用户操作过的保留；仅在用户明确要求时，可经审批调用 `open_system_terminal` 打开系统终端，不接管、不读取输出。
 - 通知内容不包含密钥与敏感路径；点击通知跳转到对应会话。
 - 后台或无人值守 Run 必须有硬预算（见 4.9）。
 
@@ -1308,7 +1308,7 @@ export function activate(ctx) {
 - 每个 Session 有一个当前模式 `plan | build`，默认 `build`；未信任工作区默认 `plan`，确认信任后可切换。
 - Plan 模式只读：允许 `read_file`、`list_dir`、`glob`、`grep`、`ask_user`、`search_skills`、`read_skill`。
 - Plan 模式禁止所有有副作用的本地操作：不写文件、不执行命令、不联网、不启动 MCP、不创建检查点、不修改设置与授权。
-- Plan 模式下 `write_file`、`apply_patch`、`run_command`、`checkpoint`、`generate_image` 与全部 MCP 工具均不可用。
+- Plan 模式下 `write_file`、`apply_patch`、`run_command`、`open_system_terminal`、`checkpoint`、`generate_image` 与全部 MCP 工具均不可用。
 - Plan 产出目标、步骤、涉及文件、风险与验收标准；用户确认后切换到 Build 执行。
 - Build 模式按工具权限与审批策略执行全部允许的工具。
 - 模式切换只能由用户操作，Agent 不能自行从 Plan 切到 Build。
