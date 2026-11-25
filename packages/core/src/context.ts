@@ -49,8 +49,12 @@ export interface ContextPreparation {
 
 /**
  * 在每次模型调用前准备消息；失败会中止 Run。
+ * actualInputTokens 为上一次模型调用返回的真实输入 token，用于校准字符估算。
  */
-export type ContextPreparer = (messages: ChatMessage[]) => Promise<ContextPreparation>;
+export type ContextPreparer = (
+  messages: ChatMessage[],
+  actualInputTokens?: number
+) => Promise<ContextPreparation>;
 
 /**
  * 上下文无法压入预算时抛出，交由 Agent 循环转为 run.failed。
@@ -108,26 +112,57 @@ export const estimateTextTokens = (text: string): number => {
 };
 
 /**
- * 单条消息的 token 估算，包含角色与工具调用参数开销。
+ * 单条消息的 token 估算，包含角色、工具调用参数与 reasoning。
  */
 export const estimateMessageTokens = (message: ChatMessage): number => {
   const toolCallTokens = message.toolCalls
     ? estimateTextTokens(JSON.stringify(message.toolCalls))
     : 0;
-  return 4 + estimateTextTokens(message.content) + toolCallTokens;
+  const reasoningTokens = message.reasoning ? estimateTextTokens(message.reasoning) : 0;
+  return 4 + estimateTextTokens(message.content) + reasoningTokens + toolCallTokens;
 };
 
 /**
- * 整段上下文与工具 schema 的 token 估算。
+ * 会回传 reasoning 的最近 assistant 消息条数，与 OpenAI 兼容协议保持一致的保守上界。
+ */
+export const MAX_REASONING_PASSBACK_MESSAGES = 8;
+
+/**
+ * 计算需要计入预算的 reasoning 下标：只取最近若干条带 reasoning 的 assistant 消息。
+ * 更早的 reasoning 不会被回传，计入会高估上下文、导致不必要的压缩。
+ */
+const selectReasoningIndices = (messages: readonly ChatMessage[]): Set<number> => {
+  const indices = new Set<number>();
+  for (
+    let index = messages.length - 1;
+    index >= 0 && indices.size < MAX_REASONING_PASSBACK_MESSAGES;
+    index -= 1
+  ) {
+    const message = messages[index];
+    if (message?.role === 'assistant' && message.reasoning?.trim()) indices.add(index);
+  }
+  return indices;
+};
+
+/**
+ * 整段上下文与工具 schema 的 token 估算；reasoning 只计入会被回传的最近若干条。
  */
 export const estimateMessagesTokens = (
   messages: readonly ChatMessage[],
   tools?: readonly ToolSchema[]
 ): number => {
-  const messageTokens = messages.reduce(
-    (total, message) => total + estimateMessageTokens(message),
-    0
-  );
+  const reasoningIndices = selectReasoningIndices(messages);
+  let messageTokens = 0;
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (!message) continue;
+    const toolCallTokens = message.toolCalls
+      ? estimateTextTokens(JSON.stringify(message.toolCalls))
+      : 0;
+    const reasoningTokens =
+      reasoningIndices.has(index) && message.reasoning ? estimateTextTokens(message.reasoning) : 0;
+    messageTokens += 4 + estimateTextTokens(message.content) + reasoningTokens + toolCallTokens;
+  }
   const toolTokens = tools?.length ? estimateTextTokens(JSON.stringify(tools)) : 0;
   return messageTokens + toolTokens;
 };

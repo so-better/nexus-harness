@@ -96,6 +96,8 @@ export class AgentLoop {
   private seq = 1;
   private toolCallCount = 0;
   private readonly approvalStatuses = new Map<string, 'approved' | 'rejected'>();
+  /** 上一次模型调用返回的真实输入 token，用于下一步校准上下文估算 */
+  private lastInputTokens: number | undefined;
 
   constructor(options: AgentLoopOptions) {
     this.options = options;
@@ -322,7 +324,10 @@ export class AgentLoop {
     const preparer = this.options.prepareContext;
     if (!preparer) return;
 
-    const prepared = await preparer(this.messages);
+    // 把上一步真实输入 token 交给准备器校准估算；消费后清空，避免重复用于无关请求
+    const actualInputTokens = this.lastInputTokens;
+    this.lastInputTokens = undefined;
+    const prepared = await preparer(this.messages, actualInputTokens);
     if (prepared.usage && this.options.providerName) {
       this.emit('usage.recorded', {
         provider: this.options.providerName,
@@ -441,6 +446,7 @@ export class AgentLoop {
             toolCalls.push(event.toolCall);
             break;
           case 'usage':
+            this.lastInputTokens = event.usage.inputTokens;
             if (this.options.providerName) {
               this.emit('usage.recorded', {
                 messageId,

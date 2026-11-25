@@ -336,6 +336,38 @@ describe('AgentLoop', () => {
     expect(events.some((event) => event.type === 'usage.recorded')).toBe(true);
   });
 
+  it('passes the previous real usage to the context preparer for calibration', async () => {
+    const calls: Array<number | undefined> = [];
+    const provider = new MockProvider([
+      {
+        toolCalls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'a.txt' } }],
+        usage: { inputTokens: 1234, outputTokens: 10 },
+        finishReason: 'tool_calls'
+      },
+      { text: '完成', finishReason: 'stop' }
+    ]);
+
+    const loop = new AgentLoop({
+      provider,
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '任务' }],
+      tools: [readTool],
+      permissionGateway: new PermissionGateway(['read']),
+      executeTool: async () => ({ ok: true, output: 'ok' }),
+      prepareContext: async (messages, actualInputTokens) => {
+        calls.push(actualInputTokens);
+        return { messages };
+      }
+    });
+
+    await loop.run();
+
+    // 第一步还没有真实 usage；第二步应拿到上一步 provider 返回的输入 token
+    expect(calls[0]).toBeUndefined();
+    expect(calls[1]).toBe(1234);
+  });
+
   it('fails the run when context preparation fails', async () => {
     const { bus, events } = createCollector();
     const loop = new AgentLoop({

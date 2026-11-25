@@ -25,6 +25,26 @@ describe('context budget', () => {
     );
   });
 
+  it('counts reasoning tokens that providers may pass back', () => {
+    const base = estimateMessagesTokens([{ role: 'assistant' as const, content: 'hi' }]);
+    const withReasoning = estimateMessagesTokens([
+      { role: 'assistant' as const, content: 'hi', reasoning: 'x'.repeat(400) }
+    ]);
+
+    expect(withReasoning).toBe(base + 100);
+  });
+
+  it('only counts reasoning for the most recent assistant messages', () => {
+    const plain = Array.from({ length: 10 }, () => ({
+      role: 'assistant' as const,
+      content: 'hi'
+    }));
+    const withReasoning = plain.map((message) => ({ ...message, reasoning: 'x'.repeat(400) }));
+
+    // 只有最近 8 条 reasoning 会被回传并计入预算
+    expect(estimateMessagesTokens(withReasoning)).toBe(estimateMessagesTokens(plain) + 8 * 100);
+  });
+
   it('reserves output and safety tokens', () => {
     const budget = createContextBudget({ contextWindow: 10_000, maxOutputTokens: 2_000 });
 
