@@ -1435,7 +1435,7 @@ interface AskUserAnswer {
 
 - 皮肤激活时由宿主在 `<html data-skin="active">` 上统一覆盖 surface token，不能只依赖 `.nh-layout` 局部变量，否则 Teleport 弹层拿不到。
 - 可跟随皮肤的主内容面使用 `--nh-surface-base` / `--nh-surface-elevated` / `--nh-surface-hover` / `--nh-surface-input`；不要再直接使用 `--nh-color-bg-base` 或 `--nh-color-bg-elevated` 作为内容表面。悬浮与选中背景也应优先使用 surface token。
-- 弹窗、Popover、Dropdown、Dialog 使用不透明的 `--nh-surface-overlay` / `--nh-surface-popover`，保证可读性；终端、Monaco、代码块、启动动画属于固定不透明区域，不跟随皮肤。
+- 弹窗、Popover、Dropdown、Dialog 使用不透明的 `--nh-surface-overlay` / `--nh-surface-popover`，保证可读性；终端、Monaco、启动动画属于固定不透明区域，不跟随皮肤；Markdown 代码块可使用半透明 surface 与适度背景模糊跟随皮肤，但必须保证代码对比度。
 - 层级统一使用 `--nh-z-skin`、`--nh-z-content`、`--nh-z-chrome`、`--nh-z-overlay` / `--nh-z-overlay-raised`，禁止新增散落的 z-index 魔法值。
 
 ### 5.3 动效与质感

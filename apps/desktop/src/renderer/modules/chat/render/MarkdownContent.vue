@@ -49,11 +49,36 @@ const handleClick = async (event: MouseEvent): Promise<void> => {
 
 <style lang="less">
 .nh-markdown {
+  --md-code-surface: color-mix(in srgb, var(--nh-surface-elevated) 82%, transparent);
+  --md-code-head-bg: color-mix(in srgb, var(--nh-color-text-primary) 4%, transparent);
+  --md-code-fg: var(--nh-color-text-primary);
+  --md-code-muted: var(--nh-color-text-secondary);
+  --md-code-border: color-mix(in srgb, var(--nh-color-accent) 14%, var(--nh-border-subtle));
+  --md-code-control-bg: var(--nh-color-bg-base);
+  --md-code-keyword: var(--nh-color-accent);
+  --md-code-string: var(--nh-color-success);
+  --md-code-number: var(--nh-color-warning);
+  --md-code-title: var(--nh-color-idle);
+
   min-width: 0;
   color: var(--nh-color-text-primary);
   font-size: 14px;
   line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+// 代码块跟随深浅主题；深色下使用固定的 code token，保证对比度
+:root[data-theme='dark'] .nh-markdown {
+  --md-code-surface: color-mix(in srgb, var(--nh-color-code-bg) 86%, transparent);
+  --md-code-head-bg: color-mix(in srgb, var(--nh-color-code-text) 4%, transparent);
+  --md-code-fg: var(--nh-color-code-text);
+  --md-code-muted: color-mix(in srgb, var(--nh-color-code-text) 55%, transparent);
+  --md-code-border: color-mix(in srgb, var(--nh-color-code-text) 14%, transparent);
+  --md-code-control-bg: color-mix(in srgb, var(--nh-color-code-text) 7%, transparent);
+  --md-code-keyword: color-mix(in srgb, var(--nh-color-accent) 55%, var(--nh-color-code-text));
+  --md-code-string: color-mix(in srgb, var(--nh-color-success) 55%, var(--nh-color-code-text));
+  --md-code-number: color-mix(in srgb, var(--nh-color-warning) 55%, var(--nh-color-code-text));
+  --md-code-title: color-mix(in srgb, var(--nh-color-idle) 55%, var(--nh-color-code-text));
 }
 
 .nh-markdown h1,
@@ -123,12 +148,14 @@ const handleClick = async (event: MouseEvent): Promise<void> => {
 }
 
 .nh-markdown code {
-  padding: 1px 4px;
-  border-radius: 4px;
-  background: var(--nh-color-bg-hover);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nh-border-subtle) 78%, transparent);
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--nh-color-text-primary) 8%, transparent);
+  box-shadow: none;
   font-family: var(--nh-font-mono);
   font-size: 0.92em;
+  font-weight: 500;
+  box-decoration-break: clone;
 }
 
 .nh-markdown hr {
@@ -301,9 +328,10 @@ const handleClick = async (event: MouseEvent): Promise<void> => {
   position: relative;
   margin: 0 0 15px;
   overflow: hidden;
-  border: 1px solid var(--nh-border-subtle);
+  border: 1px solid var(--md-code-border);
   border-radius: 9px;
-  background: var(--nh-surface-elevated);
+  background: var(--md-code-surface);
+  backdrop-filter: blur(12px) saturate(120%);
 }
 
 .nh-markdown .md-code-head {
@@ -311,66 +339,79 @@ const handleClick = async (event: MouseEvent): Promise<void> => {
   align-items: center;
   justify-content: space-between;
   padding: 6px 12px;
-  border-bottom: 1px solid var(--nh-border-subtle);
-  color: var(--nh-color-text-secondary);
+  border-bottom: 1px solid var(--md-code-border);
+  background: var(--md-code-head-bg);
+  color: var(--md-code-muted);
   font-size: 11px;
 }
 
 .nh-markdown .md-code-head button {
   padding: 3px 7px;
-  border: 1px solid var(--nh-border-subtle);
+  border: 1px solid var(--md-code-border);
   border-radius: 5px;
-  background: var(--nh-surface-base);
-  color: var(--nh-color-text-secondary);
+  background: var(--md-code-control-bg);
+  color: var(--md-code-muted);
   font-size: 11px;
   cursor: pointer;
+}
+
+.nh-markdown .md-code-head button:hover {
+  background: color-mix(in srgb, var(--md-code-fg) 10%, transparent);
+  color: var(--md-code-fg);
 }
 
 .nh-markdown .md-code-block pre {
   margin: 0;
   padding: 14px 16px;
   overflow-x: auto;
+  color: var(--md-code-fg);
   font-size: 12px;
   line-height: 1.5;
 }
 
 .nh-markdown .md-code-block code {
   padding: 0;
+  border: 0;
+  border-radius: 0;
   background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font-weight: 400;
+  font-size: inherit;
 }
 
 .nh-markdown .hljs {
-  color: var(--nh-color-text-primary);
+  color: var(--md-code-fg);
   background: transparent;
 }
 
 .nh-markdown .hljs-comment,
 .nh-markdown .hljs-quote {
-  color: var(--nh-color-text-secondary);
+  color: var(--md-code-muted);
   font-style: italic;
 }
 
 .nh-markdown .hljs-keyword,
 .nh-markdown .hljs-selector-tag,
 .nh-markdown .hljs-literal {
-  color: var(--nh-color-accent);
+  color: var(--md-code-keyword);
 }
 
 .nh-markdown .hljs-string,
 .nh-markdown .hljs-attr,
 .nh-markdown .hljs-template-tag {
-  color: var(--nh-color-success);
+  color: var(--md-code-string);
 }
 
 .nh-markdown .hljs-number,
 .nh-markdown .hljs-symbol {
-  color: var(--nh-color-warning);
+  color: var(--md-code-number);
 }
 
 .nh-markdown .hljs-title,
 .nh-markdown .hljs-section,
 .nh-markdown .hljs-function {
-  color: var(--nh-color-idle);
+  color: var(--md-code-title);
 }
 
 .nh-markdown.is-streaming > :last-child::after {
