@@ -28,4 +28,18 @@ describe('list_dir', () => {
     expect(result.output).toContain('file a.txt');
     expect(result.output.indexOf('a.txt')).toBeLessThan(result.output.indexOf('b-dir'));
   });
+
+  it('paginates entries with offset and limit', async () => {
+    await writeFile(join(root, 'c.txt'), 'c');
+
+    const page = await runListDirTool(
+      { roots: [root], primaryRoot: root },
+      { offset: 1, limit: 1 }
+    );
+
+    // 排序后为 a.txt / b-dir / c.txt，offset=1 取到 b-dir
+    expect(page.output).toContain('b-dir');
+    expect(page.output).not.toContain('a.txt');
+    expect(page.output).toContain('offset=2');
+  });
 });

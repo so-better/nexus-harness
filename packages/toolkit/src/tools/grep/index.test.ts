@@ -31,4 +31,24 @@ describe('grep', () => {
     expect(result.output).toContain('src/b.md:1:');
     expect(result.output).not.toContain('ignored.ts');
   });
+
+  it('paginates matches with offset and limit', async () => {
+    await writeFile(join(root, 'multi.txt'), 'paginate-me 1\npaginate-me 2\npaginate-me 3\n');
+
+    const first = await runGrepTool(
+      { roots: [root], primaryRoot: root },
+      { pattern: 'paginate-me', limit: 2 }
+    );
+    expect(first.output).toContain('paginate-me 1');
+    expect(first.output).toContain('paginate-me 2');
+    expect(first.output).not.toContain('paginate-me 3');
+    expect(first.output).toContain('offset=2');
+
+    const second = await runGrepTool(
+      { roots: [root], primaryRoot: root },
+      { pattern: 'paginate-me', offset: 2, limit: 2 }
+    );
+    expect(second.output).toContain('paginate-me 3');
+    expect(second.output).not.toContain('offset=');
+  });
 });
