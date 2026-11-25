@@ -654,6 +654,8 @@ interface ProviderCapabilities {
 
 `read_file` 支持字节 `offset` / `maxBytes` 分页；`grep` / `glob` / `list_dir` 支持 `offset` / `limit` 分页，结果被截断时输出会给出继续读取的 offset。
 
+工具输出超过输入预算约 35% 时立即落 Artifact：`output` 保留全文供 UI 与审计，`modelOutput` 只含头尾预览与 `read_artifact` 引用；`read_artifact` 单次返回字符数按预算夹紧，避免小窗口一次取回过大的分片。
+
 `save_*` 工具写入 `<userData>/files`，不触发工作区写审批，但必须记录 `file.created` 并受大小与类型限制。`save_file` 支持文本与 Base64 二进制内容；`save_word` / `save_pdf` 使用 Markdown，`save_ppt` 支持模板化版式。
 
 本地二进制读取已接入：按 MIME 与扩展名选择专用读取器；图片作为视觉内容发送，PDF/Office/文本等可抽取格式转文本，其他二进制只保存文件引用，原始内容不得直接进入上下文。
