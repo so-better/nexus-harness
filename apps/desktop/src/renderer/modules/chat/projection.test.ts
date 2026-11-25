@@ -592,6 +592,47 @@ describe('projectEvents', () => {
     });
   });
 
+  it('accumulates duration and recomputes characters when merging assistant steps', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'run.started',
+        payload: { model: 'mock-model' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'message.completed',
+        payload: {
+          messageId: 'assistant-1',
+          role: 'assistant',
+          content: '你好',
+          durationMs: 100
+        }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'message.completed',
+        payload: {
+          messageId: 'assistant-2',
+          role: 'assistant',
+          content: '世界',
+          durationMs: 200
+        }
+      })
+    ]);
+
+    const assistants = projection.messages.filter((message) => message.role === 'assistant');
+    expect(assistants).toHaveLength(1);
+    expect(assistants[0]?.content).toBe('你好\n\n世界');
+    expect(assistants[0]).toMatchObject({ durationMs: 300, contentChars: 6 });
+  });
+
   it('projects reasoning deltas onto the assistant message', () => {
     const projection = projectEvents([
       event({

@@ -113,6 +113,13 @@ const mergeAssistantRuns = (messages: ChatMessageView[], askUsers: ChatAskUser[]
 
     const content = [base.content, message.content].filter(Boolean).join('\n\n');
     base.content = content;
+    // 合并后按最终正文重算字符数
+    base.contentChars = [...content].length;
+    // 累加各步模型生成耗时，反映整轮助手的生成时间
+    if (message.durationMs !== undefined) {
+      base.durationMs = (base.durationMs ?? 0) + message.durationMs;
+    }
+    if (message.error) base.error = true;
     if (message.reasoning) base.reasoning = `${base.reasoning ?? ''}${message.reasoning}`;
     base.streaming = Boolean(base.streaming || message.streaming);
     const knownTools = new Set(base.toolCalls.map((tool) => tool.id));
