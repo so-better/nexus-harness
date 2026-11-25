@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_TOOL_GROUPS, PLAN_TOOL_GROUPS, searchToolsInputSchema } from './tool-groups';
 
 describe('tool-groups', () => {
-  it('defaults to core only', () => {
-    expect([...DEFAULT_TOOL_GROUPS]).toEqual(['core']);
+  it('defaults to core and web', () => {
+    expect([...DEFAULT_TOOL_GROUPS]).toEqual(['core', 'web']);
   });
 
   it('uses read-only management groups as plan base', () => {

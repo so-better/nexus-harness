@@ -72,9 +72,11 @@ export const searchToolsToolDefinition: AgentToolDefinition = {
 };
 
 /**
- * 默认常驻组：仅 core（文件/对话基能力），其余工具由统一筛选或 search_tools 加载。
+ * 默认常驻组：core（文件/对话基能力）与 web（联网检索）。
+ * web 常驻是因为天气、新闻、实时数据等“当前信息”提问无法靠名称/描述关键词稳定召回；
+ * 其余内置工具仍由统一筛选或 search_tools 按需加载。
  */
-export const DEFAULT_TOOL_GROUPS: readonly ToolGroupId[] = ['core'];
+export const DEFAULT_TOOL_GROUPS: readonly ToolGroupId[] = ['core', 'web'];
 
 /**
  * Plan 模式常驻组：除 core 外只为只读管理工具提供载体，写入工具会被白名单过滤。

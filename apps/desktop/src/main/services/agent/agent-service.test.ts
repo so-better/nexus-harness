@@ -244,7 +244,7 @@ describe('AgentService', () => {
 
     expect(result.finishReason).toBe('stop');
     expect(requests[0]?.messages[0]?.content).toContain('无工作区');
-    // 默认仅注入 core（文件工具、ask_user、search_tools、open_url、save_file）
+    // 默认注入 core（文件工具、ask_user、search_tools、open_url、save_file）与 web（联网检索）
     expect(requests[0]?.tools?.map((tool) => tool.name)).toEqual([
       'read_file',
       'list_dir',
@@ -257,7 +257,9 @@ describe('AgentService', () => {
       'search_tools',
       'read_artifact',
       'open_url',
-      'save_file'
+      'save_file',
+      'web_search',
+      'web_fetch'
     ]);
   });
 

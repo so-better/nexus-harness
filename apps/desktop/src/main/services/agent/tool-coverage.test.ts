@@ -36,6 +36,8 @@ const CORE_TOOLS = [
   'read_artifact',
   'open_url',
   'save_file',
+  'web_search',
+  'web_fetch',
   'memory_search',
   'memory_read',
   'search_knowledge',
@@ -48,6 +50,7 @@ const CORE_TOOLS = [
 const CASES: ToolCase[] = [
   // 网络 / 媒体
   { prompt: '联网搜索 TypeScript 最新版本发布说明', tool: 'web_search' },
+  { prompt: '今天北京天气怎么样，需要实时信息', tool: 'web_search' },
   { prompt: '读取这个网页的正文 https://example.com/article', tool: 'web_fetch' },
   { prompt: '从图库搜索城市夜景的图片素材', tool: 'search_images' },
   { prompt: '搜索一段海浪的视频素材', tool: 'search_videos' },
