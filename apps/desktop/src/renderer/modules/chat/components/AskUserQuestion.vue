@@ -74,6 +74,7 @@ const isSelected = (optionId: string): boolean => props.selectedIds.includes(opt
 }
 
 .nh-ask-question__text {
+  margin: 0;
   font-size: 15px;
   font-weight: 500;
   line-height: 1.6;

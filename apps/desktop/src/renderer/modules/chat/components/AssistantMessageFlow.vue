@@ -47,18 +47,31 @@
               @allow-workspace="emit('allow-workspace')"
               @reject-workspace="emit('reject-workspace')"
             />
-            <ApprovalCard
-              v-for="approval in approvalForTool(tool)"
-              :key="approval.id"
-              :approval="approval"
-              :tool="tool"
-              :session-id="sessionId"
-              :message-id="message.id"
-              :run-id="message.runId"
-              :data-approval-id="approval.id"
-              @approve="emit('approve', approval.id)"
-              @reject="emit('reject', approval.id)"
-            />
+            <template v-if="useApprovalPager">
+              <ApprovalPager
+                v-if="tool.id === firstPendingApprovalToolId"
+                :items="pendingApprovalItems"
+                :session-id="sessionId"
+                :message-id="message.id"
+                :run-id="message.runId"
+                @approve="(approvalId) => emit('approve', approvalId)"
+                @reject="(approvalId) => emit('reject', approvalId)"
+              />
+            </template>
+            <template v-else>
+              <ApprovalCard
+                v-for="approval in approvalForTool(tool)"
+                :key="approval.id"
+                :approval="approval"
+                :tool="tool"
+                :session-id="sessionId"
+                :message-id="message.id"
+                :run-id="message.runId"
+                :data-approval-id="approval.id"
+                @approve="emit('approve', approval.id)"
+                @reject="emit('reject', approval.id)"
+              />
+            </template>
           </template>
         </template>
         <template v-else-if="segment.kind === 'ask'">
@@ -143,18 +156,31 @@
               @allow-workspace="emit('allow-workspace')"
               @reject-workspace="emit('reject-workspace')"
             />
-            <ApprovalCard
-              v-for="approval in approvalForTool(entry.tool)"
-              :key="approval.id"
-              :approval="approval"
-              :tool="entry.tool"
-              :session-id="sessionId"
-              :message-id="message.id"
-              :run-id="message.runId"
-              :data-approval-id="approval.id"
-              @approve="emit('approve', approval.id)"
-              @reject="emit('reject', approval.id)"
-            />
+            <template v-if="useApprovalPager">
+              <ApprovalPager
+                v-if="entry.tool.id === firstPendingApprovalToolId"
+                :items="pendingApprovalItems"
+                :session-id="sessionId"
+                :message-id="message.id"
+                :run-id="message.runId"
+                @approve="(approvalId) => emit('approve', approvalId)"
+                @reject="(approvalId) => emit('reject', approvalId)"
+              />
+            </template>
+            <template v-else>
+              <ApprovalCard
+                v-for="approval in approvalForTool(entry.tool)"
+                :key="approval.id"
+                :approval="approval"
+                :tool="entry.tool"
+                :session-id="sessionId"
+                :message-id="message.id"
+                :run-id="message.runId"
+                :data-approval-id="approval.id"
+                @approve="emit('approve', approval.id)"
+                @reject="emit('reject', approval.id)"
+              />
+            </template>
           </template>
         </div>
       </div>
@@ -197,6 +223,7 @@
  */
 
 import type { AskUserAnswer } from '@shared/ask-user';
+import { computed } from 'vue';
 import type {
   ChatApproval,
   ChatAskUser,
@@ -217,6 +244,7 @@ import {
 } from '../message-flow-lookups';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 import ApprovalCard from './ApprovalCard.vue';
+import ApprovalPager from './ApprovalPager.vue';
 import AskUserCard from './AskUserCard.vue';
 import OutputFileCard from './OutputFileCard.vue';
 import InlineMediaFile from './InlineMediaFile.vue';
@@ -252,6 +280,25 @@ const emit = defineEmits<{
 
 const approvalForTool = (tool: ChatToolCall): ChatApproval[] =>
   getApprovalForTool(tool, props.approvals);
+
+/**
+ * 收集本消息内所有待审批项，按工具创建顺序排列。
+ */
+const pendingApprovalItems = computed<Array<{ approval: ChatApproval; tool: ChatToolCall }>>(() => {
+  const items: Array<{ approval: ChatApproval; tool: ChatToolCall }> = [];
+  for (const tool of props.message.toolCalls) {
+    for (const approval of approvalForTool(tool)) {
+      items.push({ approval, tool });
+    }
+  }
+  return items;
+});
+
+/**
+ * 多个待审批共用一次分页展示，避免审批卡自上而下铺开。
+ */
+const useApprovalPager = computed(() => pendingApprovalItems.value.length > 1);
+const firstPendingApprovalToolId = computed(() => pendingApprovalItems.value[0]?.tool.id);
 
 const isWorkspaceAuthTool = (toolId: string): boolean =>
   getIsWorkspaceAuthTool(toolId, props.relatedWorkspaceAuth);

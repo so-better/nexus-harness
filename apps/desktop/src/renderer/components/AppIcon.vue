@@ -45,6 +45,7 @@
     <path v-else-if="name === 'moon'" d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z" />
     <path v-else-if="name === 'monitor'" d="M4 5h16v11H4zM9 20h6M12 16v4" />
     <path v-else-if="name === 'chevron-left'" d="m15 6-6 6 6 6" />
+    <path v-else-if="name === 'chevron-right'" d="m9 6 6 6-6 6" />
     <path
       v-else-if="name === 'database'"
       d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3ZM4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"
@@ -138,6 +139,7 @@ export type AppIconName =
   | 'arrow-up'
   | 'arrow-down'
   | 'chevron-left'
+  | 'chevron-right'
   | 'globe'
   | 'key'
   | 'database'

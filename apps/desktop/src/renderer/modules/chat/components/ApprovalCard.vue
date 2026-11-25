@@ -6,6 +6,9 @@
     @approve="emit('approve')"
     @reject="emit('reject')"
   >
+    <template v-if="$slots['footer-left']" #footer-left>
+      <slot name="footer-left" />
+    </template>
     <p v-if="!detailTool || approval.scope !== detailTool.name" class="nh-approval-scope">
       {{ approval.scope }}
     </p>

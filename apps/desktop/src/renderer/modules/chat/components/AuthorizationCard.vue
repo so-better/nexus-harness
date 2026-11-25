@@ -11,27 +11,32 @@
       <p v-if="warning" class="nh-authorization__warning">{{ warning }}</p>
     </div>
     <div class="nh-authorization__actions">
-      <NButton
-        size="medium"
-        secondary
-        :disabled="Boolean(submitting)"
-        :loading="submitting === 'reject'"
-        @click="submit('reject')"
-      >
-        <template #icon><AppIcon name="close" :size="14" /></template>
-        {{ t('chat.reject') }}
-      </NButton>
-      <NButton
-        size="medium"
-        type="primary"
-        secondary
-        :disabled="Boolean(submitting)"
-        :loading="submitting === 'approve'"
-        @click="submit('approve')"
-      >
-        <template #icon><AppIcon name="check" :size="14" /></template>
-        {{ t('chat.approve') }}
-      </NButton>
+      <div v-if="$slots['footer-left']" class="nh-authorization__actions-left">
+        <slot name="footer-left" />
+      </div>
+      <div class="nh-authorization__actions-right">
+        <NButton
+          size="medium"
+          secondary
+          :disabled="Boolean(submitting)"
+          :loading="submitting === 'reject'"
+          @click="submit('reject')"
+        >
+          <template #icon><AppIcon name="close" :size="14" /></template>
+          {{ t('chat.reject') }}
+        </NButton>
+        <NButton
+          size="medium"
+          type="primary"
+          secondary
+          :disabled="Boolean(submitting)"
+          :loading="submitting === 'approve'"
+          @click="submit('approve')"
+        >
+          <template #icon><AppIcon name="check" :size="14" /></template>
+          {{ t('chat.approve') }}
+        </NButton>
+      </div>
     </div>
   </section>
 </template>
@@ -137,11 +142,25 @@ onBeforeUnmount(() => {
   display: flex;
   grid-area: actions;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  align-items: flex-start;
-  justify-content: flex-end;
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--nh-border-subtle);
+}
+
+.nh-authorization__actions-left {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.nh-authorization__actions-right {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
 }
 </style>
