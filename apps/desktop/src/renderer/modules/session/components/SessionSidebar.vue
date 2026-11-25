@@ -364,6 +364,12 @@ const groups = computed<SessionGroup[]>(() => {
   background: var(--nh-surface-elevated);
 }
 
+// 皮肤下降低侧栏不透明度，让列表卡片真正透出背景
+:root[data-skin='active'] .nh-sidebar {
+  background: color-mix(in srgb, var(--nh-surface-elevated) 80%, transparent);
+  backdrop-filter: blur(18px) saturate(120%);
+}
+
 .nh-sidebar__header {
   display: flex;
   height: 56px;

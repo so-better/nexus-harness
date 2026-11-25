@@ -231,7 +231,7 @@ const relativeTime = computed(() => {
   padding: 11px 12px;
   border: 1px solid color-mix(in srgb, var(--nh-border-subtle) 82%, transparent);
   border-radius: 10px;
-  background: var(--nh-surface-base);
+  background: color-mix(in srgb, var(--nh-surface-base) 72%, transparent);
   color: var(--nh-color-text-primary);
   cursor: pointer;
   text-align: left;
@@ -242,12 +242,35 @@ const relativeTime = computed(() => {
 
 .nh-session-item:hover {
   border-color: color-mix(in srgb, var(--nh-color-accent) 26%, var(--nh-border-subtle));
+  background: color-mix(in srgb, var(--nh-surface-hover) 72%, transparent);
+}
+
+.nh-session-item:focus-visible {
+  outline: 2px solid var(--nh-color-accent);
+  outline-offset: 2px;
 }
 
 .nh-session-item--active {
   border-color: color-mix(in srgb, var(--nh-color-accent) 50%, var(--nh-border-subtle));
-  background: color-mix(in srgb, var(--nh-color-accent) 16%, var(--nh-surface-base));
+  background: color-mix(
+    in srgb,
+    var(--nh-color-accent) 14%,
+    color-mix(in srgb, var(--nh-surface-base) 72%, transparent)
+  );
   box-shadow: var(--nh-highlight);
+}
+
+// 皮肤激活时卡片只保留描边，hover/active 才轻染，尽量透出皮肤
+:root[data-skin='active'] .nh-session-item {
+  background: transparent;
+}
+
+:root[data-skin='active'] .nh-session-item:hover {
+  background: color-mix(in srgb, var(--nh-color-bg-hover) 32%, transparent);
+}
+
+:root[data-skin='active'] .nh-session-item--active {
+  background: color-mix(in srgb, var(--nh-color-accent) 14%, transparent);
 }
 
 .nh-session-item__icon {
