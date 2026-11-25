@@ -196,9 +196,19 @@ export class AnthropicProvider implements ChatProvider {
 
     let response = await fetchImpl(endpointUrl, requestInit(buildBody(true)));
     if (!response.ok && (response.status === 400 || response.status === 422)) {
-      // 兼容不支持 prompt cache 的 Anthropic 兼容代理：去掉 cache_control 重试一次
-      await response.text().catch(() => '');
-      response = await fetchImpl(endpointUrl, requestInit(buildBody(false)));
+      const status = response.status;
+      const detail = (await response.text().catch(() => '')).slice(0, 2000);
+      // 只在错误明确指向 prompt cache 时才去掉 cache_control 重试，避免对无关 4xx 重复请求
+      if (/cache[_ ]?control|prompt[ _]?cach/i.test(detail)) {
+        response = await fetchImpl(endpointUrl, requestInit(buildBody(false)));
+      } else {
+        yield {
+          type: 'error',
+          code: `PROVIDER_HTTP_${status}`,
+          message: detail || `模型服务返回 HTTP ${status}`
+        };
+        return;
+      }
     }
 
     if (!response.ok) {

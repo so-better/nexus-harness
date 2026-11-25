@@ -194,6 +194,29 @@ describe('AnthropicProvider', () => {
     ).toBeUndefined();
   });
 
+  it('does not retry 4xx errors unrelated to prompt cache', async () => {
+    const fetchImpl = vi.fn(async () => new Response('invalid model name', { status: 400 }));
+
+    const provider = new AnthropicProvider({
+      baseUrl: 'https://example.com/v1',
+      apiKey: 'key',
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+    const events: ProviderStreamEvent[] = [];
+    for await (const event of provider.stream({
+      model: 'claude',
+      messages: [{ role: 'user', content: 'hi' }],
+      tools: [{ name: 'a', description: 'A', inputSchema: { type: 'object' } }]
+    })) {
+      events.push(event);
+    }
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(events.find((event) => event.type === 'error')).toMatchObject({
+      code: 'PROVIDER_HTTP_400'
+    });
+  });
+
   it('keeps malformed tool arguments as a structured value', async () => {
     const fetchImpl = vi.fn(async () => {
       const body = new ReadableStream<Uint8Array>({
