@@ -204,17 +204,7 @@
     />
     <ThinkingIndicator v-if="showThinking" />
   </div>
-  <PluginSlot
-    location="message.assistant.footer"
-    :context="{
-      location: 'message.assistant.footer',
-      sessionId,
-      messageId: message.id,
-      runId: message.runId,
-      role: 'assistant',
-      usage: message.usage
-    }"
-  />
+  <PluginSlot location="message.assistant.footer" :context="footerContext" />
 </template>
 
 <script setup lang="ts">
@@ -243,6 +233,7 @@ import {
   toolLookup as getToolLookup
 } from '../message-flow-lookups';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
+import type { SlotContext } from '@/plugin-runtime/slot-registry';
 import ApprovalCard from './ApprovalCard.vue';
 import ApprovalPager from './ApprovalPager.vue';
 import AskUserCard from './AskUserCard.vue';
@@ -267,6 +258,8 @@ const props = defineProps<{
   contentText: string;
   isTyping: boolean;
   showThinking: boolean;
+  /** 子代理/嵌套消息不展示耗时与字数统计 */
+  hideStats?: boolean | undefined;
 }>();
 
 const emit = defineEmits<{
@@ -277,6 +270,21 @@ const emit = defineEmits<{
   'allow-workspace': [];
   'reject-workspace': [];
 }>();
+
+/**
+ * 消息尾部插槽上下文：错误气泡与子代理不展示耗时/字数，避免噪声。
+ */
+const footerContext = computed<SlotContext>(() => ({
+  location: 'message.assistant.footer',
+  sessionId: props.sessionId,
+  messageId: props.message.id,
+  runId: props.message.runId,
+  role: 'assistant',
+  usage: props.message.usage,
+  ...(props.hideStats || props.message.error
+    ? {}
+    : { durationMs: props.message.durationMs, contentChars: props.message.contentChars })
+}));
 
 const approvalForTool = (tool: ChatToolCall): ChatApproval[] =>
   getApprovalForTool(tool, props.approvals);

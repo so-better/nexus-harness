@@ -29,6 +29,10 @@ export interface PluginSlotContext {
   approvalId?: string;
   fileId?: string;
   usage?: PluginUsageSummary;
+  /** 本条助手消息的生成耗时（毫秒） */
+  durationMs?: number;
+  /** 本条助手消息正文的字符数（Unicode 码点） */
+  contentChars?: number;
   model?: string;
 }
 

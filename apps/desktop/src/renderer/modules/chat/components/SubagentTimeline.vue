@@ -13,6 +13,7 @@
       :workspace-auth="workspaceAuth ?? null"
       :workspace-auth-tool-exists="Boolean(workspaceAuth)"
       :actions-disabled="true"
+      hide-message-stats
       @approve="(approvalId) => emit('approve', approvalId)"
       @reject="(approvalId) => emit('reject', approvalId)"
       @allow-workspace="emit('allow-workspace')"

@@ -167,7 +167,10 @@ export class AgentLoop {
       }
 
       const assistantMessageId = randomUUID();
+      const stepStartedAt = Date.now();
       const result = await this.runStep(assistantMessageId);
+      // 单条助手消息的生成耗时（仅本步模型调用，不含上下文准备）；时钟回拨时夹紧为非负
+      const stepDurationMs = Math.max(0, Date.now() - stepStartedAt);
 
       if (this.options.signal?.aborted) {
         this.emit('run.cancelled', { reason: 'aborted' });
@@ -222,7 +225,8 @@ export class AgentLoop {
           messageId: assistantMessageId,
           role: 'assistant',
           content: result.text,
-          ...(result.reasoning ? { reasoning: result.reasoning } : {})
+          ...(result.reasoning ? { reasoning: result.reasoning } : {}),
+          durationMs: stepDurationMs
         });
       }
 

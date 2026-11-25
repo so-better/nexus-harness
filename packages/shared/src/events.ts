@@ -98,6 +98,8 @@ export const eventPayloadSchemas = {
     role: z.enum(['user', 'assistant']),
     content: z.string(),
     reasoning: z.string().optional(),
+    /** 本条助手消息的生成耗时（毫秒）；用于消息尾部的耗时展示 */
+    durationMs: z.number().nonnegative().optional(),
     error: z.boolean().optional(),
     images: z.array(z.object({ path: z.string(), mime: z.string() })).optional(),
     references: z.array(messageFileReferenceSchema).max(64).optional(),

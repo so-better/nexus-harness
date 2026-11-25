@@ -63,6 +63,7 @@
           :content-text="contentText"
           :is-typing="isTyping"
           :show-thinking="showThinking"
+          :hide-stats="hideMessageStats"
           @answer-user="(requestId, answers) => emit('answer-user', requestId, answers)"
           @approve="(approvalId) => emit('approve', approvalId)"
           @reject="(approvalId) => emit('reject', approvalId)"
@@ -141,6 +142,8 @@ const props = withDefaults(
     workspaceAuth?: WorkspaceAuthorizationRequest | null;
     workspaceAuthToolExists?: boolean;
     runThinking?: boolean;
+    /** 子代理/嵌套消息不展示耗时与字数统计 */
+    hideMessageStats?: boolean;
   }>(),
   {
     grouped: false,
@@ -152,7 +155,8 @@ const props = withDefaults(
     actionsDisabled: false,
     workspaceAuth: null,
     workspaceAuthToolExists: false,
-    runThinking: false
+    runThinking: false,
+    hideMessageStats: false
   }
 );
 

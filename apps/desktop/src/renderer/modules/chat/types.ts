@@ -98,6 +98,12 @@ export interface ChatMessageView {
   compactionNotice?: boolean;
   runId?: string;
   usage?: ChatUsage;
+  /** 本条助手消息的模型生成耗时（毫秒），不含工具执行与上下文准备 */
+  durationMs?: number;
+  /** 本条助手消息正文的字符数（Unicode 码点；复合 emoji 可能计多个） */
+  contentChars?: number;
+  /** 是否为错误气泡（合成助手消息），用于抑制尾部统计 */
+  error?: boolean;
   files?: OutputFile[];
   references?: MessageFileReference[];
   attachments?: MessageAttachment[];

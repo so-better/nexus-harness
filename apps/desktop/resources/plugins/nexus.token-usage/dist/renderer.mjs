@@ -22,6 +22,8 @@ const formatTime = (value) =>
     value
   );
 
+const formatDuration = (ms) => `${(Math.max(0, ms) / 1000).toFixed(1)}s`;
+
 const tokensOf = (usage) => (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0);
 
 const labels = () =>
@@ -144,7 +146,18 @@ const chartIcon = () => {
 const mountUsage = (element, context, session, ctx) => {
   if (session) activeSessionId = context.sessionId;
   const text = labels();
-  const value = usageText(context.usage, session, text);
+  const tokenValue = usageText(context.usage, session, text);
+  // 消息尾部：token · 耗时 · 字符数；会话头仍只显示 token
+  const inlineValue = [
+    context.usage ? tokenValue : '',
+    typeof context.durationMs === 'number' ? formatDuration(context.durationMs) : '',
+    typeof context.contentChars === 'number'
+      ? `${formatNumber(context.contentChars)} ${isEnglish() ? 'chars' : '字'}`
+      : ''
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const value = session ? tokenValue : inlineValue;
   if (!value) return () => undefined;
 
   if (!session) {
@@ -152,6 +165,8 @@ const mountUsage = (element, context, session, ctx) => {
     label.style.cssText = [
       'display:inline-block',
       'margin-top:6px',
+      'max-width:100%',
+      'overflow-wrap:anywhere',
       'color:var(--nh-color-text-secondary)',
       'font-family:var(--nh-font-mono)',
       'font-size:10px',

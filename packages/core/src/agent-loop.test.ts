@@ -619,4 +619,25 @@ describe('AgentLoop', () => {
       }
     });
   });
+
+  it('records a non-negative duration on message.completed', async () => {
+    const { bus, events } = createCollector();
+    const provider = new MockProvider([{ text: '你好', finishReason: 'stop' }]);
+    const loop = new AgentLoop({
+      provider,
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '打招呼' }],
+      eventBus: bus
+    });
+
+    await loop.run();
+
+    const completed = events.find(
+      (event): event is NexusEvent<'message.completed'> => event.type === 'message.completed'
+    );
+    expect(completed?.payload).toMatchObject({ role: 'assistant', content: '你好' });
+    expect(typeof completed?.payload.durationMs).toBe('number');
+    expect(completed?.payload.durationMs).toBeGreaterThanOrEqual(0);
+  });
 });

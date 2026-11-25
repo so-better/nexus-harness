@@ -16,7 +16,7 @@ metadata:
       usage,
       用户插件
     ]
-  version: 1.3.23
+  version: 1.3.24
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -221,6 +221,8 @@ export function activate(ctx) {
 
 插槽挂载在 Shadow DOM 中，插件只负责容器内部内容，不得改变宿主布局、遮挡宿主操作或劫持点击。
 
+插槽上下文只读，包含 `location`、`sessionId`、`runId`、`messageId`、`role`、`usage` 等；AI 消息插槽额外提供 `durationMs`（本条消息的模型生成耗时，毫秒，不含工具执行与上下文准备）与 `contentChars`（正文字符数，Unicode 码点），可用于展示耗时与字数。错误气泡与子代理消息不提供这两项。
+
 ## 主进程 ctx
 
 ```ts
@@ -314,9 +316,17 @@ interface MainPluginContext {
 export function activate(ctx) {
   return ctx.slots.register('hello.footer', (element, context) => {
     const span = document.createElement('span');
-    span.textContent = context.usage
-      ? `本次 ${context.usage.inputTokens + context.usage.outputTokens} tokens`
-      : 'Hello';
+    const parts = [];
+    if (context.usage) {
+      parts.push(`本次 ${context.usage.inputTokens + context.usage.outputTokens} tokens`);
+    }
+    if (typeof context.durationMs === 'number') {
+      parts.push(`${(context.durationMs / 1000).toFixed(1)}s`);
+    }
+    if (typeof context.contentChars === 'number') {
+      parts.push(`${context.contentChars} 字`);
+    }
+    span.textContent = parts.join(' · ') || 'Hello';
     span.style.cssText =
       'display:block;margin-top:6px;color:var(--nh-color-text-secondary);font-size:11px';
     element.appendChild(span);

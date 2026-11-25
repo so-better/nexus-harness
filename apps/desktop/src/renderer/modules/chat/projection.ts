@@ -359,6 +359,9 @@ export const projectEvents = (
         existing.role = payload.role;
         existing.content = payload.content;
         if (payload.reasoning !== undefined) existing.reasoning = payload.reasoning;
+        if (payload.durationMs !== undefined) existing.durationMs = payload.durationMs;
+        existing.contentChars = [...payload.content].length;
+        if (payload.error) existing.error = true;
         existing.streaming = false;
         finishSegments(existing);
         const timeline = ensureTimeline(existing);
@@ -411,6 +414,9 @@ export const projectEvents = (
           role: payload.role,
           content: payload.content,
           ...(payload.reasoning !== undefined ? { reasoning: payload.reasoning } : {}),
+          ...(payload.durationMs === undefined ? {} : { durationMs: payload.durationMs }),
+          contentChars: [...payload.content].length,
+          ...(payload.error ? { error: true } : {}),
           toolCalls: [],
           createdAt: event.ts,
           streaming: false,
@@ -779,6 +785,7 @@ export const projectEvents = (
       content: [pendingFailure.error.message, pendingFailure.error.code]
         .filter(Boolean)
         .join('\n\n'),
+      error: true,
       toolCalls: [],
       createdAt: pendingFailure.event.ts
     });

@@ -569,6 +569,29 @@ describe('projectEvents', () => {
     });
   });
 
+  it('stores per-message duration and character count', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: {
+          messageId: 'assistant-stats',
+          role: 'assistant',
+          content: '你好😀',
+          durationMs: 1234
+        }
+      })
+    ]);
+
+    expect(projection.messages[0]).toMatchObject({
+      durationMs: 1234,
+      // 按 Unicode 码点计数：你 / 好 / 😀 = 3
+      contentChars: 3
+    });
+  });
+
   it('projects reasoning deltas onto the assistant message', () => {
     const projection = projectEvents([
       event({

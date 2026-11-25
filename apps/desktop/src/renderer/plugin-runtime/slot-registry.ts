@@ -24,6 +24,10 @@ export interface SlotContext {
   approvalId?: string | undefined;
   fileId?: string | undefined;
   usage?: UsageSummary | undefined;
+  /** 本条助手消息的生成耗时（毫秒） */
+  durationMs?: number | undefined;
+  /** 本条助手消息正文的字符数（Unicode 码点） */
+  contentChars?: number | undefined;
   model?: string | undefined;
 }
 

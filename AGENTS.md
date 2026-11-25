@@ -989,6 +989,10 @@ interface SlotContext {
   approvalId?: string;
   fileId?: string;
   usage?: UsageSummary;
+  /** 本条助手消息的模型生成耗时（毫秒，不含工具执行与上下文准备） */
+  durationMs?: number;
+  /** 本条助手消息正文的字符数（Unicode 码点） */
+  contentChars?: number;
   model?: string;
 }
 ```
@@ -1027,7 +1031,7 @@ interface SlotContext {
 
 `apps/desktop/resources/plugins/nexus.token-usage` 是插件开发的参考实现，随应用同步到 `<userData>/plugins`，必须持续保持可运行，并演示：
 
-- 通过 `messageSlots` 在会话标题栏和每条 AI 回复尾部分别显示会话与消息 token 用量。
+- 通过 `messageSlots` 在会话标题栏和每条 AI 回复尾部分别显示会话与消息用量；消息尾部同时显示 token、耗时（秒）与字符数。
 - 通过只读 `SlotContext.usage` 读取宿主投影的用量，不自行累计跨会话总量。
 - 通过 `usage:read` 和 `ctx.usage.getStats` 读取会话/全局统计，通过 `views` 与 `ctx.views.open` 打开看板。
 - 通过 `events:usage.recorded` 与事件元数据在看板打开时刷新。
@@ -1994,7 +1998,7 @@ CHANGELOG.md         # 版本变更记录
 | `run.interrupted` | `reason` | 应用中断或崩溃后恢复 |
 | `message.reasoning.delta` | `messageId`、`text` | 推理内容增量，仅用于展示与导出 |
 | `message.delta` | `messageId`、`text` | 流式文本增量 |
-| `message.completed` | `messageId`、`role`、`content`、`reasoning?`、`error?`、`images?`、`references?`、`attachments?` | 消息完成 |
+| `message.completed` | `messageId`、`role`、`content`、`reasoning?`、`durationMs?`、`error?`、`images?`、`references?`、`attachments?` | 消息完成 |
 | `message.edited` | `messageId`、`content`、`references?`、`attachments?` | 用户编辑消息 |
 | `message.regenerated` | `messageId`、`sourceMessageId` | 重新生成回复 |
 | `message.superseded` | `messageId`、`reason` | 旧回复被编辑或重生成替代 |
