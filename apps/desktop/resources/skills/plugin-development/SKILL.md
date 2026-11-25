@@ -16,7 +16,7 @@ metadata:
       usage,
       用户插件
     ]
-  version: 1.3.22
+  version: 1.3.23
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -244,7 +244,8 @@ interface MainPluginContext {
 
 ## 事件
 
-- 回调收到 `(payload, meta)`；`meta` 包含 `type`、`sessionId`、`runId` 和 `ts`，可用于按会话或时间刷新视图。
+- 回调收到 `(payload, meta)`；`meta` 包含 `type`、`sessionId`、`runId`、`ts` 和可选 `parentToolCallId`，可用于按会话或时间刷新视图。
+- `parentToolCallId` 表示子代理内部事件；做会话级统计或展示时应按它过滤，避免把子代理消息当成父会话消息重复统计。
 - 高频 `message.delta` 默认不开放；使用 `message.completed`、`usage.recorded` 等聚合事件。
 - 事件是只读观察，不能修改、拦截或替代审批。
 - 订阅前必须在 manifest 声明 `events:<event>` 或 `events:*`。

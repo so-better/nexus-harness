@@ -164,7 +164,7 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 | 术语 | 含义 |
 | --- | --- |
 | Harness | 承载 Agent 的运行时，负责上下文、工具、权限、事件、回滚与 UI |
-| Agent | 模型驱动的执行循环，当前只有单 Agent |
+| Agent | 模型驱动的执行循环；主 Agent 可派生受限子代理（`explore` 只读 / `general` 完整工具，写/执行仍需审批） |
 | Agent 模式 | `plan` 只读规划，`build` 执行变更 |
 | Ask User | Agent 的结构化提问，暂停 Run 等待用户选择或输入 |
 | Provider | 模型服务商适配器，如 OpenAI 兼容、Anthropic、Ollama |
@@ -627,6 +627,7 @@ interface ProviderCapabilities {
 | `list_dir` / `glob` | read | 否 |
 | `grep` | read | 否 |
 | `read_artifact` | read | 否（读取会话内 Artifact，支持字符 offset 分页） |
+| `task` | read | 否（子代理；`general` 内的写/执行仍需审批） |
 | `write_file` | write | 是 |
 | `apply_patch` | write | 是 |
 | `run_command` | execute | 是 |
@@ -930,7 +931,7 @@ metadata:
 
 #### 事件钩子
 
-- `ctx.events.on(event, handler)` 是插件订阅宿主事件的统一方式；payload 由 `packages/shared` 定义，第二个参数提供 `type`、`sessionId`、`runId` 与 `ts`。
+- `ctx.events.on(event, handler)` 是插件订阅宿主事件的统一方式；payload 由 `packages/shared` 定义，第二个参数提供 `type`、`sessionId`、`runId`、`ts` 与可选 `parentToolCallId`（子代理事件）。
 - 可用于 session、message、tool、approval、usage、file、context、mcp 等领域事件。
 - 事件钩子是只读观察，不得修改、拦截或替代审批；需要拦截的能力必须单独评审并提升权限。
 - 高频事件 `message.delta` 默认不暴露；使用 `message.completed`、`usage.recorded` 等聚合事件。
@@ -1203,6 +1204,7 @@ export function activate(ctx) {
 ### 4.9 Agent 循环与运行控制
 
 - 单次 Run 的循环固定为：构造上下文 → 调用模型 → 收集工具调用 → 执行工具 → 回填结果 → 继续，直到满足停止条件。
+- 主 Agent 可通过 `task` 派生受限子代理（`explore` 只读 / `general` 复用父工具与审批），`task` 同时支持 `prompt`（单个）与 `prompts`（1–4 个并行）；`explore` 只读 / `general` 完整工具（写/执行/联网串行化并仍需审批）。子代理使用独立上下文与压缩，禁止递归 `task`/`ask_user`，只把结论摘要回填父会话；每个子代理完整对话落 Artifact。子代理事件带 `parentToolCallId` 持久化，UI 在 `task` 卡内实时嵌套渲染；父会话历史重建与搜索索引必须跳过这些事件。子代理审批保留原始事件并在嵌套时间线内直接展示与审批，父 Run 状态和通知仍感知阻塞；子代理触发的目录授权通过 `parentToolCallId` 归入 task 卡的嵌套时间线。并行 general 的写文件按真实路径去重冲突，写/执行工具串行化；`run_command` 的间接写不做路径级冲突检测。子代理禁用 `ask_user`，只能自主完成或在结论中说明阻塞。进度与结论通过 `subagent.*` 事件关联父 run，用量汇总到父 run。
 - 停止条件：模型不再调用工具、达到验收标准、用户取消、预算触发、连续无进展、验证反复失败。
 - 预算项为 token、费用与墙钟时间；工具调用次数与步数只作为观测指标，不设默认硬上限。
 - 用户可在设置中为单次 Run 配置可选的工具调用或步数硬上限，默认关闭。
@@ -1988,6 +1990,9 @@ CHANGELOG.md         # 版本变更记录
 | `run.interrupted` | `runId`、`reason` | 应用中断或崩溃后恢复 |
 | `run.budget.exceeded` | `runId`、`budget`、`threshold`、`action` | 预算触发，记录继续或停止 |
 | `run.no_progress` | `runId`、`reason` | 连续无进展，暂停等待用户 |
+| `subagent.started` | `parentToolCallId`、`agent`、`description?` | 子代理开始 |
+| `subagent.progress` | `parentToolCallId`、`name`、`ok?` | 子代理工具进度 |
+| `subagent.completed` | `parentToolCallId`、`agent`、`ok`、`summary`、`steps`、`toolCalls`、`usage?`、`transcriptRef?`、`transcripts?` | 子代理结束并回填结论与用量 |
 | `message.reasoning.delta` | `messageId`、`text` | 推理内容增量，仅用于展示与导出 |
 | `message.delta` | `messageId`、`text` | 流式文本增量 |
 | `message.completed` | `messageId`、`content`、`reasoning` | 消息完成 |

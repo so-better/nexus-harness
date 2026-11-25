@@ -688,7 +688,8 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
           type: event.type,
           sessionId: event.sessionId,
           ts: event.ts,
-          ...(event.runId ? { runId: event.runId } : {})
+          ...(event.runId ? { runId: event.runId } : {}),
+          ...(event.parentToolCallId ? { parentToolCallId: event.parentToolCallId } : {})
         });
       } catch (reason) {
         error.value = reason instanceof Error ? reason.message : String(reason);

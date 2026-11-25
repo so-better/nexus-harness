@@ -54,6 +54,11 @@ export interface PluginEventMeta {
   sessionId: string;
   runId?: string;
   ts: number;
+  /**
+   * 子代理事件所属父级 task 工具调用；父会话事件为 undefined。
+   * 插件可据此过滤或单独统计子代理内部事件。
+   */
+  parentToolCallId?: string;
 }
 
 export type PluginUsageBucket = 'day' | 'hour' | 'run';
@@ -121,7 +126,7 @@ export interface PluginContext {
     add: (item: PluginStatusBarItem) => Disposable;
   };
   events: {
-    on: (event: string, handler: (payload: unknown) => void) => Disposable;
+    on: (event: string, handler: (payload: unknown, meta: PluginEventMeta) => void) => Disposable;
   };
   storage: {
     get: <T>(key: string) => Promise<T | undefined>;

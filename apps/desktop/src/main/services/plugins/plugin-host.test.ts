@@ -6,6 +6,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
+import type { NexusEvent } from '@shared/events';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDatabase } from '../storage/database';
 import { PluginHost } from './plugin-host';
@@ -145,6 +146,56 @@ describe('PluginHost', () => {
     const plugin = host.list().find((item) => item.id === 'nexus.user');
     expect(plugin?.enabled).toBe(false);
     expect(plugin?.error).toContain('缺少 storage 权限');
+  });
+
+  it('exposes parentToolCallId to main-process plugin event handlers', async () => {
+    const state = globalThis as { __nexusPluginEventMeta?: unknown };
+    delete state.__nexusPluginEventMeta;
+    await writeFile(
+      join(pluginsDir, 'nexus.user', 'plugin.json'),
+      JSON.stringify({
+        id: 'nexus.user',
+        name: 'nexus.user',
+        version: '1.0.0',
+        engines: { nexus: '^0.1.0' },
+        main: 'dist/main.cjs',
+        permissions: ['events:usage.recorded'],
+        contributes: {}
+      })
+    );
+    await mkdir(join(pluginsDir, 'nexus.user', 'dist'), { recursive: true });
+    await writeFile(
+      join(pluginsDir, 'nexus.user', 'dist', 'main.cjs'),
+      "exports.activate = (ctx) => { ctx.events.on('usage.recorded', (_payload, meta) => { globalThis.__nexusPluginEventMeta = meta; }); };"
+    );
+
+    await host.scan();
+    await host.setEnabled('nexus.user', true);
+    host.emitEvent({
+      id: 'event-1',
+      sessionId: 'session-1',
+      runId: 'child-1',
+      seq: 1,
+      type: 'usage.recorded',
+      version: 1,
+      ts: 1,
+      payload: {
+        provider: 'provider-1',
+        model: 'model-1',
+        inputTokens: 1,
+        outputTokens: 1,
+        cost: 0
+      },
+      parentToolCallId: 'task-1'
+    } as NexusEvent);
+
+    expect(state.__nexusPluginEventMeta).toMatchObject({
+      type: 'usage.recorded',
+      sessionId: 'session-1',
+      runId: 'child-1',
+      parentToolCallId: 'task-1'
+    });
+    delete state.__nexusPluginEventMeta;
   });
 
   it('cleans up main-process plugin state when disabled', async () => {

@@ -18,6 +18,14 @@ import {
 
 const MAIN_ACTIVATION_TIMEOUT_MS = 10_000;
 
+interface PluginEventMeta {
+  type: string;
+  sessionId: string;
+  runId?: string;
+  ts: number;
+  parentToolCallId?: string;
+}
+
 interface PluginRow {
   enabled: number;
   error: string | null;
@@ -77,7 +85,7 @@ export interface MainPluginContext {
     show: (message: string, level?: 'info' | 'warning' | 'error') => void;
   };
   events: {
-    on: (event: string, handler: (payload: unknown) => void) => () => void;
+    on: (event: string, handler: (payload: unknown, meta: PluginEventMeta) => void) => () => void;
   };
 }
 
@@ -103,7 +111,10 @@ const resolveEntry = async (
 export class PluginHost {
   private readonly records = new Map<string, PluginRecord>();
   private readonly listeners = new Set<(plugins: PluginPublic[]) => void>();
-  private readonly eventListeners = new Map<string, Set<(payload: unknown) => void>>();
+  private readonly eventListeners = new Map<
+    string,
+    Set<(payload: unknown, meta: PluginEventMeta) => void>
+  >();
   private watcher: FSWatcher | undefined;
   private reloadTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly hostVersion: string;
@@ -261,7 +272,13 @@ export class PluginHost {
       if (name !== event.type) continue;
       for (const handler of handlers) {
         try {
-          handler(event.payload);
+          handler(event.payload, {
+            type: event.type,
+            sessionId: event.sessionId,
+            ts: event.ts,
+            ...(event.runId ? { runId: event.runId } : {}),
+            ...(event.parentToolCallId ? { parentToolCallId: event.parentToolCallId } : {})
+          });
         } catch (error) {
           console.error(`插件事件处理失败：${name}`, error);
         }
