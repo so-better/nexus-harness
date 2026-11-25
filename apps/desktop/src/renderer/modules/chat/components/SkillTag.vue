@@ -72,13 +72,16 @@ const emit = defineEmits<{ remove: [] }>();
   transition: opacity var(--nh-duration-fast) var(--nh-ease-standard);
 }
 
-.nh-skill-tag:hover .nh-skill-tag__remove,
+.nh-skill-tag__remove:hover {
+  background: color-mix(in srgb, var(--nh-color-danger) 16%, transparent);
+  color: var(--nh-color-danger);
+}
+
 .nh-skill-tag__remove:focus-visible {
   opacity: 1;
 }
 
-.nh-skill-tag__remove:hover {
-  background: color-mix(in srgb, var(--nh-color-danger) 16%, transparent);
-  color: var(--nh-color-danger);
+.nh-skill-tag:hover .nh-skill-tag__remove {
+  opacity: 1;
 }
 </style>

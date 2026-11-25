@@ -306,7 +306,7 @@ onMounted(start);
 </script>
 
 <style scoped lang="less">
-@import '../../../styles/input-prefix.less';
+@import url('../../../styles/input-prefix.less');
 
 .nh-message__edit-files {
   display: flex;

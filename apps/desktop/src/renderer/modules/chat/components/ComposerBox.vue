@@ -357,7 +357,7 @@ const {
 </script>
 
 <style scoped lang="less">
-@import '../../../styles/input-prefix.less';
+@import url('../../../styles/input-prefix.less');
 
 .nh-composer {
   display: flex;

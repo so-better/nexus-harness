@@ -370,15 +370,15 @@ const timeLabel = computed(() =>
   max-width: 72%;
 }
 
-.nh-message--compaction .nh-message__system-dot {
-  display: none;
-}
-
 .nh-message__system-dot {
   width: 6px;
   height: 6px;
   flex: none;
   border-radius: 50%;
   background: var(--nh-color-warning);
+}
+
+.nh-message--compaction .nh-message__system-dot {
+  display: none;
 }
 </style>
