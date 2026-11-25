@@ -40,7 +40,12 @@
               :session-id="sessionId"
               :message-id="message.id"
               :run-id="message.runId"
+              :workspace-auth="nestedWorkspaceAuth(tool)"
               @authorize-root="emit('request-root')"
+              @approve="(approvalId) => emit('approve', approvalId)"
+              @reject="(approvalId) => emit('reject', approvalId)"
+              @allow-workspace="emit('allow-workspace')"
+              @reject-workspace="emit('reject-workspace')"
             />
             <ApprovalCard
               v-for="approval in approvalForTool(tool)"
@@ -131,7 +136,12 @@
               :session-id="sessionId"
               :message-id="message.id"
               :run-id="message.runId"
+              :workspace-auth="nestedWorkspaceAuth(entry.tool)"
               @authorize-root="emit('request-root')"
+              @approve="(approvalId) => emit('approve', approvalId)"
+              @reject="(approvalId) => emit('reject', approvalId)"
+              @allow-workspace="emit('allow-workspace')"
+              @reject-workspace="emit('reject-workspace')"
             />
             <ApprovalCard
               v-for="approval in approvalForTool(entry.tool)"
@@ -248,6 +258,12 @@ const isWorkspaceAuthTool = (toolId: string): boolean =>
 
 const isToolInterruption = (tool: ChatToolCall): boolean =>
   getIsToolInterruption(tool, props.approvals, props.relatedWorkspaceAuth);
+
+/**
+ * 子代理触发的目录授权挂到父 task 工具卡；嵌套时间线内按子工具 id 展示授权卡。
+ */
+const nestedWorkspaceAuth = (tool: ChatToolCall): WorkspaceAuthorizationRequest | null =>
+  props.relatedWorkspaceAuth?.parentToolCallId === tool.id ? props.relatedWorkspaceAuth : null;
 
 const toolLookup = (id: string): ChatToolCall[] => getToolLookup(props.message, id);
 const askLookup = (id: string): ChatAskUser[] => getAskLookup(props.askUsers, id);

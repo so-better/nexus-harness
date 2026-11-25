@@ -140,10 +140,118 @@ const mergeAssistantRuns = (messages: ChatMessageView[], askUsers: ChatAskUser[]
   }
 };
 
+interface SubagentProjectionCacheEntry {
+  processedCount: number;
+  lastEvent: NexusEvent | undefined;
+  projection: ChatProjection;
+}
+
+/**
+ * 子代理嵌套投影缓存：最后一条事件不变直接复用；
+ * 纯 delta 追加时只改目标消息，避免每次流式都重扫完整子代理事件。
+ */
+const subagentProjectionCache = new Map<string, SubagentProjectionCacheEntry>();
+const MAX_SUBAGENT_PROJECTION_CACHE = 32;
+
+const isDeltaEvent = (event: NexusEvent | undefined): boolean =>
+  Boolean(event && (event.type === 'message.delta' || event.type === 'message.reasoning.delta'));
+
+const applyDeltaEvents = (
+  projection: ChatProjection,
+  source: readonly NexusEvent[]
+): ChatProjection | undefined => {
+  const messages = projection.messages.slice();
+  const indexById = new Map(messages.map((message, index) => [message.id, index]));
+  const cloned = new Map<string, ChatMessageView>();
+
+  for (const event of source) {
+    if (event.type !== 'message.delta' && event.type !== 'message.reasoning.delta')
+      return undefined;
+    const payload = event.payload as { messageId?: unknown; text?: unknown };
+    if (typeof payload.messageId !== 'string' || typeof payload.text !== 'string') {
+      return undefined;
+    }
+    const index = indexById.get(payload.messageId);
+    if (index === undefined) return undefined;
+
+    if (!cloned.has(payload.messageId)) {
+      const original = messages[index];
+      if (!original) return undefined;
+      const timeline = original.timeline?.map((segment) => ({ ...segment }));
+      const copy: ChatMessageView = { ...original, ...(timeline ? { timeline } : {}) };
+      cloned.set(payload.messageId, copy);
+      messages[index] = copy;
+    }
+    const message = cloned.get(payload.messageId);
+    if (!message) return undefined;
+
+    if (event.type === 'message.delta') {
+      message.content += payload.text;
+      appendText(message, 'content', payload.text);
+    } else {
+      message.reasoning = (message.reasoning ?? '') + payload.text;
+      appendText(message, 'reasoning', payload.text);
+    }
+    message.streaming = true;
+  }
+
+  return { ...projection, messages };
+};
+
+/**
+ * 清空子代理投影缓存；供测试验证增量结果与完整重算一致。
+ */
+export const clearSubagentProjectionCache = (): void => {
+  subagentProjectionCache.clear();
+};
+
+const projectSubagentRun = (
+  childRunId: string,
+  runEvents: readonly NexusEvent[]
+): ChatProjection => {
+  const lastEvent = runEvents[runEvents.length - 1];
+  const cached = subagentProjectionCache.get(childRunId);
+  if (cached && cached.lastEvent === lastEvent) return cached.projection;
+
+  // 仅当上一批也停在 delta 时才走增量，确保 usage/completed 等状态先完整重算
+  if (
+    cached &&
+    isDeltaEvent(cached.lastEvent) &&
+    isDeltaEvent(lastEvent) &&
+    cached.processedCount <= runEvents.length
+  ) {
+    const projected = applyDeltaEvents(cached.projection, runEvents.slice(cached.processedCount));
+    if (projected) {
+      subagentProjectionCache.set(childRunId, {
+        processedCount: runEvents.length,
+        lastEvent,
+        projection: projected
+      });
+      return projected;
+    }
+  }
+
+  const projection = projectEvents(runEvents, { ignoreParentToolCallId: true });
+  subagentProjectionCache.set(childRunId, {
+    processedCount: runEvents.length,
+    lastEvent,
+    projection
+  });
+  if (subagentProjectionCache.size > MAX_SUBAGENT_PROJECTION_CACHE) {
+    const oldest = subagentProjectionCache.keys().next().value;
+    if (oldest !== undefined) subagentProjectionCache.delete(oldest);
+  }
+  return projection;
+};
+
 /**
  * 按事件顺序重建聊天视图；消息与工具调用保持原始顺序。
+ * ignoreParentToolCallId 用于子代理嵌套投影，让子代理事件按普通事件处理。
  */
-export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => {
+export const projectEvents = (
+  events: readonly NexusEvent[],
+  options: { ignoreParentToolCallId?: boolean } = {}
+): ChatProjection => {
   const messages: ChatMessageView[] = [];
   const approvals: ChatApproval[] = [];
   const askUsers: ChatAskUser[] = [];
@@ -156,6 +264,17 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
   let pendingFailure: { event: NexusEvent; error: { code: string; message: string } } | undefined;
   const pendingUsage = new Map<string, ChatUsage>();
   let compactionNoticeShown = false;
+
+  // 子代理事件按 parentToolCallId 分组，主会话跳过；之后各自递归投影为嵌套时间线
+  const childEventsByParent = new Map<string, NexusEvent[]>();
+  if (!options.ignoreParentToolCallId) {
+    for (const event of events) {
+      if (!event.parentToolCallId) continue;
+      const list = childEventsByParent.get(event.parentToolCallId) ?? [];
+      list.push(event);
+      childEventsByParent.set(event.parentToolCallId, list);
+    }
+  }
 
   const attachUsage = (messageId: string): void => {
     const usage = pendingUsage.get(messageId);
@@ -171,6 +290,16 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
   };
 
   for (const event of events) {
+    if (event.parentToolCallId && !options.ignoreParentToolCallId) {
+      // 子代理用量仍计入父会话总量；其余事件留给嵌套投影
+      if (event.type === 'usage.recorded') {
+        const payload = event.payload as EventPayloadMap['usage.recorded'];
+        usage.inputTokens += payload.inputTokens;
+        usage.outputTokens += payload.outputTokens;
+        usage.cost += payload.cost ?? 0;
+      }
+      continue;
+    }
     if (event.type === 'message.reasoning.delta') {
       const payload = event.payload as EventPayloadMap['message.reasoning.delta'];
       let message = messages.find((item) => item.id === payload.messageId);
@@ -309,6 +438,8 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
 
     if (event.type === 'file.created') {
       const payload = event.payload as EventPayloadMap['file.created'];
+      // 子代理产物不挂到父会话消息上，避免混淆；完整过程在子代理 Artifact 中
+      if (payload.parentToolCallId) continue;
       if (!lastAssistant) {
         lastAssistant = {
           id: `assistant-${event.id}`,
@@ -378,7 +509,9 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
         id: payload.approvalId,
         toolCallId: payload.toolCallId,
         scope: payload.scope,
-        status: 'pending'
+        status: 'pending',
+        ...(payload.toolName === undefined ? {} : { toolName: payload.toolName }),
+        ...(payload.input === undefined ? {} : { input: payload.input })
       });
       updateTool(messages, payload.toolCallId, (tool) => {
         tool.approvalId = payload.approvalId;
@@ -393,8 +526,14 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       const approval = approvals.find((item) => item.id === payload.approvalId);
       if (approval) {
         approval.status = payload.decision;
+        // 同一工具可能对应多个子代理审批：仍有 pending 时保持等待，避免被单个结果覆盖
+        const related = approvals.filter((item) => item.toolCallId === approval.toolCallId);
+        const pending = related.some((item) => item.status === 'pending');
+        const rejected = related.some(
+          (item) => item.status === 'rejected' || item.status === 'expired'
+        );
         updateTool(messages, approval.toolCallId, (tool) => {
-          tool.status = payload.decision === 'approved' ? 'approved' : 'rejected';
+          tool.status = pending ? 'waiting_approval' : rejected ? 'rejected' : 'approved';
         });
       }
       status = running ? 'running' : status;
@@ -416,6 +555,70 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       updateTool(messages, payload.toolCallId, (tool) => {
         tool.status = 'failed';
         tool.error = payload.error;
+      });
+      continue;
+    }
+
+    if (event.type === 'subagent.started') {
+      const payload = event.payload as EventPayloadMap['subagent.started'];
+      updateTool(messages, payload.parentToolCallId, (tool) => {
+        tool.subagent = {
+          agent: payload.agent,
+          ...(payload.description ? { description: payload.description } : {}),
+          status: 'running',
+          steps: 0,
+          toolCalls: 0,
+          progress: []
+        };
+      });
+      continue;
+    }
+
+    if (event.type === 'subagent.progress') {
+      const payload = event.payload as EventPayloadMap['subagent.progress'];
+      updateTool(messages, payload.parentToolCallId, (tool) => {
+        if (!tool.subagent) return;
+        // 完成事件与开始事件同一工具时合并，避免步骤列表重复
+        if (payload.ok !== undefined) {
+          const pending = [...tool.subagent.progress]
+            .reverse()
+            .find((step) => step.name === payload.name && step.ok === undefined);
+          if (pending) {
+            pending.ok = payload.ok;
+            tool.subagent.toolCalls += 1;
+            return;
+          }
+        }
+        tool.subagent.progress.push({
+          id: `${tool.id}:sub-${tool.subagent.progress.length}`,
+          name: payload.name,
+          ...(payload.ok === undefined ? {} : { ok: payload.ok })
+        });
+        if (payload.ok !== undefined) tool.subagent.toolCalls += 1;
+      });
+      continue;
+    }
+
+    if (event.type === 'subagent.completed') {
+      const payload = event.payload as EventPayloadMap['subagent.completed'];
+      updateTool(messages, payload.parentToolCallId, (tool) => {
+        const base = tool.subagent ?? {
+          agent: payload.agent,
+          status: 'running' as const,
+          steps: 0,
+          toolCalls: 0,
+          progress: []
+        };
+        tool.subagent = {
+          ...base,
+          status: payload.ok ? 'succeeded' : 'failed',
+          steps: payload.steps,
+          toolCalls: payload.toolCalls,
+          summary: payload.summary,
+          ...(payload.transcriptRef === undefined ? {} : { transcriptRef: payload.transcriptRef }),
+          ...(payload.transcripts === undefined ? {} : { transcripts: payload.transcripts }),
+          ...(payload.usage ? { usage: payload.usage } : {})
+        };
       });
       continue;
     }
@@ -590,6 +793,44 @@ export const projectEvents = (events: readonly NexusEvent[]): ChatProjection => 
       continue;
     }
     if (!running || message !== lastAssistant) message.hidden = true;
+  }
+
+  for (const [parentToolCallId, childEvents] of childEventsByParent) {
+    const byRun = new Map<string, NexusEvent[]>();
+    for (const childEvent of childEvents) {
+      // 子代理提问已禁用；审批保留在嵌套时间线内直接展示
+      if (childEvent.type.startsWith('ask_user.')) continue;
+      const childRunId = childEvent.runId ?? 'subagent';
+      const list = byRun.get(childRunId) ?? [];
+      list.push(childEvent);
+      byRun.set(childRunId, list);
+    }
+    if (byRun.size === 0) continue;
+    const runs = [...byRun.entries()].map(([childRunId, runEvents]) => ({
+      runId: childRunId,
+      projection: projectSubagentRun(childRunId, runEvents)
+    }));
+    // 子代理审批同时并入顶层列表，供全局待审批计数与跳转使用；
+    // 其 toolCallId 指向子代理工具，不会在父消息里重复渲染审批卡。
+    let pendingApprovals = 0;
+    for (const run of runs) {
+      for (const approval of run.projection.approvals) {
+        const existing = approvals.find((item) => item.id === approval.id);
+        if (existing) Object.assign(existing, approval);
+        else approvals.push(approval);
+        if (approval.status === 'pending') pendingApprovals += 1;
+      }
+    }
+    updateTool(messages, parentToolCallId, (tool) => {
+      const base = tool.subagent ?? {
+        agent: 'general' as const,
+        status: 'running' as const,
+        steps: 0,
+        toolCalls: 0,
+        progress: []
+      };
+      tool.subagent = { ...base, runs, pendingApprovals };
+    });
   }
 
   mergeAssistantRuns(messages, askUsers);

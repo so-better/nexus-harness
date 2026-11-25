@@ -20,6 +20,43 @@ export type ToolCallStatus =
   | 'failed';
 
 /**
+ * 子代理进度步骤：用于在 task 工具卡里展示其内部工具调用。
+ */
+export interface ChatSubagentProgress {
+  id: string;
+  name: string;
+  ok?: boolean;
+}
+
+/**
+ * task 工具派生出的子代理状态；仅用于展示，不参与业务真相。
+ */
+export interface ChatSubagent {
+  agent: 'explore' | 'general';
+  description?: string;
+  status: 'running' | 'succeeded' | 'failed';
+  steps: number;
+  toolCalls: number;
+  summary?: string;
+  /** 完整子代理对话的 Artifact 引用；用于“查看过程” */
+  transcriptRef?: string;
+  /** 并行子代理：每个子任务的过程引用与序号 */
+  transcripts?: Array<{ index: number; ref: string }>;
+  /** 实时嵌套：每个子代理 run 的投影（含消息、工具、推理） */
+  runs?: Array<{ runId: string; projection: ChatProjection }>;
+  /** 嵌套时间线内待审批数量，用于父卡片状态提示 */
+  pendingApprovals?: number;
+  progress: ChatSubagentProgress[];
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens?: number | undefined;
+    cacheWriteTokens?: number | undefined;
+    cost?: number | undefined;
+  };
+}
+
+/**
  * 单次工具调用展示数据。
  */
 export interface ChatToolCall {
@@ -31,6 +68,7 @@ export interface ChatToolCall {
   error?: { code: string; message: string };
   artifactId?: string;
   approvalId?: string;
+  subagent?: ChatSubagent;
 }
 
 /**
@@ -74,6 +112,9 @@ export interface ChatApproval {
   toolCallId: string;
   scope: string;
   status: 'pending' | 'approved' | 'rejected' | 'expired';
+  /** 子代理审批：实际待批准的工具名与参数，用于展示完整 diff/命令 */
+  toolName?: string;
+  input?: unknown;
 }
 
 /**

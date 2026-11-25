@@ -6,7 +6,7 @@
     @approve="emit('approve')"
     @reject="emit('reject')"
   >
-    <p v-if="!tool || approval.scope !== tool.name" class="nh-approval-scope">
+    <p v-if="!detailTool || approval.scope !== detailTool.name" class="nh-approval-scope">
       {{ approval.scope }}
     </p>
     <div class="nh-approval-summary">
@@ -16,7 +16,7 @@
       </div>
       <p v-if="summary.meta" class="nh-approval-summary__meta">{{ summary.meta }}</p>
     </div>
-    <ApprovalDetails v-if="tool" :tool="tool" />
+    <ApprovalDetails v-if="detailTool" :tool="detailTool" />
   </AuthorizationCard>
 </template>
 
@@ -41,9 +41,22 @@ const props = defineProps<{
 
 const emit = defineEmits<{ approve: []; reject: [] }>();
 
+/**
+ * 子代理审批会带上实际待批准的工具；优先用它展示 diff/命令，而不是外层 task 工具。
+ */
+const detailTool = computed<ChatToolCall | undefined>(() => {
+  if (!props.approval.toolName) return props.tool;
+  return {
+    id: props.approval.toolCallId,
+    name: props.approval.toolName,
+    input: props.approval.input,
+    status: 'waiting_approval'
+  };
+});
+
 const input = computed<Record<string, unknown>>(() =>
-  props.tool?.input && typeof props.tool.input === 'object'
-    ? (props.tool.input as Record<string, unknown>)
+  detailTool.value?.input && typeof detailTool.value.input === 'object'
+    ? (detailTool.value.input as Record<string, unknown>)
     : {}
 );
 const stringValue = (key: string): string | undefined =>
@@ -57,7 +70,7 @@ const countChars = (value: string | undefined): number => [...(value ?? '')].len
  * 审批摘要：让用户无需展开工具卡就能知道将要执行什么。
  */
 const summary = computed<{ label: string; value: string; meta?: string }>(() => {
-  const name = props.tool?.name;
+  const name = detailTool.value?.name;
   const command = stringValue('command');
   const path = stringValue('path');
   const query = stringValue('query');
@@ -84,7 +97,7 @@ const summary = computed<{ label: string; value: string; meta?: string }>(() => 
     };
   }
   if (name?.startsWith('mcp_')) {
-    const args = JSON.stringify(props.tool?.input ?? {}).slice(0, 180);
+    const args = JSON.stringify(detailTool.value?.input ?? {}).slice(0, 180);
     return {
       label: t('chat.approvalSummaryMcp'),
       value: name,
@@ -111,7 +124,7 @@ const summary = computed<{ label: string; value: string; meta?: string }>(() => 
  * 审批标题直接说明将要发生什么，避免所有工具都只显示泛化的“需要审批”。
  */
 const title = computed(() => {
-  const name = props.tool?.name;
+  const name = detailTool.value?.name;
   if (name === 'run_command') return t('chat.approvalCommandTitle');
   if (name === 'write_file' || name === 'apply_patch') return t('chat.approvalWriteTitle');
   if (name === 'generate_image') return t('chat.approvalImageTitle');

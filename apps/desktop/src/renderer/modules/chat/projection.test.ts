@@ -4,7 +4,7 @@
 
 import type { NexusEvent } from '@shared/events';
 import { describe, expect, it } from 'vitest';
-import { projectEvents } from './projection';
+import { clearSubagentProjectionCache, projectEvents } from './projection';
 
 const event = (input: Omit<NexusEvent, 'id' | 'version' | 'ts'>): NexusEvent =>
   ({ ...input, id: `event-${input.seq}`, version: 1, ts: input.seq }) as NexusEvent;
@@ -770,5 +770,357 @@ describe('projectEvents', () => {
     expect(timeline.map((segment) => segment.kind)).toEqual(['reasoning', 'content']);
     expect(timeline[0]).toMatchObject({ kind: 'reasoning', text: '先想再想' });
     expect(timeline[1]).toMatchObject({ kind: 'content', text: '第一段第二段' });
+  });
+
+  it('attaches subagent progress and summary to the task tool call', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'tool.requested',
+        payload: { toolCallId: 'task-1', name: 'task', input: { prompt: '探索' } }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'subagent.started',
+        payload: { parentToolCallId: 'task-1', agent: 'explore' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'subagent.progress',
+        payload: { parentToolCallId: 'task-1', name: 'grep' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 4,
+        type: 'subagent.progress',
+        payload: { parentToolCallId: 'task-1', name: 'grep', ok: true }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 5,
+        type: 'subagent.completed',
+        payload: {
+          parentToolCallId: 'task-1',
+          agent: 'explore',
+          ok: true,
+          summary: '结论',
+          steps: 2,
+          toolCalls: 1
+        }
+      })
+    ]);
+
+    const tool = projection.messages
+      .flatMap((message) => message.toolCalls)
+      .find((item) => item.id === 'task-1');
+    expect(tool?.subagent).toMatchObject({
+      agent: 'explore',
+      status: 'succeeded',
+      summary: '结论',
+      steps: 2,
+      toolCalls: 1
+    });
+    expect(tool?.subagent?.progress).toHaveLength(1);
+    expect(tool?.subagent?.progress[0]).toMatchObject({ name: 'grep', ok: true });
+  });
+
+  it('keeps subagent approval details and transcript reference', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'tool.requested',
+        payload: { toolCallId: 'task-1', name: 'task', input: { prompt: '探索' } }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'approval.requested',
+        payload: {
+          approvalId: 'approval-1',
+          toolCallId: 'task-1',
+          scope: 'subagent:write_file src/a.ts',
+          toolName: 'write_file',
+          input: { path: 'src/a.ts', oldText: 'a', newText: 'b' }
+        }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'subagent.completed',
+        payload: {
+          parentToolCallId: 'task-1',
+          agent: 'general',
+          ok: true,
+          summary: '完成',
+          steps: 2,
+          toolCalls: 1,
+          transcriptRef: 'artifact-1',
+          transcripts: [
+            { index: 0, ref: 'artifact-0' },
+            { index: 1, ref: 'artifact-1' }
+          ]
+        }
+      })
+    ]);
+
+    expect(projection.approvals[0]).toMatchObject({
+      toolName: 'write_file',
+      input: { path: 'src/a.ts', oldText: 'a', newText: 'b' }
+    });
+    const tool = projection.messages
+      .flatMap((message) => message.toolCalls)
+      .find((item) => item.id === 'task-1');
+    expect(tool?.subagent?.transcriptRef).toBe('artifact-1');
+    expect(tool?.subagent?.transcripts).toHaveLength(2);
+    expect(tool?.subagent?.transcripts?.[1]).toMatchObject({ index: 1, ref: 'artifact-1' });
+  });
+
+  it('keeps a task tool waiting while other subagent approvals are still pending', () => {
+    const base = [
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'tool.requested',
+        payload: { toolCallId: 'task-1', name: 'task', input: { prompt: '探索' } }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'approval.requested',
+        payload: {
+          approvalId: 'a1',
+          toolCallId: 'task-1',
+          scope: 'subagent#1:write_file src/a.ts',
+          toolName: 'write_file'
+        }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'approval.requested',
+        payload: {
+          approvalId: 'a2',
+          toolCallId: 'task-1',
+          scope: 'subagent#2:write_file src/b.ts',
+          toolName: 'write_file'
+        }
+      })
+    ];
+    const resolvedOne = event({
+      sessionId: 'session-1',
+      runId: 'run-1',
+      seq: 4,
+      type: 'approval.resolved',
+      payload: { approvalId: 'a1', decision: 'approved' }
+    });
+    const resolvedBoth = event({
+      sessionId: 'session-1',
+      runId: 'run-1',
+      seq: 5,
+      type: 'approval.resolved',
+      payload: { approvalId: 'a2', decision: 'approved' }
+    });
+
+    const waiting = projectEvents([...base, resolvedOne]);
+    const done = projectEvents([...base, resolvedOne, resolvedBoth]);
+    const findTask = (projection: ReturnType<typeof projectEvents>) =>
+      projection.messages
+        .flatMap((message) => message.toolCalls)
+        .find((item) => item.id === 'task-1');
+
+    expect(findTask(waiting)?.status).toBe('waiting_approval');
+    expect(findTask(done)?.status).toBe('approved');
+  });
+
+  it('does not attach subagent file events to the parent messages', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'tool.requested',
+        payload: { toolCallId: 'task-1', name: 'task', input: { prompt: '探索' } }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'file.created',
+        payload: {
+          fileId: 'file-1',
+          name: 'a.txt',
+          mime: 'text/plain',
+          bytes: 1,
+          source: 'generated',
+          parentToolCallId: 'task-1'
+        }
+      })
+    ]);
+
+    expect(projection.messages.flatMap((message) => message.files ?? [])).toHaveLength(0);
+  });
+
+  it('nests child run events under the task tool without polluting parent messages', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'tool.requested',
+        payload: { toolCallId: 'task-1', name: 'task', input: { prompt: '探索' } }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'child-1',
+        seq: 2,
+        type: 'message.completed',
+        parentToolCallId: 'task-1',
+        payload: { messageId: 'child-msg-1', role: 'assistant', content: '子代理结论' }
+      })
+    ]);
+
+    const tool = projection.messages
+      .flatMap((message) => message.toolCalls)
+      .find((item) => item.id === 'task-1');
+    expect(tool?.subagent?.runs).toHaveLength(1);
+    expect(tool?.subagent?.runs?.[0]?.projection.messages[0]).toMatchObject({
+      content: '子代理结论'
+    });
+    expect(projection.messages.some((message) => message.content === '子代理结论')).toBe(false);
+  });
+
+  it('reuses the cached subagent projection while child events are unchanged', () => {
+    const events = [
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'tool.requested',
+        payload: { toolCallId: 'task-1', name: 'task', input: { prompt: '探索' } }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'child-1',
+        seq: 2,
+        type: 'message.completed',
+        parentToolCallId: 'task-1',
+        payload: { messageId: 'child-msg-1', role: 'assistant', content: '子代理结论' }
+      })
+    ];
+
+    const first = projectEvents(events);
+    const second = projectEvents(events);
+    const findRun = (projection: ReturnType<typeof projectEvents>) =>
+      projection.messages
+        .flatMap((message) => message.toolCalls)
+        .find((item) => item.id === 'task-1')?.subagent?.runs?.[0]?.projection;
+
+    expect(findRun(first)).toBe(findRun(second));
+  });
+
+  it('renders subagent approvals inside the nested timeline', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'tool.requested',
+        payload: { toolCallId: 'task-1', name: 'task', input: { prompt: '修改文件' } }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'child-1',
+        seq: 2,
+        type: 'tool.requested',
+        parentToolCallId: 'task-1',
+        payload: {
+          toolCallId: 'child-tool-1',
+          name: 'write_file',
+          input: { path: 'src/a.ts' }
+        }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'child-1',
+        seq: 3,
+        type: 'approval.requested',
+        parentToolCallId: 'task-1',
+        payload: {
+          approvalId: 'approval-child-1',
+          toolCallId: 'child-tool-1',
+          scope: 'write_file src/a.ts'
+        }
+      })
+    ]);
+
+    const tool = projection.messages
+      .flatMap((message) => message.toolCalls)
+      .find((item) => item.id === 'task-1');
+    const run = tool?.subagent?.runs?.[0];
+
+    expect(tool?.subagent?.pendingApprovals).toBe(1);
+    expect(run?.projection.approvals).toMatchObject([
+      { id: 'approval-child-1', toolCallId: 'child-tool-1', status: 'pending' }
+    ]);
+    expect(projection.approvals.some((approval) => approval.id === 'approval-child-1')).toBe(true);
+  });
+
+  it('keeps incremental subagent delta projection identical to a full recompute', () => {
+    const base = [
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'tool.requested',
+        payload: { toolCallId: 'task-1', name: 'task', input: { prompt: '总结' } }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'child-1',
+        seq: 2,
+        type: 'message.delta',
+        parentToolCallId: 'task-1',
+        payload: { messageId: 'child-msg-1', text: 'Hel' }
+      })
+    ];
+    projectEvents(base);
+    const fullEvents = [
+      ...base,
+      event({
+        sessionId: 'session-1',
+        runId: 'child-1',
+        seq: 3,
+        type: 'message.delta',
+        parentToolCallId: 'task-1',
+        payload: { messageId: 'child-msg-1', text: 'lo' }
+      })
+    ];
+
+    const incremental = projectEvents(fullEvents);
+    clearSubagentProjectionCache();
+    const full = projectEvents(fullEvents);
+
+    const findMessages = (projection: ReturnType<typeof projectEvents>) =>
+      projection.messages
+        .flatMap((message) => message.toolCalls)
+        .find((tool) => tool.id === 'task-1')?.subagent?.runs?.[0]?.projection.messages;
+
+    expect(findMessages(incremental)).toEqual(findMessages(full));
+    expect(findMessages(incremental)?.[0]?.content).toBe('Hello');
   });
 });

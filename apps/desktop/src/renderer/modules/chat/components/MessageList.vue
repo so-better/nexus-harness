@@ -88,9 +88,14 @@ const stack = ref<HTMLElement | null>(null);
 
 const workspaceAuthToolExists = computed(() => {
   const toolCallId = props.workspaceAuth?.toolCallId;
+  const parentToolCallId = props.workspaceAuth?.parentToolCallId;
   return Boolean(
-    toolCallId &&
-    props.messages.some((message) => message.toolCalls.some((tool) => tool.id === toolCallId))
+    (toolCallId &&
+      props.messages.some((message) => message.toolCalls.some((tool) => tool.id === toolCallId))) ||
+    (parentToolCallId &&
+      props.messages.some((message) =>
+        message.toolCalls.some((tool) => tool.id === parentToolCallId)
+      ))
   );
 });
 
