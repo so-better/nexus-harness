@@ -1,5 +1,6 @@
 /**
- * 内置 MCP 模板：只补齐 userData 中缺失的 Server，不覆盖用户配置。
+ * 内置 MCP 模板：补齐 userData 中缺失的 Server，不覆盖用户配置。
+ * 对已退役的内置 Server，仅在配置仍是原样内置版本时移除。
  */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -8,6 +9,32 @@ import { mcpServerConfigSchema } from '@shared/mcp';
 interface RawConfig {
   mcpServers?: Record<string, unknown>;
 }
+
+/**
+ * 已退役的内置 Server 快照：仅当当前配置与快照完全一致（未被用户修改）时才移除。
+ */
+const RETIRED_BUILTIN_SERVERS: Record<string, unknown> = {
+  'browser-use': {
+    type: 'stdio',
+    command: 'uvx',
+    args: ['--from', 'browser-use==1.0.6', 'browser-use', '--cli-mcp'],
+    enabled: true
+  },
+  'microsoft-learn': {
+    type: 'http',
+    url: 'https://learn.microsoft.com/api/mcp',
+    enabled: true
+  }
+};
+
+/** 稳定序列化：对象键排序后比较，避免键顺序差异导致漏判。 */
+const stableStringify = (value: unknown): string => {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`;
+};
 
 /**
  * 读取内置模板并合并到用户 mcp.json；返回新增的 Server id。
@@ -67,15 +94,26 @@ export const syncBuiltinMcpConfig = async (
   }
 
   const currentServers = current.mcpServers ?? {};
+  let changed = false;
+
+  // 先移除“仍是原样内置版本”的退役 Server；用户改过的保留
+  for (const [id, snapshot] of Object.entries(RETIRED_BUILTIN_SERVERS)) {
+    if (!(id in currentServers)) continue;
+    if (stableStringify(currentServers[id]) !== stableStringify(snapshot)) continue;
+    delete currentServers[id];
+    changed = true;
+  }
+
   const added: string[] = [];
   for (const [id, value] of Object.entries(builtinServers)) {
     if (id in currentServers) continue;
     if (!mcpServerConfigSchema.safeParse(value).success) continue;
     currentServers[id] = value;
     added.push(id);
+    changed = true;
   }
   current.mcpServers = currentServers;
-  if (!added.length && (await readFile(target, 'utf8').catch(() => '')) !== '') return [];
+  if (!changed) return [];
   await writeFile(target, `${JSON.stringify(current, null, 2)}\n`, 'utf8');
   return added;
 };

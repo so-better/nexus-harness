@@ -6,12 +6,6 @@
       "args": ["-y", "@playwright/mcp@0.0.86"],
       "enabled": true
     },
-    "browser-use": {
-      "type": "stdio",
-      "command": "uvx",
-      "args": ["--from", "browser-use==1.0.6", "browser-use", "--cli-mcp"],
-      "enabled": true
-    },
     "context7": {
       "type": "stdio",
       "command": "npx",
@@ -21,11 +15,6 @@
     "deepwiki": {
       "type": "http",
       "url": "https://mcp.deepwiki.com/mcp",
-      "enabled": true
-    },
-    "microsoft-learn": {
-      "type": "http",
-      "url": "https://learn.microsoft.com/api/mcp",
       "enabled": true
     }
   }

@@ -54,14 +54,74 @@ describe('syncBuiltinMcpConfig', () => {
     const raw = JSON.parse(
       await readFile(join(process.cwd(), 'apps/desktop/resources/mcp/mcp.json'), 'utf8')
     ) as { mcpServers: Record<string, { enabled?: boolean }> };
-    expect(Object.keys(raw.mcpServers)).toEqual([
-      'playwright',
-      'browser-use',
-      'context7',
-      'deepwiki',
-      'microsoft-learn'
-    ]);
+    expect(Object.keys(raw.mcpServers)).toEqual(['playwright', 'context7', 'deepwiki']);
     expect(Object.values(raw.mcpServers).every((server) => server.enabled === true)).toBe(true);
+  });
+
+  it('removes a retired built-in server when it is untouched', async () => {
+    const source = join(root, 'builtin.json');
+    const target = join(root, 'mcp');
+    await mkdir(target, { recursive: true });
+    await writeFile(
+      source,
+      JSON.stringify({
+        mcpServers: { playwright: { command: 'npx', args: ['@playwright/mcp@1'] } }
+      })
+    );
+    await writeFile(
+      join(target, 'mcp.json'),
+      JSON.stringify({
+        mcpServers: {
+          'browser-use': {
+            type: 'stdio',
+            command: 'uvx',
+            args: ['--from', 'browser-use==1.0.6', 'browser-use', '--cli-mcp'],
+            enabled: true
+          },
+          'microsoft-learn': {
+            type: 'http',
+            url: 'https://learn.microsoft.com/api/mcp',
+            enabled: true
+          },
+          custom: { command: 'node', args: ['server.js'] }
+        }
+      })
+    );
+
+    await expect(syncBuiltinMcpConfig(source, target)).resolves.toEqual(['playwright']);
+    const saved = JSON.parse(await readFile(join(target, 'mcp.json'), 'utf8')) as {
+      mcpServers: Record<string, unknown>;
+    };
+    expect(saved.mcpServers['browser-use']).toBeUndefined();
+    expect(saved.mcpServers['microsoft-learn']).toBeUndefined();
+    expect(saved.mcpServers.custom).toBeDefined();
+    expect(saved.mcpServers.playwright).toBeDefined();
+  });
+
+  it('keeps a retired built-in server that the user modified', async () => {
+    const source = join(root, 'builtin.json');
+    const target = join(root, 'mcp');
+    await mkdir(target, { recursive: true });
+    await writeFile(source, JSON.stringify({ mcpServers: {} }));
+    await writeFile(
+      join(target, 'mcp.json'),
+      JSON.stringify({
+        mcpServers: {
+          'browser-use': {
+            type: 'stdio',
+            command: 'uvx',
+            args: ['--from', 'browser-use==2.0.0', 'browser-use', '--cli-mcp'],
+            enabled: false
+          }
+        }
+      })
+    );
+
+    await expect(syncBuiltinMcpConfig(source, target)).resolves.toEqual([]);
+    const saved = JSON.parse(await readFile(join(target, 'mcp.json'), 'utf8')) as {
+      mcpServers: Record<string, unknown>;
+    };
+    expect(saved.mcpServers['browser-use']).toBeDefined();
   });
 
   it('preserves an invalid existing config instead of overwriting it', async () => {
