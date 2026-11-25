@@ -32,6 +32,12 @@ interface TerminalRecord {
   openView: boolean;
   detached: boolean;
   aiAccess: boolean;
+  /** 由 run_command 创建的命令终端，空闲时可被后续命令复用 */
+  commandTerminal: boolean;
+  /** 自上次命令结束后没有任何输入；只有空闲终端才可复用，避免打断用户输入 */
+  idle: boolean;
+  /** 用户手动重命名过标题，后续命令与 shell 切换不再覆盖 */
+  userTitle: boolean;
   createdAt: number;
   cols: number;
   rows: number;
@@ -259,6 +265,7 @@ export class TerminalService {
     if (!record) return false;
     record.title = title.trim() || basename(record.cwd) || '终端';
     record.customTitle = custom;
+    record.userTitle = custom;
     return true;
   }
 
@@ -315,11 +322,23 @@ export class TerminalService {
   /**
    * 启动一个带命令的终端；返回任务句柄，Run 等待命令结束后继续。
    */
-  startCommand(options: CreateTerminalOptions & { command: string; timeoutMs?: number }): {
+  startCommand(
+    options: CreateTerminalOptions & {
+      command: string;
+      timeoutMs?: number;
+      /** 必须来自 findReusableCommandTerminal；忙终端会被拒绝并新建标签 */
+      reuseTerminalId?: string;
+    }
+  ): {
     terminal: TerminalSessionPublic;
     done: Promise<CommandResult>;
   } {
     const detached = options.detached === true;
+    const reusable =
+      !detached && options.reuseTerminalId ? this.records.get(options.reuseTerminalId) : undefined;
+    if (reusable && this.canReuseCommandTerminal(reusable, options)) {
+      return this.reuseCommandTerminal(reusable, options);
+    }
     const record = this.createRecord({
       ...options,
       source: 'ai',
@@ -339,9 +358,97 @@ export class TerminalService {
     return { terminal: this.toPublic(record), done };
   }
 
+  /**
+   * 查找可复用的 AI 命令终端：同会话/窗口、运行中、非常驻且当前空闲。
+   * 用于让连续 run_command 复用同一个标签，避免堆积空终端。
+   */
+  findReusableCommandTerminal(sessionId: string, ownerId?: number): string | undefined {
+    for (const record of this.records.values()) {
+      if (record.sessionId !== sessionId) continue;
+      if (ownerId !== undefined && record.ownerId !== ownerId) continue;
+      if (record.source !== 'ai' || !record.commandTerminal) continue;
+      if (record.status !== 'running' || record.detached || record.command) continue;
+      if (!record.idle) continue;
+      return record.id;
+    }
+    return undefined;
+  }
+
+  private canReuseCommandTerminal(
+    record: TerminalRecord,
+    options: CreateTerminalOptions & { command: string }
+  ): boolean {
+    if (record.status !== 'running' || record.source !== 'ai' || !record.commandTerminal) {
+      return false;
+    }
+    if (record.detached || record.command || record.sessionId !== options.sessionId) return false;
+    return options.ownerId === undefined || record.ownerId === options.ownerId;
+  }
+
+  /**
+   * 在同一个标签内替换 PTY 执行新命令；旧交互式 shell 被关闭，输出从头记录。
+   */
+  private reuseCommandTerminal(
+    record: TerminalRecord,
+    options: CreateTerminalOptions & { command: string; timeoutMs?: number }
+  ): { terminal: TerminalSessionPublic; done: Promise<CommandResult> } {
+    const previous = record.pty;
+    const invocation = shellForCommand(options.command);
+    const cols = options.cols ?? record.cols;
+    const rows = options.rows ?? record.rows;
+    const child = pty.spawn(invocation.file, invocation.args, {
+      name: 'xterm-256color',
+      cols,
+      rows,
+      cwd: options.cwd,
+      env: { ...createShellEnvironment(), TERM: 'xterm-256color', COLORTERM: 'truecolor' },
+      ...(process.platform === 'win32' ? { useConpty: true } : {})
+    });
+    if (record.timer) clearTimeout(record.timer);
+    const done = new Promise<CommandResult>((resolve) => {
+      record.resolve = resolve;
+      record.timer = setTimeout(() => {
+        record.timedOut = true;
+        this.killTree(record);
+        this.finish(record, null);
+      }, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    });
+    // 先替换 record.pty，旧 PTY 的退出事件会被忽略
+    record.pty = child;
+    record.pid = child.pid;
+    record.shell = invocation.file;
+    record.cwd = options.cwd;
+    record.command = options.command;
+    record.commandTerminal = true;
+    record.detached = false;
+    record.idle = false;
+    record.openView = options.openView !== false;
+    record.status = 'running';
+    record.exitCode = null;
+    record.cols = cols;
+    record.rows = rows;
+    record.output = '';
+    record.truncated = false;
+    record.timedOut = false;
+    if (!record.userTitle) {
+      record.title = options.title ?? (basename(options.cwd) || '终端');
+      record.customTitle = Boolean(options.title);
+    }
+    this.bind(record, child, true);
+    this.emit({ type: 'created', terminal: this.toPublic(record) });
+    try {
+      previous.kill();
+    } catch {
+      // 旧交互式 shell 可能已主动退出，忽略关闭失败
+    }
+    return { terminal: this.toPublic(record), done };
+  }
+
   write(id: string, data: string): boolean {
     const record = this.records.get(id);
     if (!record || record.status !== 'running') return false;
+    // 任何输入都让终端不再被视为空闲，避免后续命令替换用户正在操作的 shell
+    record.idle = false;
     record.pty.write(data);
     return true;
   }
@@ -413,6 +520,9 @@ export class TerminalService {
       customTitle: Boolean(options.title),
       ...(options.ownerId === undefined ? {} : { ownerId: options.ownerId }),
       ...(options.command ? { command: options.command } : {}),
+      commandTerminal: Boolean(options.command),
+      idle: !options.command,
+      userTitle: false,
       openView: options.openView !== false,
       detached: options.detached === true,
       aiAccess: options.aiAccess ?? options.source === 'ai',
@@ -473,6 +583,7 @@ export class TerminalService {
     if (record.detached) {
       record.status = 'exited';
       record.exitCode = exitCode;
+      record.idle = false;
       this.emit({ type: 'exit', id: record.id, exitCode, status: 'exited' });
       return;
     }
@@ -485,6 +596,7 @@ export class TerminalService {
 
     record.status = 'exited';
     record.exitCode = exitCode;
+    record.idle = false;
     this.emit({ type: 'exit', id: record.id, exitCode, status: 'exited' });
   }
 
@@ -510,12 +622,17 @@ export class TerminalService {
       record.command = undefined;
       record.truncated = false;
       record.timedOut = false;
-      record.title = basename(record.cwd) || '终端';
+      record.idle = true;
+      if (!record.userTitle) {
+        record.title = basename(record.cwd) || '终端';
+        record.customTitle = false;
+      }
       this.bind(record, child, false);
       this.emit({ type: 'created', terminal: this.toPublic(record) });
     } catch {
       record.status = 'exited';
       record.exitCode = null;
+      record.idle = false;
       this.emit({ type: 'exit', id: record.id, exitCode: null, status: 'exited' });
     }
   }

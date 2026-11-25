@@ -99,6 +99,118 @@ describe('TerminalService', () => {
     expect(service.list()[0]).toMatchObject({ openView: false, status: 'running' });
   });
 
+  it('reuses an idle AI command terminal for subsequent commands', async () => {
+    const firstCommand = makePty();
+    const idleShell = makePty();
+    idleShell.pid = 999_998;
+    const secondCommand = makePty();
+    secondCommand.pid = 999_997;
+    const restoredShell = makePty();
+    restoredShell.pid = 999_996;
+    spawnMock
+      .mockReturnValueOnce(firstCommand)
+      .mockReturnValueOnce(idleShell)
+      .mockReturnValueOnce(secondCommand)
+      .mockReturnValueOnce(restoredShell);
+    const service = new TerminalService();
+    const events: TerminalEvent[] = [];
+    service.onEvent((event) => events.push(event));
+
+    const first = service.startCommand({
+      sessionId: 'session-1',
+      cwd: '/tmp',
+      command: 'echo one',
+      openView: false
+    });
+    firstCommand.emitData('one\n');
+    firstCommand.emitExit(0);
+    await first.done;
+
+    const reusable = service.findReusableCommandTerminal('session-1');
+    expect(reusable).toBe(first.terminal.id);
+
+    const second = service.startCommand({
+      sessionId: 'session-1',
+      cwd: '/tmp',
+      command: 'echo two',
+      openView: false,
+      reuseTerminalId: first.terminal.id
+    });
+    expect(second.terminal.id).toBe(first.terminal.id);
+    expect(second.terminal.pid).toBe(secondCommand.pid);
+    expect(service.list()).toHaveLength(1);
+    expect(idleShell.kill).toHaveBeenCalled();
+    expect(events.filter((event) => event.type === 'created')).toHaveLength(3);
+
+    secondCommand.emitData('two\n');
+    secondCommand.emitExit(0);
+    await expect(second.done).resolves.toMatchObject({ output: 'two\n', exitCode: 0 });
+  });
+
+  it('does not reuse interactive terminals or terminals that received input', async () => {
+    const interactive = makePty();
+    spawnMock.mockReturnValue(interactive);
+    const service = new TerminalService();
+    service.create({ sessionId: 'session-1', cwd: '/tmp', source: 'ai' });
+    expect(service.findReusableCommandTerminal('session-1')).toBeUndefined();
+
+    const commandPty = makePty();
+    const shellPty = makePty();
+    shellPty.pid = 999_998;
+    spawnMock.mockReset();
+    spawnMock.mockReturnValueOnce(commandPty).mockReturnValueOnce(shellPty);
+    const task = service.startCommand({
+      sessionId: 'session-1',
+      cwd: '/tmp',
+      command: 'echo hi',
+      openView: false
+    });
+    commandPty.emitExit(0);
+    await task.done;
+    expect(service.findReusableCommandTerminal('session-1')).toBe(task.terminal.id);
+
+    expect(service.write(task.terminal.id, 'ls\r')).toBe(true);
+    expect(service.findReusableCommandTerminal('session-1')).toBeUndefined();
+  });
+
+  it('keeps a user-renamed title when reusing the command terminal', async () => {
+    const firstCommand = makePty();
+    const idleShell = makePty();
+    idleShell.pid = 999_998;
+    const secondCommand = makePty();
+    secondCommand.pid = 999_997;
+    const restoredShell = makePty();
+    restoredShell.pid = 999_996;
+    spawnMock
+      .mockReturnValueOnce(firstCommand)
+      .mockReturnValueOnce(idleShell)
+      .mockReturnValueOnce(secondCommand)
+      .mockReturnValueOnce(restoredShell);
+    const service = new TerminalService();
+
+    const first = service.startCommand({
+      sessionId: 'session-1',
+      cwd: '/tmp',
+      command: 'echo one',
+      openView: false
+    });
+    firstCommand.emitExit(0);
+    await first.done;
+    expect(service.updateTitle(first.terminal.id, '我的终端', true)).toBe(true);
+
+    const second = service.startCommand({
+      sessionId: 'session-1',
+      cwd: '/tmp',
+      command: 'echo two',
+      title: 'echo two',
+      openView: false,
+      reuseTerminalId: first.terminal.id
+    });
+    expect(second.terminal.title).toBe('我的终端');
+    secondCommand.emitExit(0);
+    await second.done;
+  });
+
   it('runs detached commands without timeout and keeps an exited tab', async () => {
     const fake = makePty();
     spawnMock.mockReturnValue(fake);

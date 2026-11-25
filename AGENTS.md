@@ -772,7 +772,7 @@ interface ProviderCapabilities {
 - AI 命令必须在已授权目录内执行，`cwd` 必须来自目录 root；用户显式打开的终端可位于工作区，无工作区时为根目录；AI 命令环境变量做白名单清理，禁止继承无关密钥。
 - 危险命令必须拦截：提权、关机/重启、格式化磁盘、`rm -rf` 根目录或通配符、`curl | sh`、fork 炸弹等；解释器 `-c` 内嵌命令递归检查。
 - 内置终端由 node-pty 持有 PTY，支持多标签与进程组终止；macOS 支持 `Cmd+K` 清屏；用户终端默认 cwd 为当前工作区，无工作区时为文件系统根目录。
-- AI 的 `run_command` 在独立终端标签中执行并捕获输出，不主动打开面板、不启动外部终端程序；用户可打开面板查看，命令仍受审批、危险命令拦截、超时与输出上限约束。常驻服务可传 `detach: true`，立即返回 terminalId，不设置超时，退出后标签保留为已退出状态。AI 可通过 `terminal_read` / `terminal_wait` 读取当前会话内已授予 AI 访问权限的用户终端或 AI 终端输出，通过 `terminal_write` 写入文本或按键；用户终端需在面板中显式授予 AI 访问，或由 AI 调用 `terminal_request_access` 发起审批；写入与关闭需要审批，终端内容可能包含敏感信息；未授权时工具返回 `TERMINAL_ACCESS_DENIED` 并提示用户在终端标签右键授权。AI 的 `terminal_create` 和 `terminal_write` 只能使用已授权工作区目录，并受危险命令拦截约束。
+- AI 的 `run_command` 在终端标签中执行并捕获输出；连续命令复用同一空闲命令标签（用户输入过或终端有前台进程时不复用），`detach: true` 才新建独立标签；复用标签时 `terminal_read` 只返回当前命令输出，面板保留历史。不主动打开面板、不启动外部终端程序；用户可打开面板查看，命令仍受审批、危险命令拦截、超时与输出上限约束。常驻服务可传 `detach: true`，立即返回 terminalId，不设置超时，退出后标签保留为已退出状态。AI 可通过 `terminal_read` / `terminal_wait` 读取当前会话内已授予 AI 访问权限的用户终端或 AI 终端输出，通过 `terminal_write` 写入文本或按键；用户终端需在面板中显式授予 AI 访问，或由 AI 调用 `terminal_request_access` 发起审批；写入与关闭需要审批，终端内容可能包含敏感信息；未授权时工具返回 `TERMINAL_ACCESS_DENIED` 并提示用户在终端标签右键授权。AI 的 `terminal_create` 和 `terminal_write` 只能使用已授权工作区目录，并受危险命令拦截约束。
 - 关闭正在运行的终端必须二次确认；命令内不允许自行追加 `&` 或 `nohup`。
 - 超时后终止整个进程树；Windows 使用 ConPTY，macOS/Linux 使用 PTY。
 - 输出超过上限时截断并标记；默认上限可配置，避免一次命令撑爆上下文。

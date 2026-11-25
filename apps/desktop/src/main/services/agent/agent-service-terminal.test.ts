@@ -12,7 +12,10 @@ import { AgentService } from './agent-service';
 
 const startCommand = vi.hoisted(() => vi.fn());
 const readOutput = vi.hoisted(() => vi.fn(() => undefined));
-vi.mock('../terminal/terminal-service', () => ({ terminalService: { startCommand, readOutput } }));
+const findReusableCommandTerminal = vi.hoisted(() => vi.fn(() => undefined));
+vi.mock('../terminal/terminal-service', () => ({
+  terminalService: { startCommand, readOutput, findReusableCommandTerminal }
+}));
 
 describe('AgentService terminal integration', () => {
   let root = '';
@@ -28,6 +31,8 @@ describe('AgentService terminal integration', () => {
     startCommand.mockReset();
     readOutput.mockReset();
     readOutput.mockReturnValue(undefined);
+    findReusableCommandTerminal.mockReset();
+    findReusableCommandTerminal.mockReturnValue(undefined);
     startCommand.mockReturnValue({
       terminal: { id: 'terminal-1', pid: 1234 },
       done: Promise.resolve({
@@ -102,6 +107,7 @@ describe('AgentService terminal integration', () => {
       }
     );
 
+    expect(findReusableCommandTerminal).toHaveBeenCalledWith('session-1', 7);
     expect(startCommand).toHaveBeenCalledWith(
       expect.objectContaining({ command: 'echo hi', ownerId: 7, openView: false })
     );

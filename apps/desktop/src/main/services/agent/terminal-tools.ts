@@ -67,6 +67,15 @@ const writeSchema = z
 
 const pendingInput = new Map<string, string>();
 
+const pendingKey = (terminal: TerminalSessionPublic): string => `${terminal.id}:${terminal.pid}`;
+
+const clearPendingInput = (terminalId: string): void => {
+  const prefix = `${terminalId}:`;
+  for (const key of pendingInput.keys()) {
+    if (key.startsWith(prefix)) pendingInput.delete(key);
+  }
+};
+
 const keys: Record<string, string> = {
   enter: '\r',
   'ctrl-c': '\u0003',
@@ -333,7 +342,7 @@ export const executeTerminalTool = async (
       return failure('TERMINAL_NOT_FOUND', '终端不存在或不属于当前会话');
     }
     if (!isAiAccessGranted(snapshot.terminal)) return accessDenied();
-    if (snapshot.terminal.status !== 'running') pendingInput.delete(parsed.data.terminalId);
+    if (snapshot.terminal.status !== 'running') clearPendingInput(parsed.data.terminalId);
     return success({
       terminal: snapshot.terminal,
       output: snapshot.output,
@@ -356,7 +365,7 @@ export const executeTerminalTool = async (
         return failure('TERMINAL_NOT_FOUND', '终端不存在或不属于当前会话');
       }
       if (!isAiAccessGranted(snapshot.terminal)) return accessDenied();
-      if (snapshot.terminal.status !== 'running') pendingInput.delete(parsed.data.terminalId);
+      if (snapshot.terminal.status !== 'running') clearPendingInput(parsed.data.terminalId);
       const matched = parsed.data.pattern
         ? snapshot.output.includes(parsed.data.pattern)
         : snapshot.terminal.status !== 'running';
@@ -435,23 +444,25 @@ export const executeTerminalTool = async (
     }
     if (!isAiAccessGranted(snapshot.terminal)) return accessDenied();
     if (snapshot.terminal.status !== 'running') {
-      pendingInput.delete(parsed.data.terminalId);
+      clearPendingInput(parsed.data.terminalId);
       return failure('TERMINAL_NOT_RUNNING', '终端已退出，无法写入');
     }
+    // 按终端 id + pid 记录未提交输入；复用标签会更换 pid，旧输入不会串到新 shell
+    const key = pendingKey(snapshot.terminal);
     const data = parsed.data.data ?? '';
-    const pending = pendingInput.get(parsed.data.terminalId) ?? '';
+    const pending = pendingInput.get(key) ?? '';
     const candidate = `${pending}${data}`;
     const danger = detectDangerousCommand(candidate);
     if (danger) {
-      pendingInput.delete(parsed.data.terminalId);
+      pendingInput.delete(key);
       return failure('COMMAND_BLOCKED', danger);
     }
     const submits =
       parsed.data.submit === true || parsed.data.key === 'enter' || /[\r\n]/.test(data);
     if (submits || parsed.data.key === 'ctrl-c' || parsed.data.key === 'escape') {
-      pendingInput.delete(parsed.data.terminalId);
+      pendingInput.delete(key);
     } else if (candidate) {
-      pendingInput.set(parsed.data.terminalId, candidate.slice(-10_000));
+      pendingInput.set(key, candidate.slice(-10_000));
     }
     let payload = data;
     if (parsed.data.submit && !/[\r\n]$/.test(payload)) payload += '\r';
@@ -472,7 +483,7 @@ export const executeTerminalTool = async (
       return failure('TERMINAL_NOT_FOUND', '终端不存在或不属于当前会话');
     }
     const closed = terminalService.close(parsed.data.terminalId);
-    if (closed) pendingInput.delete(parsed.data.terminalId);
+    if (closed) clearPendingInput(parsed.data.terminalId);
     return closed
       ? success({ terminalId: parsed.data.terminalId, closed })
       : failure('TERMINAL_CLOSE_FAILED', '关闭终端失败');

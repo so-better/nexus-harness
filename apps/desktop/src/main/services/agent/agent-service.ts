@@ -2017,12 +2017,17 @@ ${assistant.slice(0, 3_000)}`;
             const cwd = await toolset.resolvePath(parsed.data.cwd ?? '.');
             const { terminalService } = await import('../terminal/terminal-service');
             const detached = parsed.data.detach === true;
+            // 连续命令复用同一个空闲 AI 命令终端，避免每次 run_command 都新建空标签
+            const reusableTerminalId = detached
+              ? undefined
+              : terminalService.findReusableCommandTerminal(input.sessionId, hooks.terminalOwnerId);
             const task = terminalService.startCommand({
               sessionId: input.sessionId,
               cwd,
               command: parsed.data.command,
               title: parsed.data.command.slice(0, 40),
               openView: false,
+              ...(reusableTerminalId ? { reuseTerminalId: reusableTerminalId } : {}),
               ...(detached ? { detached: true } : {}),
               ...(hooks.terminalOwnerId === undefined ? {} : { ownerId: hooks.terminalOwnerId }),
               ...(parsed.data.timeoutMs === undefined ? {} : { timeoutMs: parsed.data.timeoutMs })
