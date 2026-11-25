@@ -1,7 +1,10 @@
 <template>
   <section class="nh-extension-panel nh-mcp">
     <div class="nh-extension-panel__header">
-      <p>{{ t('mcp.hint') }}</p>
+      <div class="nh-mcp__header-copy">
+        <p>{{ t('mcp.hint') }}</p>
+        <p class="nh-mcp__token-hint">{{ t('mcp.tokenHint') }}</p>
+      </div>
       <div class="nh-extension-panel__actions">
         <NButton type="primary" secondary :loading="saving" @click="save()">
           <template #icon><AppIcon name="check" :size="14" /></template>
@@ -345,6 +348,18 @@ onMounted(async () => {
   margin: 0;
   color: var(--nh-color-text-secondary);
   font-size: 12px;
+}
+
+.nh-mcp__header-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nh-mcp__token-hint {
+  color: var(--nh-color-warning);
+  font-size: 11px;
 }
 
 .nh-extension-panel__actions {

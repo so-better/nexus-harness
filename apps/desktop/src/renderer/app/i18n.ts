@@ -140,6 +140,8 @@ const zhCN = {
   'skills.deleted': 'SKILL 已删除',
   'skills.deleteFailed': '删除 SKILL 失败',
   'mcp.hint': 'MCP Server 为 Agent 提供外部工具与资源；enabled 控制启用状态，工具调用仍需审批。',
+  'mcp.tokenHint':
+    '提示：启用的 MCP 工具会全部注入会话上下文，工具过多会显著增加每次请求的 token 消耗。',
   'mcp.import': '导入 MCP',
   'mcp.add': '添加',
   'mcp.addTitle': '添加 MCP Server',
@@ -777,6 +779,8 @@ const enUS: Record<MessageKey, string> = {
   'skills.deleteFailed': 'Failed to delete SKILL',
   'mcp.hint':
     'MCP servers provide external tools and resources to the agent; enabled controls activation, and tool calls still require approval.',
+  'mcp.tokenHint':
+    'Note: enabled MCP tools are all injected into the session context; too many tools will significantly increase token usage per request.',
   'mcp.import': 'Import MCP',
   'mcp.add': 'Add',
   'mcp.addTitle': 'Add MCP Server',
