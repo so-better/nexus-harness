@@ -43,6 +43,19 @@ describe('read_artifact', () => {
     expect(payload.hint).toContain('offset: 10000');
   });
 
+  it('clamps the requested slice to the host character limit', async () => {
+    const result = await runReadArtifactTool(
+      fakeArtifacts('x'.repeat(100)),
+      'session-1',
+      { artifactId: 'art-1', maxChars: 100 },
+      { maxCharsLimit: 10 }
+    );
+
+    const payload = JSON.parse(result.output) as ArtifactSlice;
+    expect(payload.content).toHaveLength(10);
+    expect(payload.truncated).toBe(true);
+  });
+
   it('returns the remaining content on the next page', async () => {
     const result = await runReadArtifactTool(
       fakeArtifacts('a'.repeat(100) + 'b'.repeat(100)),

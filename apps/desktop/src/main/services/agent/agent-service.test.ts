@@ -882,7 +882,7 @@ describe('AgentService', () => {
     expect(compacted?.payload.strategy).toContain('summarized');
   });
 
-  it('keeps full read_file output for UI but compacts it before the next model call', async () => {
+  it('compacts oversized read_file output at execution time while keeping UI output full', async () => {
     await writeFile(join(root, 'large.txt'), 'x'.repeat(20_000), 'utf8');
     const provider = new MockProvider([
       {
@@ -919,10 +919,16 @@ describe('AgentService', () => {
     );
 
     const completed = events.find((event) => event.type === 'tool.completed');
-    // read_file 完整输出保留在事件与 UI 中，不再被压成预览
-    expect((completed?.payload as { output?: string }).output).toHaveLength(20_000);
-    // 下一次模型调用前由上下文压缩落 artifact，模型只看预览
-    expect(events.some((event) => event.type === 'context.compacted')).toBe(true);
+    const payload = completed?.payload as {
+      output?: string;
+      modelOutput?: string;
+      artifactId?: string;
+    };
+    // UI/事件保留完整输出，模型侧用 modelOutput 预览 + read_artifact 引用
+    expect(payload.output).toHaveLength(20_000);
+    expect(payload.artifactId).toEqual(expect.any(String));
+    expect(payload.modelOutput).toContain('"truncated":true');
+    expect(payload.modelOutput).toContain('read_artifact');
     expect(result.messages.some((message) => message.content.includes('"truncated":true'))).toBe(
       true
     );

@@ -102,6 +102,13 @@ export class AgentContextService {
   }
 
   /**
+   * 当前输入预算（已扣除输出预留与安全余量），供工具执行层判断单次输出是否需要提前压缩。
+   */
+  get inputBudget(): number {
+    return this.budget.inputBudget;
+  }
+
+  /**
    * 用校准系数估算上下文 token；所有预算比较都必须走这里。
    */
   private estimateTokens(messages: readonly ChatMessage[], tools?: readonly ToolSchema[]): number {

@@ -11,6 +11,7 @@ import {
   EventBus,
   PermissionGateway,
   createNexusEvent,
+  estimateTextTokens,
   type AgentToolDefinition
 } from '@nexus/core';
 import {
@@ -701,6 +702,10 @@ const RECENT_TOOL_TURNS = 6;
  */
 const MAX_OPTIONAL_TOOLS = 24;
 /**
+ * 显式加载工具的数量上限：为自动筛选工具预留槽位，避免长 Run 内搜索/补加载累积后把自动工具挤光。
+ */
+const MAX_SEARCHED_TOOLS = Math.max(1, MAX_OPTIONAL_TOOLS - MAX_AUTO_TOOLS);
+/**
  * 命令输出预览：命令/日志的重要信息常在末尾，预览同时保留头部与尾部。
  */
 const COMMAND_PREVIEW_HEAD = 400;
@@ -1109,6 +1114,14 @@ ${assistant.slice(0, 3_000)}`;
         ...(extraParams ? { extraParams } : {}),
         ...(hooks.signal ? { signal: hooks.signal } : {})
       });
+      // 单次工具输出占输入预算的比例；超过则提前落 Artifact，避免一次性把大输出塞进下一次模型请求
+      const MODEL_OUTPUT_BUDGET_RATIO = 0.35;
+      const modelOutputTokenCap = Math.max(
+        2_000,
+        Math.floor(context.inputBudget * MODEL_OUTPUT_BUDGET_RATIO)
+      );
+      // read_artifact 单次返回上限：按预算夹紧，避免小窗口下一次取回过大分片
+      const readArtifactMaxCharsLimit = Math.min(100_000, Math.max(4_000, modelOutputTokenCap * 2));
       let checkpointRoot = toolset ? await toolset.resolvePath('.') : undefined;
       let workspaceDenied = false;
 
@@ -1191,6 +1204,19 @@ ${assistant.slice(0, 3_000)}`;
       let currentToolDefinitions: AgentToolDefinition[] = [];
       // 模型通过 search_tools 主动加载的工具名，以及可供检索的完整候选
       const searchedToolNames = new Set<string>();
+      /**
+       * 记录显式加载的工具并按 LRU 限制数量：长 Run 内多次 search/补加载时，
+       * 避免旧工具无限累积并长期挤占自动筛选工具的槽位。
+       */
+      const rememberSearchedTool = (name: string): void => {
+        searchedToolNames.delete(name);
+        searchedToolNames.add(name);
+        while (searchedToolNames.size > MAX_SEARCHED_TOOLS) {
+          const oldest = searchedToolNames.values().next().value;
+          if (oldest === undefined) break;
+          searchedToolNames.delete(oldest);
+        }
+      };
       let searchableCandidates: SelectableTool[] = [];
       let rebuildVisibleTools: () => void = () => {
         throw new Error('工具注册表尚未初始化');
@@ -1232,15 +1258,29 @@ ${assistant.slice(0, 3_000)}`;
             candidates: searchableCandidates,
             maxTools: parsed.data.limit ?? 8
           });
-          for (const tool of matches) searchedToolNames.add(tool.name);
+          for (const tool of matches) rememberSearchedTool(tool.name);
           rebuildVisibleTools();
+          // 只回报真正进入可见集的名字：受可选工具总量上限影响时，未注入的要如实告知
+          const visible = new Set(currentToolDefinitions.map((tool) => tool.name));
+          const loaded = matches.map((tool) => tool.name).filter((name) => visible.has(name));
+          const dropped = matches.map((tool) => tool.name).filter((name) => !visible.has(name));
           return {
             ok: true,
-            output: JSON.stringify({ loaded: matches.map((tool) => tool.name) })
+            output: JSON.stringify({
+              loaded,
+              ...(dropped.length
+                ? {
+                    dropped,
+                    note: '可选工具已达单轮上限；优先使用已加载工具，或减少同时加载的数量后重试'
+                  }
+                : {})
+            })
           };
         }
         if (call.name === 'read_artifact') {
-          return runReadArtifactTool(artifacts, input.sessionId, call.arguments);
+          return runReadArtifactTool(artifacts, input.sessionId, call.arguments, {
+            maxCharsLimit: readArtifactMaxCharsLimit
+          });
         }
         if (call.name === 'theme_get' || call.name === 'theme_update') {
           return executeThemeTool(call.name, call.arguments);
@@ -2390,10 +2430,11 @@ ${assistant.slice(0, 3_000)}`;
         }
         const baseCount = result.length;
 
+        // 优先级：模型显式 search_tools 加载 > 自动筛选 > 最近历史用过，保证显式请求不被截掉
         const optionals = [
+          ...allToolDefinitions.filter((definition) => searchedToolNames.has(definition.name)),
           ...autoTools,
-          ...allToolDefinitions.filter((definition) => usedToolNames.has(definition.name)),
-          ...allToolDefinitions.filter((definition) => searchedToolNames.has(definition.name))
+          ...allToolDefinitions.filter((definition) => usedToolNames.has(definition.name))
         ];
         for (const definition of optionals) {
           if (result.length - baseCount >= MAX_OPTIONAL_TOOLS) break;
@@ -2461,6 +2502,43 @@ ${assistant.slice(0, 3_000)}`;
           mode === 'plan' ? ['read'] : ['read', 'write', 'execute', 'network']
         ),
         executeTool,
+        resolveMissingTool: (call) => {
+          // 明确被模式禁用的工具不自动补加载
+          if (mode === 'plan' && !PLAN_ALLOWED_TOOLS.has(call.name)) return false;
+          if (!allToolDefinitions.some((definition) => definition.name === call.name)) return false;
+          rememberSearchedTool(call.name);
+          rebuildVisibleTools();
+          return currentToolDefinitions.some((definition) => definition.name === call.name);
+        },
+        compactToolResult: async (call, result) => {
+          // 仅处理巨大的成功输出；已有专用 modelOutput 的（如命令）或本身就是分页回读的不重复处理
+          if (!result.ok || result.modelOutput !== undefined) return result;
+          if (call.name === 'read_artifact') return result;
+          if (estimateTextTokens(result.output) <= modelOutputTokenCap) return result;
+          try {
+            const stored = await artifacts.saveText(
+              input.sessionId,
+              `tool-${call.name}`,
+              result.output,
+              { runId }
+            );
+            return {
+              ...result,
+              artifactId: stored.artifactId,
+              bytes: stored.bytes,
+              modelOutput: JSON.stringify({
+                truncated: true,
+                artifactId: stored.artifactId,
+                bytes: stored.bytes,
+                preview: commandOutputPreview(result.output),
+                hint: `完整内容可用 read_artifact({ artifactId: "${stored.artifactId}" }) 读取`
+              })
+            };
+          } catch {
+            // 落盘失败时保留完整输出，交由上下文压缩兜底
+            return result;
+          }
+        },
         prepareContext: (messages, actualInputTokens) =>
           context.prepare(messages, currentToolDefinitions, actualInputTokens),
         sanitizeToolInput: (call) => sanitizeImageConfigInput(call.name, call.arguments),

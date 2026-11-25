@@ -72,6 +72,19 @@ export interface AgentLoopOptions {
     approvalId: string
   ) => Promise<boolean>;
   autoApprove?: (call: ProviderToolCall, tool: AgentToolDefinition) => boolean | Promise<boolean>;
+  /**
+   * 已知但当前未注入的工具按需补齐；返回 true 表示已加入可见集。
+   * 用于按需加载场景下，模型直接调用历史工具时避免误报 TOOL_NOT_FOUND。
+   */
+  resolveMissingTool?: (call: ProviderToolCall) => boolean;
+  /**
+   * 工具执行后、写入事件前按宿主策略压缩“模型侧输出”。
+   * 只能修改 modelOutput / artifactId 等模型上下文相关字段，output 仍用于 UI 与审计。
+   */
+  compactToolResult?: (
+    call: ProviderToolCall,
+    result: ToolExecutionResult
+  ) => Promise<ToolExecutionResult>;
   signal?: AbortSignal;
 }
 
@@ -261,7 +274,15 @@ export class AgentLoop {
           continue;
         }
 
-        const toolResult = await this.executeTool(call);
+        let toolResult = await this.executeTool(call);
+
+        if (toolResult.ok && this.options.compactToolResult) {
+          try {
+            toolResult = await this.options.compactToolResult(call, toolResult);
+          } catch {
+            // 压缩失败时保留完整输出，交由后续上下文压缩兜底
+          }
+        }
 
         if (toolResult.ok) {
           this.emit('tool.completed', {
@@ -513,12 +534,18 @@ export class AgentLoop {
   private async authorizeTool(
     call: ProviderToolCall
   ): Promise<{ code: string; message: string } | undefined> {
-    const tool = this.currentTools().find((item) => item.name === call.name);
+    let tool = this.currentTools().find((item) => item.name === call.name);
     if (!tool) {
       if (this.options.blockedTools?.includes(call.name)) {
         return { code: 'TOOL_MODE_DENIED', message: `当前模式不可用工具：${call.name}` };
       }
-      return { code: 'TOOL_NOT_FOUND', message: `未注册工具：${call.name}` };
+      // 已知工具可能因按需加载未注入：先让宿主补齐，再重新授权
+      if (this.options.resolveMissingTool?.(call)) {
+        tool = this.currentTools().find((item) => item.name === call.name);
+      }
+      if (!tool) {
+        return { code: 'TOOL_NOT_FOUND', message: `未注册工具：${call.name}` };
+      }
     }
 
     const gateway = this.options.permissionGateway;

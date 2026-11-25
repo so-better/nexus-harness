@@ -50,12 +50,20 @@ export interface ReadArtifactResult {
 }
 
 /**
+ * 读取选项：maxCharsLimit 由宿主按当前模型输入预算注入，避免一次取回过大分片再次撑爆上下文。
+ */
+export interface ReadArtifactOptions {
+  maxCharsLimit?: number;
+}
+
+/**
  * 按会话读取产物分片；返回带 nextOffset 提示的结构化结果。
  */
 export const runReadArtifactTool = async (
   artifacts: ArtifactService,
   sessionId: string,
-  input: unknown
+  input: unknown,
+  options: ReadArtifactOptions = {}
 ): Promise<ReadArtifactResult> => {
   const parsed = readArtifactInputSchema.safeParse(input);
   if (!parsed.success) {
@@ -67,7 +75,10 @@ export const runReadArtifactTool = async (
   }
 
   const offset = parsed.data.offset ?? 0;
-  const maxChars = parsed.data.maxChars ?? DEFAULT_MAX_CHARS;
+  const maxChars = Math.min(
+    parsed.data.maxChars ?? DEFAULT_MAX_CHARS,
+    options.maxCharsLimit ?? MAX_CHARS
+  );
   const slice = await artifacts.readRange(sessionId, parsed.data.artifactId, offset, maxChars);
   if (!slice) {
     return {
