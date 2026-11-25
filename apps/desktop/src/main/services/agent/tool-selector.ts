@@ -214,7 +214,13 @@ export const isAmbiguousRecall = (
 };
 
 /**
- * 自动工具的注入计划：分差清晰时直接用 BM25，模糊时交给模型重排。
+ * 候选仅比 K 多出的余量小于该值时，重排收益有限却要付出一次模型调用与首字延迟，
+ * 直接取 BM25 前 K 个即可。
+ */
+export const RERANK_MIN_EXTRA = 4;
+
+/**
+ * 自动工具的注入计划：分差清晰或候选余量很小时直接用 BM25，模糊且余量充足时交给模型重排。
  */
 export type AutoToolPlan =
   { kind: 'direct'; tools: SelectableTool[] } | { kind: 'rerank'; shortlist: SelectableTool[] };
@@ -225,6 +231,10 @@ export type AutoToolPlan =
 export const planAutoTools = (scored: readonly ScoredTool[], k: number): AutoToolPlan => {
   const tools = scored.map((item) => item.tool);
   if (scored.length <= k) return { kind: 'direct', tools };
+  // 余量太小时重排对结果影响有限，跳过以省一次模型调用和首字延迟
+  if (scored.length <= k + RERANK_MIN_EXTRA) {
+    return { kind: 'direct', tools: tools.slice(0, k) };
+  }
   return isAmbiguousRecall(scored, k)
     ? { kind: 'rerank', shortlist: tools }
     : { kind: 'direct', tools: tools.slice(0, k) };

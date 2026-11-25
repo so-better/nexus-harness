@@ -106,6 +106,7 @@ import {
   searchToolsToolDefinition,
   type ToolGroupId
 } from './tool-groups';
+import { readArtifactToolDefinition, runReadArtifactTool } from './read-artifact-tool';
 import {
   planAutoTools,
   selectScoredTools,
@@ -643,6 +644,7 @@ const runSkillScriptToolDefinition: AgentToolDefinition = {
 
 const PLAN_ALLOWED_TOOLS = new Set([
   'search_tools',
+  'read_artifact',
   'read_file',
   'list_dir',
   'glob',
@@ -1236,6 +1238,9 @@ ${assistant.slice(0, 3_000)}`;
             ok: true,
             output: JSON.stringify({ loaded: matches.map((tool) => tool.name) })
           };
+        }
+        if (call.name === 'read_artifact') {
+          return runReadArtifactTool(artifacts, input.sessionId, call.arguments);
         }
         if (call.name === 'theme_get' || call.name === 'theme_update') {
           return executeThemeTool(call.name, call.arguments);
@@ -2123,33 +2128,8 @@ ${assistant.slice(0, 3_000)}`;
             })
           );
         }
-        if (!result.ok || result.output.length <= TOOL_OUTPUT_ARTIFACT_CHAR_LIMIT) return result;
-
-        try {
-          const stored = await artifacts.saveText(
-            input.sessionId,
-            `tool-${call.name}`,
-            result.output,
-            { runId }
-          );
-          return {
-            ok: true,
-            output: JSON.stringify({
-              truncated: true,
-              artifactId: stored.artifactId,
-              bytes: stored.bytes,
-              preview: result.output.slice(0, TOOL_OUTPUT_PREVIEW_CHAR_LIMIT)
-            }),
-            artifactId: stored.artifactId,
-            bytes: stored.bytes
-          };
-        } catch {
-          // 产物落盘失败时降级为短预览，不能因此让工具调用失败
-          return {
-            ok: true,
-            output: `${result.output.slice(0, TOOL_OUTPUT_PREVIEW_CHAR_LIMIT)}\n…[输出过长且产物保存失败]`
-          };
-        }
+        // 工具完整输出直接回给模型；超长输出由上下文压缩按预算落 Artifact，可用 read_artifact 回读
+        return result;
       };
       const memoryContext =
         this.memory?.settings().retrieval === false ? undefined : this.memory?.context();
@@ -2158,8 +2138,7 @@ ${assistant.slice(0, 3_000)}`;
         role: 'system',
         content: buildAgentSystemPrompt({
           mode,
-          hasWorkspace: input.rootPaths.length > 0,
-          ...(memoryContext?.text ? { memory: memoryContext.text } : {})
+          hasWorkspace: input.rootPaths.length > 0
         })
       };
       const shouldAddUserMessage = !input.regenerateMessageId;
@@ -2246,6 +2225,7 @@ ${assistant.slice(0, 3_000)}`;
           ...(toolset?.definitions ?? fileToolDefinitions),
           askUserToolDefinition,
           searchToolsToolDefinition,
+          readArtifactToolDefinition,
           openUrlToolDefinition,
           saveFileToolDefinition,
           ...(this.memory && this.memory.settings().retrieval
@@ -2464,7 +2444,8 @@ ${assistant.slice(0, 3_000)}`;
         buildEnvironmentContext({
           roots: environmentRoots,
           providerName: providerConfig.name,
-          model: modelConfig.id
+          model: modelConfig.id,
+          ...(memoryContext?.text ? { memory: memoryContext.text } : {})
         })
       );
       const loop = new AgentLoop({
@@ -2480,7 +2461,8 @@ ${assistant.slice(0, 3_000)}`;
           mode === 'plan' ? ['read'] : ['read', 'write', 'execute', 'network']
         ),
         executeTool,
-        prepareContext: (messages) => context.prepare(messages, currentToolDefinitions),
+        prepareContext: (messages, actualInputTokens) =>
+          context.prepare(messages, currentToolDefinitions, actualInputTokens),
         sanitizeToolInput: (call) => sanitizeImageConfigInput(call.name, call.arguments),
         ...(hooks.approveTool ? { approveTool: hooks.approveTool } : {}),
         ...(hooks.autoApprove ? { autoApprove: hooks.autoApprove } : {}),

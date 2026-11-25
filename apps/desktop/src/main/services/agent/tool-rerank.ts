@@ -8,9 +8,10 @@ import type { UsageSummary } from '@nexus/shared';
 import type { SelectableTool } from './tool-selector';
 
 /**
- * 重排调用超时；避免工具筛选阻塞首 token。
+ * 重排调用超时：重排在首 token 之前同步执行，必须贴近首字延迟预算。
+ * 超时即回退到 BM25 前 K 个，保证不丢工具，因此可设得较短。
  */
-const RERANK_TIMEOUT_MS = 8_000;
+const RERANK_TIMEOUT_MS = 2_000;
 /**
  * 单个工具描述在提示词中的截断长度。
  */

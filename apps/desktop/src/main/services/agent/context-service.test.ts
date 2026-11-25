@@ -45,6 +45,20 @@ describe('AgentContextService', () => {
     expect(result.compacted).toBeUndefined();
   });
 
+  it('uses real usage to correct token underestimation before overflow', async () => {
+    const service = createService();
+    const messages: ChatMessage[] = [user('a'.repeat(3_000)), assistant('b'.repeat(3_000))];
+
+    // 首次准备建立“上次估算”，此时还没有真实 usage
+    const first = await service.prepare(messages);
+    expect(first.compacted).toBeUndefined();
+
+    // 真实输入远高于字符估算时，校准后应提前压缩，而不是等到真实超窗
+    const second = await service.prepare(messages, undefined, 6_000);
+    expect(second.compacted).toBe(true);
+    expect(second.strategies).toContain('hard_truncated');
+  });
+
   it('moves oversized tool output to an artifact and keeps a preview', async () => {
     const service = createService();
     const messages: ChatMessage[] = [
@@ -52,7 +66,7 @@ describe('AgentContextService', () => {
       {
         role: 'tool',
         toolCallId: 'call-1',
-        content: 'x'.repeat(8_000)
+        content: 'x'.repeat(20_000)
       }
     ];
 
@@ -64,6 +78,28 @@ describe('AgentContextService', () => {
     expect(result.artifactIds).toHaveLength(1);
     expect(toolMessage?.content).toContain('"truncated":true');
     expect(toolMessage?.content.length).toBeLessThan(2_000);
+  });
+
+  it('truncates older tool output before the most recent one', async () => {
+    const service = createService();
+    const messages: ChatMessage[] = [
+      user('读取两个文件'),
+      { role: 'tool', toolCallId: 'old', content: 'a'.repeat(8_000) },
+      assistant('已读取第一个'),
+      { role: 'tool', toolCallId: 'recent', content: 'b'.repeat(2_000) }
+    ];
+
+    const result = await service.prepare(messages);
+    const oldMessage = result.messages.find((message) => message.toolCallId === 'old');
+    const recentMessage = result.messages.find((message) => message.toolCallId === 'recent');
+
+    // 旧输出先落 Artifact 并给出回读提示
+    expect(oldMessage?.content).toContain('"truncated":true');
+    expect(oldMessage?.content).toContain('read_artifact');
+    expect(result.strategies).toContain('tool_output_truncated');
+    // 最近一轮工具输出仍保留原文
+    expect(recentMessage?.content).toBe('b'.repeat(2_000));
+    expect(result.strategies).not.toContain('recent_tool_truncated');
   });
 
   it('summarizes older messages and stores the summary artifact', async () => {
@@ -195,7 +231,7 @@ describe('AgentContextService', () => {
     });
     const messages: ChatMessage[] = [
       user('读取大文件'),
-      { role: 'tool', toolCallId: 'call-1', content: 'x'.repeat(8_000) }
+      { role: 'tool', toolCallId: 'call-1', content: 'x'.repeat(20_000) }
     ];
 
     const result = await service.prepare(messages);
@@ -229,6 +265,22 @@ describe('AgentContextService', () => {
     expect(result.strategies).toContain('hard_truncated');
     expect(result.usage).toMatchObject({ inputTokens: 10, outputTokens: 0 });
     expect(result.afterTokens).toBeLessThanOrEqual(2_560);
+  });
+
+  it('truncates oversized reasoning during hard truncation', async () => {
+    const service = createService();
+    const messages: ChatMessage[] = [
+      user('目标'),
+      { role: 'assistant', content: 'a'.repeat(8_000), reasoning: 'r'.repeat(8_000) }
+    ];
+
+    const result = await service.prepare(messages);
+    const assistant = result.messages.at(-1);
+
+    expect(result.strategies).toContain('hard_truncated');
+    expect(assistant?.content).toContain('…[已截断]');
+    expect(assistant?.reasoning).toContain('…[已截断]');
+    expect(result.afterTokens).toBeLessThanOrEqual(result.beforeTokens ?? Number.MAX_SAFE_INTEGER);
   });
 
   it('throws when protected user messages alone exceed the budget', async () => {

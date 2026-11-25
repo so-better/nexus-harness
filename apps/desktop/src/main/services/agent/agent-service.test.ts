@@ -255,6 +255,7 @@ describe('AgentService', () => {
       'grep',
       'ask_user',
       'search_tools',
+      'read_artifact',
       'open_url',
       'save_file'
     ]);
@@ -559,8 +560,11 @@ describe('AgentService', () => {
       db.close();
     }
 
-    expect(requests[0]?.messages[0]?.content).toContain('<memory>');
-    expect(requests[0]?.messages[0]?.content).toContain('偏好简洁中文回答');
+    // 记忆放在动态环境块中，追加到最后一条用户消息，避免破坏系统提示缓存
+    const lastUser = [...(requests[0]?.messages ?? [])].reverse().find((m) => m.role === 'user');
+    expect(lastUser?.content).toContain('长期记忆');
+    expect(lastUser?.content).toContain('偏好简洁中文回答');
+    expect(requests[0]?.messages[0]?.content).not.toContain('偏好简洁中文回答');
   });
 
   it('skips memory injection when retrieval is disabled', async () => {
@@ -878,7 +882,7 @@ describe('AgentService', () => {
     expect(compacted?.payload.strategy).toContain('summarized');
   });
 
-  it('artifacts oversized tool output before the next model call', async () => {
+  it('keeps full read_file output for UI but compacts it before the next model call', async () => {
     await writeFile(join(root, 'large.txt'), 'x'.repeat(20_000), 'utf8');
     const provider = new MockProvider([
       {
@@ -915,11 +919,14 @@ describe('AgentService', () => {
     );
 
     const completed = events.find((event) => event.type === 'tool.completed');
-    expect(completed?.payload).toMatchObject({ artifactId: expect.any(String) });
+    // read_file 完整输出保留在事件与 UI 中，不再被压成预览
+    expect((completed?.payload as { output?: string }).output).toHaveLength(20_000);
+    // 下一次模型调用前由上下文压缩落 artifact，模型只看预览
+    expect(events.some((event) => event.type === 'context.compacted')).toBe(true);
     expect(result.messages.some((message) => message.content.includes('"truncated":true'))).toBe(
       true
     );
-    expect(await readdir(join(root, 'artifacts', 'session-1'))).toHaveLength(1);
+    expect((await readdir(join(root, 'artifacts', 'session-1'))).length).toBeGreaterThan(0);
   });
 
   it('runs a tool call and returns the final messages', async () => {

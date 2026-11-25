@@ -113,9 +113,14 @@ describe('tool-selector', () => {
     expect(clear.kind).toBe('direct');
     if (clear.kind === 'direct') expect(clear.tools).toHaveLength(2);
 
-    const close = planAutoTools(scored([10, 5, 4.9, 4.8]), 2);
+    // 余量充足且边界接近时才重排
+    const close = planAutoTools(scored([10, 5, 4.9, 4.8, 4.7, 4.6, 4.5]), 2);
     expect(close.kind).toBe('rerank');
-    if (close.kind === 'rerank') expect(close.shortlist).toHaveLength(4);
+    if (close.kind === 'rerank') expect(close.shortlist).toHaveLength(7);
+
+    // 余量很小时不重排，直接用 BM25 前 K 个
+    const narrow = planAutoTools(scored([10, 5, 4.9, 4.8]), 2);
+    expect(narrow.kind).toBe('direct');
 
     const few = planAutoTools(scored([10, 5]), 5);
     expect(few.kind).toBe('direct');

@@ -66,6 +66,14 @@ interface SummaryFailure {
 export class AgentContextService {
   private readonly budget: ContextBudget;
   private readonly artifactized = new WeakSet<ChatMessage>();
+  /**
+   * 真实 usage 校准系数：真实输入 token / 字符估算，修正估算系统性偏差。
+   */
+  private calibration = 1;
+  /**
+   * 上一次准备并送入模型的上下文估算 token，用于与真实 usage 比较。
+   */
+  private lastSentEstimate?: number;
 
   constructor(private readonly options: AgentContextOptions) {
     this.budget = createContextBudget({
@@ -75,14 +83,45 @@ export class AgentContextService {
   }
 
   /**
+   * 用真实 usage 校准字符估算：真实输入明显高于估算时抬高系数，避免压得太晚导致超窗。
+   * 系数做指数滑动平均并限制在 0.5–4，防止单次异常 usage 把估算带偏。
+   */
+  private calibrate(actualInputTokens: number | undefined): void {
+    if (
+      actualInputTokens === undefined ||
+      actualInputTokens <= 0 ||
+      this.lastSentEstimate === undefined ||
+      this.lastSentEstimate <= 0
+    ) {
+      return;
+    }
+    const ratio = actualInputTokens / this.lastSentEstimate;
+    if (!Number.isFinite(ratio) || ratio <= 0) return;
+    const clamped = Math.min(4, Math.max(0.5, ratio));
+    this.calibration = this.calibration * 0.5 + clamped * 0.5;
+  }
+
+  /**
+   * 用校准系数估算上下文 token；所有预算比较都必须走这里。
+   */
+  private estimateTokens(messages: readonly ChatMessage[], tools?: readonly ToolSchema[]): number {
+    return Math.round(estimateMessagesTokens(messages, tools) * this.calibration);
+  }
+
+  /**
    * 在模型调用前压缩消息；无法压入预算时抛出 ContextLimitError。
+   * actualInputTokens 为上一次真实调用的输入 token，用于校准估算。
    */
   async prepare(
     messages: ChatMessage[],
-    tools?: readonly ToolSchema[]
+    tools?: readonly ToolSchema[],
+    actualInputTokens?: number
   ): Promise<ContextPreparation> {
-    const beforeTokens = estimateMessagesTokens(messages, tools);
+    this.calibrate(actualInputTokens);
+
+    const beforeTokens = this.estimateTokens(messages, tools);
     if (beforeTokens <= this.budget.compactAt) {
+      this.lastSentEstimate = beforeTokens;
       return { messages, beforeTokens, afterTokens: beforeTokens };
     }
 
@@ -102,7 +141,7 @@ export class AgentContextService {
     let summaryRef: string | undefined;
     let snapshotRef: string | undefined;
     let summaryFailed = false;
-    if (estimateMessagesTokens(working, tools) > this.budget.compactAt) {
+    if (this.estimateTokens(working, tools) > this.budget.compactAt) {
       const canSummarize = this.splitForSummary(working) !== undefined;
       if (canSummarize) {
         const summary = await this.summarizeOlderMessages(working);
@@ -119,7 +158,20 @@ export class AgentContextService {
       }
     }
 
-    if (summaryFailed || estimateMessagesTokens(working, tools) > this.budget.inputBudget) {
+    // 预算仍不足时，连最近一轮工具输出也落 Artifact（可通过 read_artifact 回读），再退到硬截断
+    if (summaryFailed || this.estimateTokens(working, tools) > this.budget.inputBudget) {
+      const forced = await this.truncateToolOutputs(working, true);
+      if (forced.changed) {
+        working = forced.messages;
+        strategies.push('recent_tool_truncated');
+        artifactIds.push(...forced.artifactIds);
+      }
+      if (forced.failed && !strategies.includes('artifact_save_failed')) {
+        strategies.push('artifact_save_failed');
+      }
+    }
+
+    if (summaryFailed || this.estimateTokens(working, tools) > this.budget.inputBudget) {
       const hard = this.hardTruncate(working);
       if (hard.changed) {
         working = hard.messages;
@@ -127,12 +179,14 @@ export class AgentContextService {
       }
     }
 
-    const afterTokens = estimateMessagesTokens(working, tools);
+    const afterTokens = this.estimateTokens(working, tools);
     if (afterTokens > this.budget.inputBudget) {
       throw new ContextLimitError(
         `上下文仍超出预算：${afterTokens}/${this.budget.inputBudget} tokens，请缩小任务或清理历史`
       );
     }
+    // 记录本次送入模型的估算，下一步用真实 usage 与其比较来校准
+    this.lastSentEstimate = afterTokens;
 
     if (strategies.length) {
       try {
@@ -163,25 +217,41 @@ export class AgentContextService {
 
   /**
    * 把过长工具输出保存为 artifact，并用带引用的预览替换上下文内容。
+   * 默认保护最近一轮（尾部连续）工具结果，优先截断更早输出；includeRecent 为 true 时连最近一轮也截断。
    */
-  private async truncateToolOutputs(messages: ChatMessage[]): Promise<{
+  private async truncateToolOutputs(
+    messages: ChatMessage[],
+    includeRecent = false
+  ): Promise<{
     messages: ChatMessage[];
     changed: boolean;
     artifactIds: string[];
     failed: boolean;
   }> {
+    // 尾部连续的 tool 消息属于最近一轮工具结果，默认保留原文
+    let protectFrom = messages.length;
+    if (!includeRecent) {
+      for (let index = messages.length - 1; index >= 0; index -= 1) {
+        if (messages[index]?.role === 'tool') protectFrom = index;
+        else break;
+      }
+    }
+
     const artifactIds: string[] = [];
     let changed = false;
     let failed = false;
     const next: ChatMessage[] = [];
 
-    for (const message of messages) {
+    for (let index = 0; index < messages.length; index += 1) {
+      const message = messages[index];
       if (
+        !message ||
+        index >= protectFrom ||
         message.role !== 'tool' ||
         message.content.length <= TOOL_OUTPUT_ARTIFACT_CHAR_LIMIT ||
         this.artifactized.has(message)
       ) {
-        next.push(message);
+        if (message) next.push(message);
         continue;
       }
 
@@ -193,21 +263,27 @@ export class AgentContextService {
           this.options.runId === undefined ? {} : { runId: this.options.runId }
         );
         artifactIds.push(stored.artifactId);
-        next.push({
+        const replacement: ChatMessage = {
           ...message,
           content: JSON.stringify({
             truncated: true,
             artifactId: stored.artifactId,
             bytes: stored.bytes,
-            preview: message.content.slice(0, TOOL_OUTPUT_PREVIEW_CHAR_LIMIT)
+            preview: message.content.slice(0, TOOL_OUTPUT_PREVIEW_CHAR_LIMIT),
+            hint: `完整内容可用 read_artifact({ artifactId: "${stored.artifactId}" }) 读取`
           })
-        });
+        };
+        // 记录替换后的对象本身，下一轮 prepare 收到同一引用时才不会重复落盘
+        this.artifactized.add(replacement);
+        next.push(replacement);
       } catch {
         failed = true;
-        next.push({
+        const replacement: ChatMessage = {
           ...message,
           content: `${message.content.slice(0, TOOL_OUTPUT_PREVIEW_CHAR_LIMIT)}\n…[输出过长且产物保存失败]`
-        });
+        };
+        this.artifactized.add(replacement);
+        next.push(replacement);
       }
       this.artifactized.add(message);
       changed = true;
@@ -370,21 +446,37 @@ export class AgentContextService {
       }
     }
 
+    // 最近一条带工具调用的 assistant 的 reasoning 可能被协议要求原样回传，兜底时保留其完整 thinking
+    let lastToolCallAssistant = -1;
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message?.role === 'assistant' && message.toolCalls?.length) {
+        lastToolCallAssistant = index;
+        break;
+      }
+    }
+
     let changed = false;
     const next = messages.map((message, index) => {
       const isProtectedUser = message.role === 'user' && (index === 0 || index === lastUserIndex);
-      if (
-        isProtectedUser ||
-        message.role === 'system' ||
-        message.content.length <= HARD_TRUNCATE_CHAR_LIMIT
-      ) {
-        return message;
-      }
+      if (isProtectedUser || message.role === 'system') return message;
+
+      const needsContent = message.content.length > HARD_TRUNCATE_CHAR_LIMIT;
+      // reasoning 也会被回传占用预算，兜底时一并截断；仅保护最近一次工具调用的 thinking
+      const needsReasoning =
+        index !== lastToolCallAssistant &&
+        (message.reasoning?.length ?? 0) > HARD_TRUNCATE_CHAR_LIMIT;
+      if (!needsContent && !needsReasoning) return message;
 
       changed = true;
       return {
         ...message,
-        content: `${message.content.slice(0, HARD_TRUNCATE_CHAR_LIMIT)}\n…[已截断]`
+        content: needsContent
+          ? `${message.content.slice(0, HARD_TRUNCATE_CHAR_LIMIT)}\n…[已截断]`
+          : message.content,
+        ...(message.reasoning && needsReasoning
+          ? { reasoning: `${message.reasoning.slice(0, HARD_TRUNCATE_CHAR_LIMIT)}\n…[已截断]` }
+          : {})
       };
     });
 

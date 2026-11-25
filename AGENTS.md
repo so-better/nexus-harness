@@ -648,6 +648,11 @@ interface ProviderCapabilities {
 | `cache_clear` / `backup_export` / `backup_import` / `general_settings_update` | write | 是 |
 | `image_config_save` / `image_config_toggle` / `image_config_delete` | write | 是 |
 | `search_tools` | read | 否（系统内部） |
+| `read_artifact` | read | 否（读取会话内 Artifact，支持 offset 分页） |
+
+`read_artifact` 用于读取上下文压缩时落盘的完整工具输出：产物按会话隔离、只读文本、不暴露真实路径，支持字符 `offset` / `maxChars` 分页；截断预览必须附带可回读提示。
+
+`read_file` 支持字节 `offset` / `maxBytes` 分页；`grep` / `glob` / `list_dir` 支持 `offset` / `limit` 分页，结果被截断时输出会给出继续读取的 offset。
 
 `save_*` 工具写入 `<userData>/files`，不触发工作区写审批，但必须记录 `file.created` 并受大小与类型限制。`save_file` 支持文本与 Base64 二进制内容；`save_word` / `save_pdf` 使用 Markdown，`save_ppt` 支持模板化版式。
 
@@ -655,9 +660,9 @@ interface ProviderCapabilities {
 
 #### 工具分组与按需加载
 
-- 工具按领域分组：`core`（文件/命令、ask_user、search_tools、open_url、save_file、技能检索、记忆、知识库）、`web`、`media`、`office`、`terminal`、`appearance`、`maintenance`、`extensions`、`mcp`。
+- 工具按领域分组：`core`（文件/命令、ask_user、search_tools、read_artifact、open_url、save_file、技能检索、记忆、知识库）、`web`、`media`、`office`、`terminal`、`appearance`、`maintenance`、`extensions`、`mcp`。
 - 自动选择统一由 `tool-selector` 完成：对内置工具与 MCP 工具使用同一套 BM25 + IDF「名称 + 描述」算法召回 top-N（默认 24），默认直接取前 K 个（`MAX_AUTO_TOOLS`=10）。不写死任何具体工具名或领域关键词，重排候选描述截断到 100 字。
-- 条件重排：仅当 Top-K 边界分数接近（相对分差小于阈值）或并列时，才调用当前对话模型从候选中挑选最终 K 个；分差清晰时不产生额外调用。
+- 条件重排：仅当 Top-K 边界分数接近（相对分差小于阈值）或并列，且候选数明显多于 K（余量 ≥ 4）时，才调用当前对话模型从候选中挑选最终 K 个；分差清晰或余量很小时不产生额外调用。
 - 重排调用失败、超时或输出非法时回退到 BM25 前 K 个，保证不因重排失败而丢工具；模型返回合法空数组时尊重“无需工具”的判断。重排调用记录 `usage.recorded`。候选不超过 K 时同样跳过重排。
 - 短指令（继续/再改）或空输入会把最近一条用户消息并入查询；MCP 与内置工具走同一条筛选流程。
 - 兜底：`search_tools(query)` 让模型随时按语义检索并加载内置或 MCP 工具，突破召回上限，是唯一的显式加载入口。

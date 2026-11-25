@@ -33,6 +33,7 @@ const CORE_TOOLS = [
   'grep',
   'ask_user',
   'search_tools',
+  'read_artifact',
   'open_url',
   'save_file',
   'memory_search',

@@ -3,7 +3,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, realpath, writeFile } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { getAppDataPaths } from '../storage/paths';
@@ -51,6 +51,22 @@ interface ArtifactRow {
   path: string;
   bytes: number;
 }
+
+/**
+ * 分片读取结果；truncated 表示 offset+maxChars 之后仍有内容。
+ */
+export interface ArtifactSlice {
+  artifactId: string;
+  label: string;
+  bytes: number;
+  content: string;
+  truncated: boolean;
+}
+
+/**
+ * 分片读取时的块大小；避免一次性把大产物读入内存。
+ */
+const READ_CHUNK_BYTES = 64 * 1024;
 
 /**
  * 把会话内的长文本保存为 artifact；baseDir/db 可注入用于测试。
@@ -118,9 +134,12 @@ export class ArtifactService {
   }
 
   /**
-   * 按会话与 ID 读取产物；路径必须位于 artifacts 根目录内。
+   * 校验会话归属与路径安全，返回真实路径；不读取内容。
    */
-  async read(sessionId: string, artifactId: string): Promise<ArtifactContent | undefined> {
+  private async resolveArtifact(
+    sessionId: string,
+    artifactId: string
+  ): Promise<{ row: ArtifactRow; realPath: string } | undefined> {
     if (!this.db) return undefined;
 
     const row = this.db
@@ -136,16 +155,80 @@ export class ArtifactService {
       const realRoot = await realpath(root);
       const realPath = await realpath(path);
       if (realPath !== realRoot && !realPath.startsWith(`${realRoot}${sep}`)) return undefined;
+      return { row, realPath };
+    } catch {
+      return undefined;
+    }
+  }
 
-      const content = await readFile(realPath, 'utf8');
+  /**
+   * 按会话与 ID 读取产物全文；路径必须位于 artifacts 根目录内。
+   */
+  async read(sessionId: string, artifactId: string): Promise<ArtifactContent | undefined> {
+    const resolved = await this.resolveArtifact(sessionId, artifactId);
+    if (!resolved) return undefined;
+
+    try {
+      const content = await readFile(resolved.realPath, 'utf8');
       return {
-        artifactId: row.id,
-        label: row.label,
-        bytes: Number(row.bytes),
+        artifactId: resolved.row.id,
+        label: resolved.row.label,
+        bytes: Number(resolved.row.bytes),
         content
       };
     } catch {
       return undefined;
+    }
+  }
+
+  /**
+   * 分片读取产物：按字符偏移流式解码，只读取所需范围，避免把大产物整体载入内存。
+   * truncated 为 true 表示 offset + maxChars 之后还有内容。
+   */
+  async readRange(
+    sessionId: string,
+    artifactId: string,
+    offset: number,
+    maxChars: number
+  ): Promise<ArtifactSlice | undefined> {
+    const resolved = await this.resolveArtifact(sessionId, artifactId);
+    if (!resolved) return undefined;
+
+    const handle = await open(resolved.realPath, 'r');
+    try {
+      const decoder = new TextDecoder('utf-8');
+      const buffer = Buffer.alloc(READ_CHUNK_BYTES);
+      const needed = offset + maxChars;
+      let text = '';
+      let position = 0;
+      let truncated = false;
+
+      // 需要多读至少一个字符才能判断 end 之后是否还有内容
+      for (;;) {
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, position);
+        if (bytesRead === 0) {
+          text += decoder.decode();
+          break;
+        }
+        position += bytesRead;
+        text += decoder.decode(buffer.subarray(0, bytesRead), { stream: true });
+        if (text.length > needed) {
+          truncated = true;
+          break;
+        }
+      }
+
+      return {
+        artifactId: resolved.row.id,
+        label: resolved.row.label,
+        bytes: Number(resolved.row.bytes),
+        content: text.slice(offset, offset + maxChars),
+        truncated
+      };
+    } catch {
+      return undefined;
+    } finally {
+      await handle.close();
     }
   }
 }
