@@ -1,6 +1,6 @@
 # 发布流程（RELEASE）
 
-本文件说明 Nexus 桌面应用的打包与发布步骤。**严格遵守顺序**：先改版本号 → 更新 CHANGELOG → 打包 → 归档产物 → 提交推送。
+本文件说明 Nexus 桌面应用的打包与发布步骤。**严格遵守顺序**：先改版本号 → 更新 CHANGELOG → 打包 → 归档产物 → 更新宣传站下载版本号 → 提交推送。
 
 - 产物输出目录：`apps/desktop/release/`（`electron-builder` 的 `directories.output`）。
 - 归档目录：仓库根目录 `archive/release/`（已通过 `.gitignore` 例外开白名单，产物入库）。
@@ -89,7 +89,25 @@ cp apps/desktop/release/Nexus-<version>-mac-arm64.zip archive/release/
 
 （把 `<version>` 换成实际版本号；架构不同时同步替换 `arm64`/`x64`。）
 
-### 第 5 步：提交并推送
+### 第 5 步：更新宣传站的下载版本号
+
+`archive/website/index.html` 里的下载链接写死了版本号，归档产物后**必须同步更新**为新版本，否则页面会 404。
+
+把该文件中所有 `Nexus-<旧版本>-...` 的下载地址改为 `Nexus-<version>-...`（共 6 处）：
+
+```text
+Nexus-<version>-mac-arm64.dmg / .zip
+Nexus-<version>-mac-x64.dmg   / .zip
+Nexus-<version>-win-x64.exe   / .zip
+```
+
+快速核对（应无旧版本号）：
+
+```bash
+grep -o "Nexus-[0-9][^\"']*" archive/website/index.html
+```
+
+### 第 6 步：提交并推送
 
 先检查工作区，确认本次要提交的内容：
 
@@ -97,7 +115,7 @@ cp apps/desktop/release/Nexus-<version>-mac-arm64.zip archive/release/
 git status
 ```
 
-把当前工作区**所有未提交改动**一起提交并推送（版本号、两个 CHANGELOG、`archive/release` 归档产物等）：
+把当前工作区**所有未提交改动**一起提交并推送（版本号、两个 CHANGELOG、`archive/release` 归档产物、宣传站下载地址等）：
 
 ```bash
 git add -A
@@ -152,7 +170,15 @@ copy apps\desktop\release\Nexus-<version>-win-x64.exe archive\release\
 copy apps\desktop\release\Nexus-<version>-win-x64.zip archive\release\
 ```
 
-### 第 5 步：提交并推送
+### 第 5 步：更新宣传站的下载版本号
+
+`archive/website/index.html` 里的下载链接写死了版本号。若 mac 步骤已同步为同一版本可跳过；当前版本不同则把其中 `Nexus-<旧版本>-...` 全部改为 `Nexus-<version>-...`（6 处）。
+
+```bash
+grep -o "Nexus-[0-9][^\"']*" archive/website/index.html
+```
+
+### 第 6 步：提交并推送
 
 先检查工作区，再把**所有未提交改动**一起提交并推送：
 
@@ -173,9 +199,11 @@ git push
 | `apps/desktop/build/`   | 打包资源（图标等，`buildResources`）                         |
 | `apps/desktop/release/` | `electron-builder` 最终产物（已忽略，不入库）                |
 | `archive/release/`      | **需要入库**的发布归档：mac `.dmg`/`.zip`，win `.exe`/`.zip` |
+| `archive/website/`      | 宣传站静态页；`index.html` 的下载链接写死版本号，发布时要同步 |
 
 ## 注意事项
 
+- **宣传站下载版本号**：`archive/website/index.html` 的下载链接形如 `Nexus-<version>-mac-arm64.dmg`，写死版本号；每次发布归档后必须同步为新版本，否则页面下载 404。mac 与 Windows 同一版本只需更新一次。
 - **产物入库体积大**：dmg/zip 常上百 MB，会明显增大仓库。当前按约定归档到 `archive/release/` 并入库；如需更规范，建议改用 Git LFS，或改为在 Gitee/GitHub Releases 上传产物、仓库只存校验和/说明。
 - **`.gitignore` 例外**：根 `.gitignore` 的 `release/` 会连带忽略 `archive/release/`，已通过 `!archive/release/`、`!archive/release/**` 开白名单；调整 `.gitignore` 时勿破坏该例外。
 - **macOS 未签名/未公证**：当前配置未做 codesign/notarize，用户首次打开可能被 Gatekeeper 拦截（右键 →“打开”，或 `xattr -dr com.apple.quarantine /Applications/Nexus.app`）。后续可接入签名与公证。
