@@ -134,12 +134,9 @@ export const useProviderSettings = (
         id: model.id.trim(),
         contextWindow: model.contextWindow,
         maxOutputTokens: model.maxOutputTokens,
-        ...(model.extraParams ? { extraParams: model.extraParams } : {}),
-        ...(model.thinkingMode === undefined ? {} : { thinkingMode: model.thinkingMode }),
-        ...(model.reasoningEffort === undefined ? {} : { reasoningEffort: model.reasoningEffort }),
-        ...(model.reasoningPassback === undefined
-          ? {}
-          : { reasoningPassback: model.reasoningPassback })
+        ...(model.role ? { role: model.role } : {}),
+        ...(model.endpoint ? { endpoint: model.endpoint } : {}),
+        ...(model.extraParams ? { extraParams: model.extraParams } : {})
       }));
       const defaultModelId = models.some((model) => model.id === providerForm.value.defaultModelId)
         ? providerForm.value.defaultModelId

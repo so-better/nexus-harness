@@ -32,6 +32,94 @@ describe('AnthropicProvider', () => {
     });
   });
 
+  it('passes back assistant thinking blocks when reasoning passback is enabled', () => {
+    const messages = [
+      {
+        role: 'assistant' as const,
+        content: '',
+        reasoning: '先检查工具结果',
+        toolCalls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'a.txt' } }]
+      },
+      { role: 'tool' as const, toolCallId: 'call-1', content: 'ok' }
+    ];
+
+    const withPassback = toAnthropicMessages(messages, true);
+    expect(withPassback.messages[0]).toMatchObject({
+      role: 'assistant',
+      content: [
+        { type: 'thinking', thinking: '先检查工具结果' },
+        { type: 'tool_use', id: 'call-1', name: 'read_file' }
+      ]
+    });
+
+    // 未启用时不注入 thinking 块
+    const withoutPassback = toAnthropicMessages(messages);
+    expect(withoutPassback.messages[0]).toMatchObject({
+      role: 'assistant',
+      content: [{ type: 'tool_use', id: 'call-1', name: 'read_file' }]
+    });
+  });
+
+  it('passes back thinking blocks for the DeepSeek Anthropic endpoint with tools', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const encoder = new TextEncoder();
+          for (const chunk of [
+            sse({ type: 'message_start', message: { usage: { input_tokens: 1 } } }),
+            sse({
+              type: 'message_delta',
+              delta: { stop_reason: 'end_turn' },
+              usage: { output_tokens: 1 }
+            }),
+            sse({ type: 'message_stop' })
+          ]) {
+            controller.enqueue(encoder.encode(chunk));
+          }
+          controller.close();
+        }
+      });
+      return new Response(body, { status: 200 });
+    });
+
+    const provider = new AnthropicProvider({
+      baseUrl: 'https://api.deepseek.com/anthropic',
+      apiKey: 'key',
+      reasoningPassback: true,
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+    for await (const _event of provider.stream({
+      model: 'deepseek-flash',
+      messages: [
+        {
+          role: 'assistant',
+          content: '',
+          reasoning: '先读取文件',
+          toolCalls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'a.txt' } }]
+        },
+        { role: 'tool', toolCallId: 'call-1', content: '文件内容' }
+      ],
+      tools: [{ name: 'read_file', description: 'read', inputSchema: { type: 'object' } }]
+    })) {
+      // consume stream
+    }
+
+    const messages = requestBody?.['messages'] as Array<Record<string, unknown>>;
+    expect(messages[0]).toMatchObject({
+      role: 'assistant',
+      content: [
+        { type: 'thinking', thinking: '先读取文件' },
+        { type: 'tool_use', id: 'call-1', name: 'read_file' }
+      ]
+    });
+    expect(messages[1]).toMatchObject({
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: 'call-1', content: '文件内容' }]
+    });
+  });
+
   it('converts image messages into Anthropic image blocks', () => {
     const converted = toAnthropicMessages([
       {

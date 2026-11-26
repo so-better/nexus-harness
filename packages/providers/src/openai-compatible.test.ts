@@ -165,7 +165,8 @@ describe('OpenAICompatibleProvider', () => {
           toolCalls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'a.txt' } }]
         },
         { role: 'tool', toolCallId: 'call-1', content: 'hello' }
-      ]
+      ],
+      tools: [{ name: 'read_file', description: 'read', inputSchema: { type: 'object' } }]
     })) {
       // consume stream
     }
@@ -177,7 +178,7 @@ describe('OpenAICompatibleProvider', () => {
     });
   });
 
-  it('only passes back reasoning for the most recent assistant messages', async () => {
+  it('does not pass back reasoning when no tools are present', async () => {
     let sentBody: Record<string, unknown> | undefined;
     const fetchImpl: typeof fetch = async (_input, init) => {
       sentBody = JSON.parse(String(init?.body));
@@ -205,12 +206,45 @@ describe('OpenAICompatibleProvider', () => {
     }
 
     const sent = sentBody?.['messages'] as Array<Record<string, unknown>>;
-    // 只回传最近 8 条（索引 2..9），更早的 0/1 不带 reasoning
-    for (let index = 2; index < 10; index += 1) {
+    // 不带 tools 时完全不回传 reasoning
+    for (const message of sent) {
+      expect(message).not.toHaveProperty('reasoning_content');
+    }
+  });
+
+  it('passes back all reasoning when tools are present', async () => {
+    let sentBody: Record<string, unknown> | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      sentBody = JSON.parse(String(init?.body));
+      return new Response(streamBody([{ choices: [{ delta: { content: 'ok' } }] }]), {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      });
+    };
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: 'https://api.deepseek.com',
+      apiKey: 'secret',
+      reasoningPassback: true,
+      fetchImpl
+    });
+    const messages = Array.from({ length: 10 }, (_value, index) => ({
+      role: 'assistant' as const,
+      content: `c${index}`,
+      reasoning: `r${index}`
+    }));
+    for await (const _event of provider.stream({
+      model: 'deepseek-flash',
+      messages,
+      tools: [{ name: 'read_file', description: 'read', inputSchema: { type: 'object' } }]
+    })) {
+      // consume stream
+    }
+
+    const sent = sentBody?.['messages'] as Array<Record<string, unknown>>;
+    // 携带 tools 时 DeepSeek 要求全部历史 reasoning 回传，不能只发最近 8 条
+    for (let index = 0; index < 10; index += 1) {
       expect(sent[index]?.['reasoning_content']).toBe(`r${index}`);
     }
-    expect(sent[1]?.['reasoning_content']).toBeUndefined();
-    expect(sent[0]?.['reasoning_content']).toBeUndefined();
   });
 
   it('does not send reasoning_content when the provider does not require it', async () => {

@@ -506,7 +506,8 @@ interface ProviderCapabilities {
 - 错误统一映射为错误码，如 `PROVIDER_UNAUTHORIZED`、`PROVIDER_RATE_LIMITED`、`PROVIDER_TIMEOUT`。
 - Anthropic 在 system 与最后一个工具块打 `cache_control: ephemeral` 复用稳定前缀；仅在错误体明确提到 `cache_control` / `prompt cache` 时才去掉缓存重试，避免对无关 4xx 重复请求。
 - usage 记录 `cacheReadTokens` / `cacheWriteTokens`：Anthropic 从 `cache_read_input_tokens` / `cache_creation_input_tokens` 读取；OpenAI 兼容从 `prompt_tokens_details.cached_tokens`、DeepSeek 从 `prompt_cache_hit_tokens` 读取缓存读（缺失视为 0）。
-- OpenAI 兼容协议只回传最近 8 条 assistant 的 `reasoning_content`，避免历史 reasoning 无限累积。
+- OpenAI 兼容协议未携带 tools 时不回传 `reasoning_content`，避免历史 reasoning 无限累积；携带 tools 时必须全量回传历史 reasoning（DeepSeek 等要求，漏传返回 400），预算估算同步全部计入。
+- 模型额外请求参数 JSON 原样透传给模型；辅助调用（会话标题、上下文摘要、记忆抽取）同样透传，宿主不解析或改写 `thinking` / `reasoning_effort` 等具体字段。
 
 #### 模型角色与图像模型
 
@@ -527,7 +528,7 @@ interface ProviderCapabilities {
 
 系统提示由宿主统一组装：身份与安全约束、工具使用规则、工作区规则与当前任务；提供商适配层只做格式转换，不允许各提供商各自实现一套。
 
-思考能力通过模型级 `thinkingMode`、`reasoningEffort`、`reasoningPassback` 与 `extraParams` 表达。非 Anthropic 协议使用设置页的思考开关与强度，`thinking` / `reasoning_effort` 为受管字段，JSON 不得覆盖；Anthropic 使用原生 `thinking` JSON，不使用该开关。`reasoningPassback` 对 OpenAI 兼容协议（含 Ollama）生效，Anthropic 使用原生 thinking 参数。核心按显式协议字段处理，不按厂商名、域名或模型 ID 特判。`extraParams` 不得覆盖 `model`、`messages`、`stream`、`tools`、`max_tokens` 等协议保留字段，也不得写入密钥；reasoning 回传由模型级开关控制。
+模型配置由结构化字段（`contextWindow`、`maxOutputTokens`、可选 `role` / `endpoint`）与一个额外请求参数 JSON 组成。`contextWindow` 用于上下文预算与压缩；`maxOutputTokens` 作为 `max_tokens` 下发并用于输出预算。额外参数 JSON **原样并入请求体**透传给模型，宿主不解析或改写 `thinking` / `reasoning_effort` 等具体字段。目前只有 DeepSeek（`isDeepSeekBaseUrl`）在携带 tools 时要求回传历史思考内容，宿主按 Base URL 自动处理，不提供逐模型开关：OpenAI 兼容端点回传 assistant 的 `reasoning_content` 字段，Anthropic 兼容端点（`/anthropic`）回传 `thinking` content block。同一判断也用于新建模型时默认 `contextWindow = 1M`。透传参数不得覆盖 `model`、`messages`、`stream`、`tools`、`max_tokens` 等协议保留字段，也不得写入密钥。
 
 系统提示保持稳定的静态前缀；平台、时间、全局记忆等动态上下文追加到最后一条用户消息（`<environment>` 块），避免破坏 prompt cache。用户自定义提示词可追加，但与默认系统提示冲突时以默认提示为准；场景模式提示词按需追加。
 
@@ -556,7 +557,7 @@ interface ProviderCapabilities {
 自动压缩触发：
 
 - 每次调用模型前估算输入 token；预计超过输入预算 70% 时压缩。
-- 字符估算只计入最近 8 条会回传的 reasoning，并用上一轮真实 usage 校准估算系数（EMA，限制 0.5–4），修正不同分词器偏差。
+- 字符估算按回传范围计入 reasoning：携带 tools 时全量计入，未携带 tools 时不计入；并用上一轮真实 usage 校准估算系数（EMA，限制 0.5–4），修正不同分词器偏差。
 - 工具结果落回后如果再次超限，立即压缩。
 - 切换模型时按新窗口重新计算，必要时重新压缩。
 
@@ -1212,7 +1213,7 @@ export function activate(ctx) {
 
 - 设置分三个层级，优先级为 **Session > Workspace > App**；读取时逐层合并，写入时记录 scope。
 - 设置分类：通用、记忆、模型与提供商、终端、外观、缓存、权限与审批、快捷键、高级；终端设置包含 shell、字号、滚回、选中即复制与 WebGL；字体使用默认等宽字体，默认字号 12px，自动检测的 shell 路径需回显。
-- 模型与提供商：对话 Provider 保持 Base URL、API Key、模型名、上下文窗口、`extraParams` 与自定义 headers；图像模型在独立入口配置完整请求 URL、模型、Key、headers、请求体模板与结果路径；媒体搜索在通用设置中配置 Pexels API Key；联网搜索配置 AnySearch API Key（可选，匿名访问也可用，但有更严格的限速与每日额度）。当前不做本地 token 单价配置，费用仅记录 Provider 返回的 cost。
+- 模型与提供商：对话 Provider 保持 Base URL、API Key、模型名、自定义 headers，以及每个模型的窗口/输出上限字段和一个额外请求参数 JSON（JSON 原样透传）；图像模型在独立入口配置完整请求 URL、模型、Key、headers、请求体模板与结果路径；媒体搜索在通用设置中配置 Pexels API Key；联网搜索配置 AnySearch API Key（可选，匿名访问也可用，但有更严格的限速与每日额度）。当前不做本地 token 单价配置，费用仅记录 Provider 返回的 cost。
 - 支持连接测试与模型列表刷新；API Key 随本地 Provider 配置保存；不写死默认模型。
 - 图像模型可选；未配置时不注册 `generate_image`，设置页提供引导。
 - 权限与审批：默认审批策略、命令白名单、敏感路径策略、工作区信任管理。
@@ -1900,7 +1901,7 @@ CHANGELOG.md         # 版本变更记录
 | 本地二进制读取 | 已支持基础能力 | 图片走视觉输入；PDF/Office/文本转文本；其他类型按文件引用处理 |
 | Git 集成 | 不做 | 不提供 Git 工具、状态或提交能力 |
 | 通知 | 系统通知 + Dock/托盘 | 后台完成、失败或等待时提醒 |
-| 模型配置 | 支持 `extraParams` 与自定义 headers | 上下文窗口、连接测试；不做本地 token 单价 |
+| 模型配置 | 结构化字段 + 一个额外参数 JSON + 自定义 headers | 额外参数原样透传；连接测试；不做本地 token 单价 |
 | 预算触发 | 交互提示可继续 | 后台或无人值守 Run 硬停 |
 | 会话恢复 | 事件回放 | 未完成 Run 标记 `interrupted` |
 | 会话模型 | 多会话 | 独立上下文，受全局并发限制 |
@@ -1940,7 +1941,7 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 已评估 token 成本：没有注入无关全文或重复提示，工具输出、历史与文件内容可按需读取或压缩。
 - [ ] 新功能提供低 token 路径，并对同类任务的输入 token 做了前后对比或回归验证。
 - [ ] 设置项经 zod 校验，API Key 随本地 Provider 配置保存。
-- [ ] 模型配置支持 `extraParams`、自定义 headers、上下文窗口与连接测试；费用只记录 Provider 返回的 cost。
+- [ ] 模型配置由窗口、输出上限字段与一个额外参数 JSON 组成；额外参数原样透传；DeepSeek 自动回传 reasoning；含自定义 headers 与连接测试；费用只记录 Provider 返回的 cost。
 - [ ] 上下文压缩保留不可压缩内容，写入 `context.compacted`，失败可降级为硬截断。
 - [ ] 系统提示包含反幻觉、工具诚实、运行元信息、链接真实性与文件生成自检约束。
 - [ ] 路径访问基于 Workspace root + Session RootGrant，未授权路径必须走授权流程。

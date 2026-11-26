@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 /**
- * 模型配置：模型级 reasoning 回传开关可见。
+ * 模型配置：每个模型只使用一个 JSON 编辑器。
  */
 import { createApp, h, nextTick, ref } from 'vue';
 import { describe, expect, it } from 'vitest';
+import type { ProviderModel } from '@shared/ipc/contracts';
 import ProviderModelsField from './ProviderModelsField.vue';
 
 describe('ProviderModelsField', () => {
-  it('blocks invalid model extra JSON and recovers after correction', async () => {
+  it('blocks invalid model JSON and recovers after correction', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     let valid = true;
@@ -24,7 +25,6 @@ describe('ProviderModelsField', () => {
           availableModels: ['model-a'],
           defaultModelId: 'model-a',
           testing: false,
-          protocol: 'openai',
           'onUpdate:valid': (value: boolean) => {
             valid = value;
           }
@@ -33,55 +33,57 @@ describe('ProviderModelsField', () => {
     app.mount(host);
     await nextTick();
     const textarea = host.querySelector<HTMLTextAreaElement>('textarea');
-    if (!textarea) throw new Error('model extra textarea not found');
+    if (!textarea) throw new Error('model config textarea not found');
 
     textarea.value = '{';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
     await nextTick();
     expect(valid).toBe(false);
-    expect(host.textContent).toContain('必须是 JSON 对象');
+    expect(host.textContent).toContain('模型额外参数必须是 JSON 对象');
 
     textarea.value = '{"custom":true}';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
     await nextTick();
     expect(valid).toBe(true);
-    expect(host.textContent).not.toContain('必须是 JSON 对象');
+    expect(host.textContent).not.toContain('模型额外参数必须是 JSON 对象');
     app.unmount();
     document.body.innerHTML = '';
   });
 
-  it('blocks managed thinking keys in model extra JSON', async () => {
+  it('parses extra request params JSON as passthrough', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    let valid = true;
+    let updated: ProviderModel[] | undefined;
     const app = createApp({
       render: () =>
         h(ProviderModelsField, {
-          models: [
-            {
-              id: 'model-a',
-              contextWindow: 128_000,
-              maxOutputTokens: 8_192
-            }
-          ],
+          models: [{ id: 'model-a', contextWindow: 128_000, maxOutputTokens: 4_096 }],
           availableModels: ['model-a'],
           defaultModelId: 'model-a',
           testing: false,
-          protocol: 'openai',
-          'onUpdate:valid': (value: boolean) => {
-            valid = value;
+          'onUpdate:models': (value: ProviderModel[]) => {
+            updated = value;
           }
         })
     });
     app.mount(host);
     await nextTick();
     const textarea = host.querySelector<HTMLTextAreaElement>('textarea');
-    if (!textarea) throw new Error('model extra textarea not found');
-    textarea.value = '{"thinking":{"type":"disabled"}}';
+    if (!textarea) throw new Error('model config textarea not found');
+
+    textarea.value = JSON.stringify({
+      thinking: { type: 'enabled' },
+      reasoning_effort: 'high'
+    });
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
     await nextTick();
-    expect(valid).toBe(false);
-    expect(host.textContent).toContain('thinking / reasoning_effort');
+
+    expect(updated?.[0]).toMatchObject({
+      id: 'model-a',
+      contextWindow: 128_000,
+      maxOutputTokens: 4_096,
+      extraParams: { thinking: { type: 'enabled' }, reasoning_effort: 'high' }
+    });
     app.unmount();
     document.body.innerHTML = '';
   });
@@ -89,13 +91,7 @@ describe('ProviderModelsField', () => {
   it('clears invalid JSON state when the model is removed', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const models = ref([
-      {
-        id: 'model-a',
-        contextWindow: 128_000,
-        maxOutputTokens: 4_096
-      }
-    ]);
+    const models = ref([{ id: 'model-a', contextWindow: 128_000, maxOutputTokens: 4_096 }]);
     const availableModels = ref(['model-a']);
     let valid = true;
     const app = createApp({
@@ -105,7 +101,6 @@ describe('ProviderModelsField', () => {
           availableModels: availableModels.value,
           defaultModelId: 'model-a',
           testing: false,
-          protocol: 'openai',
           'onUpdate:models': (value: typeof models.value) => {
             models.value = value;
           },
@@ -117,7 +112,7 @@ describe('ProviderModelsField', () => {
     app.mount(host);
     await nextTick();
     const textarea = host.querySelector<HTMLTextAreaElement>('textarea');
-    if (!textarea) throw new Error('model extra textarea not found');
+    if (!textarea) throw new Error('model config textarea not found');
     textarea.value = '{';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
     await nextTick();
@@ -132,64 +127,33 @@ describe('ProviderModelsField', () => {
     document.body.innerHTML = '';
   });
 
-  it('hides reasoning passback for Anthropic', async () => {
+  it('defaults DeepSeek models to a 1M context window', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
+    let updated: ProviderModel[] | undefined;
     const app = createApp({
       render: () =>
         h(ProviderModelsField, {
-          models: [
-            {
-              id: 'claude-test',
-              contextWindow: 128_000,
-              maxOutputTokens: 4_096
-            }
-          ],
-          availableModels: ['claude-test'],
-          defaultModelId: 'claude-test',
+          models: [],
+          availableModels: ['deepseek-flash'],
+          defaultModelId: '',
           testing: false,
-          protocol: 'anthropic'
+          baseUrl: 'https://api.deepseek.com',
+          'onUpdate:models': (value: ProviderModel[]) => {
+            updated = value;
+          }
         })
     });
     app.mount(host);
     await nextTick();
+
+    // 第一个是「全选」，第二个是模型行复选框
+    const checkbox = host.querySelectorAll<HTMLElement>('.n-checkbox')[1];
+    if (!checkbox) throw new Error('model checkbox not found');
+    checkbox.click();
     await nextTick();
 
-    expect(host.textContent).not.toContain('回传 reasoning');
-    app.unmount();
-    document.body.innerHTML = '';
-  });
-
-  it('shows the generic reasoning passback switch for a selected model', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const app = createApp({
-      render: () =>
-        h(ProviderModelsField, {
-          models: [
-            {
-              id: 'model-a',
-              contextWindow: 128_000,
-              maxOutputTokens: 4_096,
-              reasoningPassback: true
-            }
-          ],
-          availableModels: ['model-a'],
-          defaultModelId: 'model-a',
-          testing: false,
-          protocol: 'openai'
-        })
-    });
-    app.mount(host);
-    await nextTick();
-    await nextTick();
-
-    expect(host.textContent).toContain('思考模式');
-    expect(host.textContent).toContain('思考强度');
-    expect(host.textContent).toContain('回传思考');
-    expect(host.querySelectorAll('.n-select')).toHaveLength(1);
-    expect(host.querySelectorAll('.n-checkbox')).toHaveLength(2);
-    expect(host.querySelectorAll('[role="switch"]')).toHaveLength(2);
+    expect(updated?.[0]?.contextWindow).toBe(1_000_000);
     app.unmount();
     document.body.innerHTML = '';
   });

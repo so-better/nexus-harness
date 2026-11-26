@@ -19,8 +19,8 @@ export interface OpenAICompatibleConfig {
   apiKey: string;
   headers?: Record<string, string>;
   capabilities?: Partial<ProviderCapabilities>;
-  /** DeepSeek thinking 模式要求 assistant 的 reasoning_content 随请求回传 */
-  reasoningPassback?: boolean | ((model: string) => boolean);
+  /** 携带 tools 时是否回传 assistant 的 reasoning_content（DeepSeek 要求） */
+  reasoningPassback?: boolean;
   fetchImpl?: typeof fetch;
 }
 
@@ -99,23 +99,20 @@ const toOpenAITool = (tool: ToolSchema): Record<string, unknown> => ({
 });
 
 /**
- * 需要回传 reasoning 的最近 assistant 消息条数；更早的 reasoning 不再回传，避免历史无限累积。
+ * 选出需要回传 reasoning 的 assistant 消息下标。
+ * 只有携带 tools 时才回传：DeepSeek 要求工具调用时历史 reasoning_content 必须全量回传，漏传返回 400；
+ * 未携带 tools 时不回传 reasoning，避免历史 reasoning 无限累积。
  */
-const MAX_REASONING_PASSBACK_MESSAGES = 8;
-
-/**
- * 选出需要回传 reasoning 的 assistant 消息下标（从末尾往前取最近若干条）。
- */
-const selectReasoningPassbackIndices = (messages: readonly ChatMessage[]): Set<number> => {
+const selectReasoningPassbackIndices = (
+  messages: readonly ChatMessage[],
+  requiredByTools: boolean
+): Set<number> => {
   const indices = new Set<number>();
-  for (
-    let index = messages.length - 1;
-    index >= 0 && indices.size < MAX_REASONING_PASSBACK_MESSAGES;
-    index -= 1
-  ) {
-    const message = messages[index];
-    if (message?.role === 'assistant' && message.reasoning?.trim()) indices.add(index);
-  }
+  if (!requiredByTools) return indices;
+
+  messages.forEach((message, index) => {
+    if (message.role === 'assistant' && message.reasoning?.trim()) indices.add(index);
+  });
   return indices;
 };
 
@@ -167,12 +164,9 @@ export class OpenAICompatibleProvider implements ChatProvider {
     const fetchImpl = this.config.fetchImpl ?? fetch;
     const url = `${this.config.baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
-    const reasoningPassback =
-      typeof this.config.reasoningPassback === 'function'
-        ? this.config.reasoningPassback(request.model)
-        : this.config.reasoningPassback === true;
+    const reasoningPassback = this.config.reasoningPassback === true;
     const reasoningPassbackIndices = reasoningPassback
-      ? selectReasoningPassbackIndices(request.messages)
+      ? selectReasoningPassbackIndices(request.messages, Boolean(request.tools?.length))
       : new Set<number>();
 
     const response = await fetchImpl(url, {

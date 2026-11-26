@@ -15,7 +15,6 @@ import type {
 } from '@shared/ipc/contracts';
 import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_OUTPUT_TOKENS } from '@nexus/core';
 import {
-  findManagedThinkingParams,
   findReservedProviderParams,
   findSensitiveProviderParams
 } from '@shared/provider-params';
@@ -35,7 +34,6 @@ interface StoredProvider {
   apiKey?: string;
   headers?: Record<string, string>;
   extraParams?: Record<string, unknown>;
-  reasoningPassback?: boolean;
   encryptedApiKey?: string;
   encryptedHeaders?: string;
   encryptedExtraParams?: string;
@@ -77,19 +75,10 @@ const normalizeModels = (
     const cleanModels = models.map((model) => ({
       id: model.id,
       contextWindow: model.contextWindow,
-      // 思考模式会占用输出预算；旧默认 4096 不足以容纳 reasoning + 正文/工具参数
-      maxOutputTokens:
-        model.thinkingMode === 'enabled' && model.maxOutputTokens === 4096
-          ? Math.min(16_384, Math.max(256, model.contextWindow - 1024))
-          : model.maxOutputTokens,
+      maxOutputTokens: model.maxOutputTokens,
       ...(model.extraParams ? { extraParams: publicExtraParams(model.extraParams) } : {}),
       ...(model.role ? { role: model.role } : {}),
-      ...(model.endpoint ? { endpoint: model.endpoint } : {}),
-      ...(model.thinkingMode === undefined ? {} : { thinkingMode: model.thinkingMode }),
-      ...(model.reasoningEffort === undefined ? {} : { reasoningEffort: model.reasoningEffort }),
-      ...(model.reasoningPassback === undefined
-        ? {}
-        : { reasoningPassback: model.reasoningPassback })
+      ...(model.endpoint ? { endpoint: model.endpoint } : {})
     }));
     const defaultModelId = models.some((model) => model.id === provider.defaultModelId)
       ? (provider.defaultModelId as string)
@@ -159,7 +148,26 @@ function publicExtraParams(params: Record<string, unknown>): Record<string, unkn
 }
 
 /**
- * 把旧 Provider 级 extraParams/reasoningPassback 迁移到每个模型。
+ * 旧版模型级思考字段已废弃，读取时从配置中剔除，避免文件残留死配置。
+ */
+const LEGACY_MODEL_FIELDS = ['thinkingMode', 'reasoningEffort', 'reasoningPassback'] as const;
+
+const stripLegacyModelFields = (provider: StoredProvider): boolean => {
+  let changed = false;
+  for (const model of provider.models ?? []) {
+    const record = model as unknown as Record<string, unknown>;
+    for (const key of LEGACY_MODEL_FIELDS) {
+      if (key in record) {
+        delete record[key];
+        changed = true;
+      }
+    }
+  }
+  return changed;
+};
+
+/**
+ * 把旧 Provider 级 extraParams 迁移到每个模型。
  */
 const migrateLegacyProviderParams = (provider: StoredProvider): boolean => {
   let changed = false;
@@ -168,15 +176,6 @@ const migrateLegacyProviderParams = (provider: StoredProvider): boolean => {
       if (model.extraParams === undefined) model.extraParams = { ...provider.extraParams };
     }
     delete provider.extraParams;
-    changed = true;
-  }
-  if (provider.reasoningPassback !== undefined) {
-    for (const model of provider.models ?? []) {
-      if (model.reasoningPassback === undefined) {
-        model.reasoningPassback = provider.reasoningPassback;
-      }
-    }
-    delete provider.reasoningPassback;
     changed = true;
   }
   return changed;
@@ -188,10 +187,7 @@ const toPublic = (provider: StoredProvider): ProviderPublic => {
   const legacyExtra = provider.extraParams ? publicExtraParams(provider.extraParams) : undefined;
   const models = normalized.models.map((model) => ({
     ...model,
-    ...(model.extraParams || !legacyExtra ? {} : { extraParams: legacyExtra }),
-    ...(model.reasoningPassback === undefined && provider.reasoningPassback !== undefined
-      ? { reasoningPassback: provider.reasoningPassback }
-      : {})
+    ...(model.extraParams || !legacyExtra ? {} : { extraParams: legacyExtra })
   }));
   return {
     id: provider.id,
@@ -248,6 +244,7 @@ export class ProviderStore {
         try {
           changed = migrateLegacySecrets(provider) || changed;
           changed = migrateLegacyProviderParams(provider) || changed;
+          changed = stripLegacyModelFields(provider) || changed;
         } catch {
           // 单个旧配置无法迁移时保留原数据，不阻断其他 Provider
         }
@@ -301,12 +298,7 @@ export class ProviderStore {
     const headers = input.headers !== undefined ? input.headers : existing?.headers;
     for (const model of input.models) {
       if (!model.extraParams) continue;
-      if (protocol !== 'anthropic') {
-        const managed = findManagedThinkingParams(model.extraParams);
-        if (managed.length) {
-          throw new Error(`模型额外参数不能覆盖思考配置：${managed.join(', ')}`);
-        }
-      }
+      // thinking / reasoning_effort 等思考参数直接写在 extraParams 中，由用户按模型自行配置
       const reserved = findReservedProviderParams(model.extraParams);
       if (reserved.length) throw new Error(`模型额外参数不能覆盖保留字段：${reserved.join(', ')}`);
       const sensitive = findSensitiveProviderParams(model.extraParams);

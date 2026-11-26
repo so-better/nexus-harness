@@ -33,6 +33,7 @@ import {
 } from '@nexus/toolkit';
 import type { PptDeck } from '@nexus/toolkit';
 import { detectDangerousCommand, isSensitivePath } from '@nexus/runtime-utils';
+import { isDeepSeekBaseUrl } from '@nexus/shared';
 import { appendFileReferences, imageMimeForName } from '@shared/files';
 import {
   createExcelBuffer,
@@ -869,26 +870,12 @@ const loadAttachmentContext = async (
 };
 
 /**
- * 合并模型级额外参数与思考参数；default 表示不覆盖。
+ * 模型 JSON 原样透传给模型；保留/敏感字段由 Provider 请求边界统一过滤。
  */
 export const buildModelExtraParams = (
-  model: Pick<ProviderModel, 'extraParams' | 'thinkingMode' | 'reasoningEffort'>,
-  protocol: AgentProviderConfig['protocol'] = 'openai'
-): Record<string, unknown> | undefined => {
-  const extra = { ...model.extraParams };
-  if (protocol !== 'anthropic') {
-    // thinking/reasoning_effort 由页面开关接管，忽略旧 JSON 中的同名值
-    delete extra['thinking'];
-    delete extra['reasoning_effort'];
-    if (model.thinkingMode && model.thinkingMode !== 'default') {
-      extra['thinking'] = { type: model.thinkingMode };
-    }
-    if (model.reasoningEffort && model.reasoningEffort !== 'default') {
-      extra['reasoning_effort'] = model.reasoningEffort;
-    }
-  }
-  return Object.keys(extra).length ? extra : undefined;
-};
+  model: Pick<ProviderModel, 'extraParams'>
+): Record<string, unknown> | undefined =>
+  model.extraParams && Object.keys(model.extraParams).length ? model.extraParams : undefined;
 
 export const createAgentProvider: ProviderFactory = (config) => {
   const shared = {
@@ -897,12 +884,12 @@ export const createAgentProvider: ProviderFactory = (config) => {
     ...(config.headers ? { headers: config.headers } : {})
   };
 
-  const reasoningPassback = (modelId: string): boolean => {
-    const model = config.models.find((item) => item.id === modelId);
-    return model ? model.reasoningPassback !== false : false;
-  };
+  // 目前只有 DeepSeek 在携带 tools 时要求回传历史 reasoning_content
+  const reasoningPassback = isDeepSeekBaseUrl(config.baseUrl);
 
-  if (config.protocol === 'anthropic') return new AnthropicProvider(shared);
+  if (config.protocol === 'anthropic') {
+    return new AnthropicProvider({ ...shared, reasoningPassback });
+  }
   if (config.protocol === 'ollama') return new OllamaProvider({ ...shared, reasoningPassback });
   return new OpenAICompatibleProvider({ ...shared, reasoningPassback });
 };
@@ -970,7 +957,8 @@ export class AgentService {
     messages: ChatMessage[],
     eventBus: EventBus,
     runId: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    utilityExtraParams?: Record<string, unknown>
   ): Promise<void> {
     if (!this.memoryExtraction || !this.memory || !this.memory.settings().autoCapture) return;
     // 先用本地信号过滤，只有可能包含长期信息时才调用抽取模型，降低每轮成本
@@ -1015,6 +1003,7 @@ ${assistant.slice(0, 3_000)}`;
         model,
         temperature: 0,
         maxTokens: 500,
+        ...(utilityExtraParams ? { extraParams: utilityExtraParams } : {}),
         ...(signal ? { signal } : {}),
         messages: [
           {
@@ -1138,7 +1127,7 @@ ${assistant.slice(0, 3_000)}`;
 
       const mode = input.mode ?? 'build';
       const activatedSkills = new Set<string>();
-      const extraParams = buildModelExtraParams(modelConfig, providerConfig.protocol);
+      const extraParams = buildModelExtraParams(modelConfig);
       let toolset =
         input.rootPaths.length > 0 ? await createFileToolset(input.rootPaths) : undefined;
       const provider = this.createProvider(providerConfig);
@@ -3101,7 +3090,8 @@ ${assistant.slice(0, 3_000)}`;
         result.messages,
         eventBus,
         runId,
-        hooks.signal
+        hooks.signal,
+        extraParams
       );
 
       return {

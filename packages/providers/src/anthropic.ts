@@ -19,6 +19,8 @@ export interface AnthropicConfig {
   apiKey: string;
   headers?: Record<string, string>;
   capabilities?: Partial<ProviderCapabilities>;
+  /** DeepSeek 等 Anthropic 兼容端点：带 tools 时回传历史 thinking 内容 */
+  reasoningPassback?: boolean;
   fetchImpl?: typeof fetch;
 }
 
@@ -32,7 +34,7 @@ const DEFAULT_CAPABILITIES: ProviderCapabilities = {
 const ANTHROPIC_VERSION = '2023-06-01';
 
 interface AnthropicContentBlock {
-  type: 'text' | 'tool_use' | 'tool_result' | 'image';
+  type: 'text' | 'tool_use' | 'tool_result' | 'image' | 'thinking';
   text?: string;
   id?: string;
   name?: string;
@@ -41,6 +43,7 @@ interface AnthropicContentBlock {
   content?: string;
   source?: { type: 'base64'; media_type: string; data: string };
   cache_control?: { type: 'ephemeral' };
+  thinking?: string;
 }
 
 interface AnthropicMessage {
@@ -61,7 +64,10 @@ const endpoint = (baseUrl: string): string => {
 /**
  * 把统一消息转换为 Anthropic system 与 messages；工具结果合并进 user 消息。
  */
-export const toAnthropicMessages = (messages: readonly ChatMessage[]): AnthropicConversion => {
+export const toAnthropicMessages = (
+  messages: readonly ChatMessage[],
+  passReasoning = false
+): AnthropicConversion => {
   const system: string[] = [];
   const result: AnthropicMessage[] = [];
 
@@ -99,10 +105,14 @@ export const toAnthropicMessages = (messages: readonly ChatMessage[]): Anthropic
       continue;
     }
 
-    if (message.role === 'assistant' && message.toolCalls?.length) {
+    if (message.role === 'assistant' && (message.toolCalls?.length || (passReasoning && message.reasoning?.trim()))) {
       const content: AnthropicContentBlock[] = [];
+      // DeepSeek 等 Anthropic 兼容端点在工具调用时要求回传完整 thinking 内容
+      if (passReasoning && message.reasoning?.trim()) {
+        content.push({ type: 'thinking', thinking: message.reasoning });
+      }
       if (message.content) content.push({ type: 'text', text: message.content });
-      for (const call of message.toolCalls) {
+      for (const call of message.toolCalls ?? []) {
         content.push({
           type: 'tool_use',
           id: call.id,
@@ -186,7 +196,10 @@ export class AnthropicProvider implements ChatProvider {
 
   async *stream(request: ProviderRequest): AsyncIterable<ProviderStreamEvent> {
     const fetchImpl = this.config.fetchImpl ?? fetch;
-    const converted = toAnthropicMessages(request.messages);
+    const converted = toAnthropicMessages(
+      request.messages,
+      this.config.reasoningPassback === true
+    );
     const endpointUrl = endpoint(this.config.baseUrl);
     const headers = {
       'Content-Type': 'application/json',

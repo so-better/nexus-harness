@@ -6,7 +6,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ChatMessage, ChatProvider, ProviderRequest } from '@nexus/providers';
-import { MockProvider } from '@nexus/providers';
+import { MockProvider, OpenAICompatibleProvider } from '@nexus/providers';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ArtifactService } from '../artifacts/artifact-service';
 import { AgentContextService } from './context-service';
@@ -246,7 +246,7 @@ describe('AgentContextService', () => {
     expect(requests[0]?.temperature).toBe(0);
   });
 
-  it('strips thinking params from summary requests', async () => {
+  it('passes model JSON params through to summary requests', async () => {
     const requests: ProviderRequest[] = [];
     const provider: ChatProvider = {
       capabilities: { streaming: true, toolCalling: true, vision: false, reasoning: false },
@@ -256,6 +256,11 @@ describe('AgentContextService', () => {
         yield { type: 'finish', reason: 'stop' };
       }
     };
+    const extraParams = {
+      thinking: { type: 'enabled' },
+      reasoning_effort: 'high',
+      custom: 1
+    };
     const service = new AgentContextService({
       provider,
       model: 'mock-model',
@@ -263,7 +268,7 @@ describe('AgentContextService', () => {
       maxOutputTokens: 1_024,
       artifacts: new ArtifactService(directory),
       sessionId: 'session-1',
-      extraParams: { thinking: { type: 'enabled' }, reasoning_effort: 'high', custom: 1 }
+      extraParams
     });
     const messages: ChatMessage[] = [
       user('目标：完成一个很长的任务'),
@@ -273,7 +278,8 @@ describe('AgentContextService', () => {
     await service.prepare(messages);
 
     expect(requests[0]?.temperature).toBe(0);
-    expect(requests[0]?.extraParams).toEqual({ custom: 1 });
+    // 辅助调用同样透传模型 JSON，宿主不改写 thinking / reasoning_effort
+    expect(requests[0]?.extraParams).toEqual(extraParams);
   });
 
   it('degrades to a short preview when artifact writing fails', async () => {
@@ -330,18 +336,74 @@ describe('AgentContextService', () => {
 
   it('truncates oversized reasoning during hard truncation', async () => {
     const service = createService();
+    const tools = [{ name: 'read_file', description: 'read', inputSchema: {} }];
     const messages: ChatMessage[] = [
       user('目标'),
       { role: 'assistant', content: 'a'.repeat(8_000), reasoning: 'r'.repeat(8_000) }
     ];
 
-    const result = await service.prepare(messages);
+    const result = await service.prepare(messages, tools);
     const assistant = result.messages.at(-1);
 
     expect(result.strategies).toContain('hard_truncated');
     expect(assistant?.content).toContain('…[已截断]');
     expect(assistant?.reasoning).toContain('…[已截断]');
     expect(result.afterTokens).toBeLessThanOrEqual(result.beforeTokens ?? Number.MAX_SAFE_INTEGER);
+  });
+
+  it('keeps reasoning_content on assistant tool calls after compaction', async () => {
+    // 摘要压缩保留最近消息；用 DeepSeek 协议回传时，剩余 assistant 工具调用必须仍带 reasoning_content
+    const service = new AgentContextService({
+      provider: new MockProvider([{ text: '摘要内容' }]),
+      model: 'deepseek-flash',
+      contextWindow: 8_192,
+      maxOutputTokens: 1_024,
+      artifacts: new ArtifactService(directory),
+      sessionId: 'session-1'
+    });
+    const tools = [{ name: 'read_file', description: 'read', inputSchema: {} }];
+    const messages: ChatMessage[] = [user('目标')];
+    for (let index = 0; index < 12; index += 1) {
+      messages.push({
+        role: 'assistant',
+        content: `步骤${index}`,
+        reasoning: `思考${index}`.repeat(200),
+        toolCalls: [{ id: `call-${index}`, name: 'read_file', arguments: { path: `f${index}` } }]
+      });
+      messages.push({ role: 'tool', toolCallId: `call-${index}`, content: 'x'.repeat(2_000) });
+    }
+
+    const prepared = await service.prepare(messages, tools);
+    expect(prepared.messages.some((message) => message.content.includes('<summary>'))).toBe(true);
+
+    let sentBody: { messages?: Array<Record<string, unknown>> } | undefined;
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: 'https://api.deepseek.com',
+      apiKey: 'secret',
+      reasoningPassback: true,
+      fetchImpl: async (_input, init) => {
+        sentBody = JSON.parse(String(init?.body));
+        return new Response('data: [DONE]\n\n', {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' }
+        });
+      }
+    });
+    for await (const _event of provider.stream({
+      model: 'deepseek-flash',
+      messages: prepared.messages,
+      tools
+    })) {
+      // consume stream
+    }
+
+    const assistantToolCalls = (sentBody?.messages ?? []).filter(
+      (message) => message['role'] === 'assistant' && message['tool_calls']
+    );
+    expect(assistantToolCalls.length).toBeGreaterThan(0);
+    for (const message of assistantToolCalls) {
+      expect(typeof message['reasoning_content']).toBe('string');
+    }
   });
 
   it('throws when protected user messages alone exceed the budget', async () => {

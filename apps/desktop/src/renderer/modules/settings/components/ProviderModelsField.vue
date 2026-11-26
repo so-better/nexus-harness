@@ -67,6 +67,7 @@
                   :value="model.contextWindow"
                   :min="4096"
                   :step="1024"
+                  v-bind="budgetInvalid(model) ? { status: 'error' } : {}"
                   @update:value="
                     (value: number | null) => updateModel(model.id, 'contextWindow', value)
                   "
@@ -84,6 +85,7 @@
                   :value="model.maxOutputTokens"
                   :min="256"
                   :step="256"
+                  v-bind="budgetInvalid(model) ? { status: 'error' } : {}"
                   @update:value="
                     (value: number | null) => updateModel(model.id, 'maxOutputTokens', value)
                   "
@@ -93,42 +95,9 @@
                   </template>
                 </NInputNumber>
               </label>
-            </div>
-
-            <div
-              v-if="protocol !== 'anthropic'"
-              class="nh-model-row__row nh-model-row__row--reasoning"
-            >
-              <label class="nh-model-row__field nh-model-row__field--switch">
-                <span>{{ t('settings.thinkingMode') }}</span>
-                <NSwitch
-                  size="small"
-                  :value="model.thinkingMode !== 'disabled'"
-                  @update:value="
-                    (value: boolean) =>
-                      updateModel(model.id, 'thinkingMode', value ? 'enabled' : 'disabled')
-                  "
-                />
-              </label>
-              <label class="nh-model-row__field nh-model-row__field--switch">
-                <span>{{ t('settings.modelReasoningPassback') }}</span>
-                <NSwitch
-                  size="small"
-                  :value="model.reasoningPassback !== false"
-                  @update:value="
-                    (value: boolean) => updateModel(model.id, 'reasoningPassback', value)
-                  "
-                />
-              </label>
-              <label class="nh-model-row__field">
-                <span>{{ t('settings.reasoningEffort') }}</span>
-                <NSelect
-                  size="small"
-                  :value="model.reasoningEffort ?? 'default'"
-                  :options="effortOptions"
-                  @update:value="(value: string) => updateModel(model.id, 'reasoningEffort', value)"
-                />
-              </label>
+              <small v-if="budgetInvalid(model)" class="nh-model-row__error">
+                {{ t('settings.modelBudgetInvalid') }}
+              </small>
             </div>
 
             <label class="nh-model-row__field nh-model-row__field--extra">
@@ -143,7 +112,7 @@
                   :value="extraText(model)"
                   type="textarea"
                   size="small"
-                  :autosize="{ minRows: 4, maxRows: 10 }"
+                  :autosize="{ minRows: 4, maxRows: 12 }"
                   :placeholder="t('settings.extraParamsPlaceholder')"
                   v-bind="extraErrors[model.id] ? { status: 'error' } : {}"
                   @update:value="(value: string) => updateExtraDraft(model, value)"
@@ -203,23 +172,19 @@
 
 <script setup lang="ts">
 /**
- * 多模型配置：获取模型后以复选框列表选择，并配置预算与默认模型。
+ * 多模型配置：上下文窗口、输出上限与 reasoning 回传作为结构化字段；
+ * 额外请求参数用单个 JSON 原样透传给模型，宿主不解析其中字段。
  */
 
 import { computed, reactive, ref, watch } from 'vue';
-import {
-  NButton,
-  NCheckbox,
-  NFormItem,
-  NInput,
-  NInputNumber,
-  NRadio,
-  NSelect,
-  NSwitch
-} from 'naive-ui';
+import { NButton, NCheckbox, NFormItem, NInput, NInputNumber, NRadio } from 'naive-ui';
 import type { ProviderModel } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
-import { findManagedThinkingParams } from '@shared/provider-params';
+import {
+  findReservedProviderParams,
+  findSensitiveProviderParams,
+  isDeepSeekBaseUrl
+} from '@shared/provider-params';
 import { parseExtraParams } from '../validation/extra-params';
 import AppIcon from '@/components/AppIcon.vue';
 
@@ -228,7 +193,8 @@ const props = defineProps<{
   availableModels: string[];
   defaultModelId: string;
   testing: boolean;
-  protocol: 'openai' | 'anthropic' | 'ollama';
+  /** Provider Base URL；DeepSeek 新建模型时默认使用 1M 上下文窗口。 */
+  baseUrl?: string;
 }>();
 
 const emit = defineEmits<{
@@ -239,6 +205,13 @@ const emit = defineEmits<{
 }>();
 
 /**
+ * 新建模型的默认上下文窗口：DeepSeek 为 1M，其余保持 128K。
+ */
+const defaultContextWindow = computed(() =>
+  isDeepSeekBaseUrl(props.baseUrl ?? '') ? 1_000_000 : 128_000
+);
+
+/**
  * 已获取模型与已保存模型的合集，保持配置存在。
  */
 const rows = computed<ProviderModel[]>(() => {
@@ -247,47 +220,42 @@ const rows = computed<ProviderModel[]>(() => {
     (id) =>
       props.models.find((model) => model.id === id) ?? {
         id,
-        contextWindow: 128_000,
+        contextWindow: defaultContextWindow.value,
         maxOutputTokens: 16_384
       }
   );
 });
 
-const effortOptions = computed(() => [
-  { label: t('settings.effortDefault'), value: 'default' },
-  { label: t('settings.effortLow'), value: 'low' },
-  { label: t('settings.effortHigh'), value: 'high' },
-  { label: t('settings.effortMax'), value: 'max' }
-]);
-
 const extraDrafts = reactive<Record<string, string>>({});
 const extraErrors = reactive<Record<string, string>>({});
 
+/**
+ * 输出上限必须小于上下文窗口；不满足时禁用保存并展示表单错误。
+ */
+const budgetInvalid = (model: ProviderModel): boolean =>
+  model.maxOutputTokens >= model.contextWindow;
+
 const extraText = (model: ProviderModel): string =>
   extraDrafts[model.id] ?? JSON.stringify(model.extraParams ?? {}, null, 2);
-
-const emitValidity = (): void => {
-  emit('update:valid', Object.keys(extraErrors).length === 0);
-};
-
-const clearModelExtraState = (modelId: string): void => {
-  delete extraDrafts[modelId];
-  delete extraErrors[modelId];
-};
 
 const updateExtraDraft = (model: ProviderModel, text: string): void => {
   extraDrafts[model.id] = text;
   try {
     const parsed = parseExtraParams(text, t('settings.modelExtraParamsInvalid'));
-    if (props.protocol !== 'anthropic' && findManagedThinkingParams(parsed).length) {
-      throw new Error(t('settings.modelExtraParamsManaged'));
+    const reserved = findReservedProviderParams(parsed);
+    if (reserved.length) {
+      throw new Error(t('settings.modelExtraParamsReserved', { keys: reserved.join(', ') }));
+    }
+    const sensitive = findSensitiveProviderParams(parsed);
+    if (sensitive.length) {
+      throw new Error(t('settings.modelExtraParamsSensitive', { keys: sensitive.join(', ') }));
     }
     delete extraErrors[model.id];
-    updateModel(model.id, 'extraParams', parsed);
-  } catch {
-    extraErrors[model.id] = t('settings.modelExtraParamsInvalid');
+    updateModel(model.id, 'extraParams', Object.keys(parsed).length ? parsed : undefined);
+  } catch (error) {
+    extraErrors[model.id] =
+      error instanceof Error ? error.message : t('settings.modelExtraParamsInvalid');
   }
-  emitValidity();
 };
 
 const resetExtraDraft = (model: ProviderModel): void => {
@@ -300,7 +268,9 @@ const manualError = ref('');
 const showManual = ref(false);
 
 watch(
-  () => Object.keys(extraErrors).length === 0,
+  () =>
+    Object.keys(extraErrors).length === 0 &&
+    !props.models.some((model) => model.maxOutputTokens >= model.contextWindow),
   (valid) => emit('update:valid', valid),
   { immediate: true }
 );
@@ -310,9 +280,11 @@ watch(
   () => {
     const ids = new Set(rows.value.map((model) => model.id));
     for (const id of new Set([...Object.keys(extraDrafts), ...Object.keys(extraErrors)])) {
-      if (!ids.has(id)) clearModelExtraState(id);
+      if (!ids.has(id)) {
+        delete extraDrafts[id];
+        delete extraErrors[id];
+      }
     }
-    emitValidity();
   }
 );
 
@@ -327,6 +299,32 @@ const allSelected = computed(
   () => rows.value.length > 0 && selectedCount.value === rows.value.length
 );
 const someSelected = computed(() => selectedCount.value > 0 && !allSelected.value);
+
+/**
+ * 更新单个模型的窗口、输出上限或透传参数。
+ */
+const updateModel = (
+  id: string,
+  key: 'contextWindow' | 'maxOutputTokens' | 'extraParams',
+  value: number | Record<string, unknown> | undefined | null
+): void => {
+  if (value === null) return;
+  emit(
+    'update:models',
+    props.models.map((model) => {
+      if (model.id !== id) return model;
+      const next: ProviderModel = { ...model };
+      if (key === 'contextWindow' || key === 'maxOutputTokens') {
+        if (typeof value === 'number') next[key] = value;
+      } else if (value && typeof value === 'object') {
+        next.extraParams = value as Record<string, unknown>;
+      } else {
+        delete next.extraParams;
+      }
+      return next;
+    })
+  );
+};
 
 /**
  * 允许在模型列表接口不可用时手动添加模型 ID。
@@ -344,7 +342,7 @@ const addManualModel = (): void => {
   const model: ProviderModel = {
     id,
     role: 'chat',
-    contextWindow: 128_000,
+    contextWindow: defaultContextWindow.value,
     maxOutputTokens: 16_384
   };
   emit('update:models', [...props.models, model]);
@@ -353,7 +351,7 @@ const addManualModel = (): void => {
 };
 
 /**
- * 勾选模型时添加默认预算；取消时移除并修正默认模型。
+ * 勾选模型时添加默认预算；取消时移除并清理草稿。
  */
 const toggleModel = (id: string, checked: boolean): void => {
   if (checked) {
@@ -365,14 +363,15 @@ const toggleModel = (id: string, checked: boolean): void => {
     return;
   }
 
-  clearModelExtraState(id);
+  delete extraDrafts[id];
+  delete extraErrors[id];
   const next = props.models.filter((model) => model.id !== id);
   emit('update:models', next);
   if (props.defaultModelId === id) emit('update:defaultModelId', next[0]?.id ?? '');
 };
 
 /**
- * 全选或清空当前模型列表；保留已选模型的预算配置。
+ * 全选或清空当前模型列表；保留已选模型的配置。
  */
 const toggleAll = (checked: boolean): void => {
   if (checked) {
@@ -383,29 +382,10 @@ const toggleAll = (checked: boolean): void => {
     if (!props.defaultModelId) emit('update:defaultModelId', next[0]?.id ?? '');
     return;
   }
+  Object.keys(extraDrafts).forEach((id) => delete extraDrafts[id]);
+  Object.keys(extraErrors).forEach((id) => delete extraErrors[id]);
   emit('update:models', []);
   if (props.defaultModelId) emit('update:defaultModelId', '');
-};
-
-/**
- * 更新单个模型的上下文或输出预算。
- */
-const updateModel = (
-  id: string,
-  key:
-    | 'contextWindow'
-    | 'maxOutputTokens'
-    | 'thinkingMode'
-    | 'reasoningEffort'
-    | 'reasoningPassback'
-    | 'extraParams',
-  value: number | string | boolean | Record<string, unknown> | null
-): void => {
-  if (value === null) return;
-  emit(
-    'update:models',
-    props.models.map((model) => (model.id === id ? { ...model, [key]: value } : model))
-  );
 };
 </script>
 
@@ -567,10 +547,6 @@ const updateModel = (
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.nh-model-row__row--reasoning {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .nh-model-row__field {
   display: flex;
   min-width: 0;
@@ -583,10 +559,6 @@ const updateModel = (
 .nh-model-row__field > span {
   min-width: 0;
   line-height: 1.4;
-}
-
-.nh-model-row__field--switch :deep(.n-switch) {
-  align-self: flex-start;
 }
 
 .nh-model-row__field--extra {
@@ -623,19 +595,18 @@ const updateModel = (
   font-size: 11px;
 }
 
+.nh-model-row__row--budget .nh-model-row__error {
+  grid-column: 1 / -1;
+}
+
 @media (width <= 880px) {
   .nh-model-row__config {
     margin-left: 0;
   }
-
-  .nh-model-row__row--reasoning {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (width <= 640px) {
-  .nh-model-row__row--budget,
-  .nh-model-row__row--reasoning {
+  .nh-model-row__row--budget {
     grid-template-columns: 1fr;
   }
 }

@@ -112,32 +112,15 @@ export const estimateTextTokens = (text: string): number => {
 };
 
 /**
- * 单条消息的 token 估算，包含角色、工具调用参数与 reasoning。
+ * 计算需要计入预算的 reasoning 下标。
+ * 携带 tools 时 Provider 全量回传历史 reasoning（如 DeepSeek），需全部计入；
+ * 未携带 tools 时不回传 reasoning，无需计入，避免高估上下文导致不必要的压缩。
  */
-export const estimateMessageTokens = (message: ChatMessage): number => {
-  const toolCallTokens = message.toolCalls
-    ? estimateTextTokens(JSON.stringify(message.toolCalls))
-    : 0;
-  const reasoningTokens = message.reasoning ? estimateTextTokens(message.reasoning) : 0;
-  return 4 + estimateTextTokens(message.content) + reasoningTokens + toolCallTokens;
-};
-
-/**
- * 会回传 reasoning 的最近 assistant 消息条数，与 OpenAI 兼容协议保持一致的保守上界。
- */
-export const MAX_REASONING_PASSBACK_MESSAGES = 8;
-
-/**
- * 计算需要计入预算的 reasoning 下标：只取最近若干条带 reasoning 的 assistant 消息。
- * 更早的 reasoning 不会被回传，计入会高估上下文、导致不必要的压缩。
- */
-const selectReasoningIndices = (messages: readonly ChatMessage[]): Set<number> => {
+const selectReasoningIndices = (messages: readonly ChatMessage[], all: boolean): Set<number> => {
   const indices = new Set<number>();
-  for (
-    let index = messages.length - 1;
-    index >= 0 && indices.size < MAX_REASONING_PASSBACK_MESSAGES;
-    index -= 1
-  ) {
+  if (!all) return indices;
+
+  for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index];
     if (message?.role === 'assistant' && message.reasoning?.trim()) indices.add(index);
   }
@@ -151,7 +134,7 @@ export const estimateMessagesTokens = (
   messages: readonly ChatMessage[],
   tools?: readonly ToolSchema[]
 ): number => {
-  const reasoningIndices = selectReasoningIndices(messages);
+  const reasoningIndices = selectReasoningIndices(messages, Boolean(tools?.length));
   let messageTokens = 0;
   for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index];

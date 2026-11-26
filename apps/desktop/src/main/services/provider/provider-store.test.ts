@@ -75,22 +75,14 @@ describe('ProviderStore', () => {
     expect(full).toMatchObject({ protocol: 'ollama', apiKey: '' });
   });
 
-  it('persists model-level extra params and passback capability', async () => {
+  it('persists model-level extra params', async () => {
     const saved = await save({
-      models: [
-        {
-          ...model('gpt-test'),
-          extraParams: { custom: 1 },
-          reasoningPassback: false
-        }
-      ]
+      models: [{ ...model('gpt-test'), extraParams: { custom: 1 } }]
     });
 
-    expect(saved.models[0]?.reasoningPassback).toBe(false);
     expect(saved.models[0]?.extraParams).toEqual({ custom: 1 });
     const full = await store.get(saved.id);
     expect(full?.models[0]?.extraParams).toEqual({ custom: 1 });
-    expect(full?.models[0]?.reasoningPassback).toBe(false);
   });
 
   it('migrates legacy provider extra params into models', async () => {
@@ -127,11 +119,14 @@ describe('ProviderStore', () => {
     ]);
   });
 
-  it('rejects managed thinking params in model extra params', async () => {
-    await expect(
-      save({ models: [{ ...model('gpt-test'), extraParams: { thinking: { type: 'disabled' } } }] })
-    ).rejects.toThrow('不能覆盖思考配置');
+  it('allows thinking params in model extra params', async () => {
+    // thinking / reasoning_effort 直接写在模型 JSON 中，不再由宿主托管
     const saved = await save({
+      models: [{ ...model('gpt-test'), extraParams: { thinking: { type: 'disabled' } } }]
+    });
+    expect(saved.models[0]?.extraParams).toEqual({ thinking: { type: 'disabled' } });
+
+    const anthropic = await save({
       protocol: 'anthropic',
       name: 'Anthropic',
       models: [
@@ -142,7 +137,7 @@ describe('ProviderStore', () => {
       ],
       defaultModelId: 'claude-test'
     });
-    expect(saved.models[0]?.extraParams).toEqual({
+    expect(anthropic.models[0]?.extraParams).toEqual({
       thinking: { type: 'enabled', budget_tokens: 1024 }
     });
   });
@@ -156,7 +151,7 @@ describe('ProviderStore', () => {
     ).rejects.toThrow('敏感字段');
   });
 
-  it('preserves model-level thinking fields', async () => {
+  it('drops legacy model thinking fields on read', async () => {
     await mkdir(directory, { recursive: true });
     await writeFile(
       join(directory, 'providers.json'),
@@ -173,7 +168,8 @@ describe('ProviderStore', () => {
               {
                 ...model('deepseek-flash'),
                 thinkingMode: 'disabled',
-                reasoningEffort: 'high'
+                reasoningEffort: 'high',
+                reasoningPassback: true
               }
             ],
             defaultModelId: 'deepseek-flash'
@@ -183,14 +179,15 @@ describe('ProviderStore', () => {
     );
 
     const providers = await store.list();
-    expect(providers[0]).toMatchObject({
-      models: [
-        expect.objectContaining({
-          thinkingMode: 'disabled',
-          reasoningEffort: 'high'
-        })
-      ]
-    });
+    expect(providers[0]?.models[0]).not.toHaveProperty('thinkingMode');
+
+    const raw = JSON.parse(await readFile(join(directory, 'providers.json'), 'utf8')) as {
+      providers: Array<{ models: Array<Record<string, unknown>> }>;
+    };
+    const stored = raw.providers[0]?.models[0] ?? {};
+    expect(stored).not.toHaveProperty('thinkingMode');
+    expect(stored).not.toHaveProperty('reasoningEffort');
+    expect(stored).not.toHaveProperty('reasoningPassback');
   });
 
   it('stores custom headers locally and keeps them out of public configs', async () => {

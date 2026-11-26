@@ -3,7 +3,7 @@
  */
 
 import type { ChatProvider } from '@nexus/providers';
-import { stripManagedThinkingParams, type UsageSummary } from '@nexus/shared';
+import type { UsageSummary } from '@nexus/shared';
 
 const TITLE_TIMEOUT_MS = 10_000;
 const MAX_TITLE_LENGTH = 32;
@@ -44,7 +44,6 @@ export const generateSessionTitle = async (
     let text = '';
     let usage: UsageSummary | undefined;
 
-    const utilityExtraParams = stripManagedThinkingParams(extraParams);
     for await (const event of provider.stream({
       model,
       maxTokens: 64,
@@ -57,7 +56,7 @@ export const generateSessionTitle = async (
         },
         { role: 'user', content: prompt.slice(0, 2_000) }
       ],
-      ...(utilityExtraParams ? { extraParams: utilityExtraParams } : {}),
+      ...(extraParams ? { extraParams } : {}),
       signal: controller.signal
     })) {
       if (event.type === 'text-delta') text += event.text;

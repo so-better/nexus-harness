@@ -32,7 +32,7 @@ describe('AgentService', () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it('passes assistant reasoning back for Ollama', async () => {
+  it('passes assistant reasoning back for DeepSeek', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('data: [DONE]\n\n', {
         status: 200,
@@ -41,25 +41,19 @@ describe('AgentService', () => {
     );
     try {
       const provider = createAgentProvider({
-        id: 'ollama',
-        protocol: 'ollama',
-        name: 'Ollama',
-        baseUrl: 'http://localhost:11434',
-        apiKey: '',
+        id: 'deepseek',
+        protocol: 'openai',
+        name: 'DeepSeek',
+        baseUrl: 'https://api.deepseek.com',
+        apiKey: 'secret',
         enabled: true,
-        models: [
-          {
-            id: 'llama',
-            contextWindow: 8192,
-            maxOutputTokens: 2048,
-            reasoningPassback: true
-          }
-        ],
-        defaultModelId: 'llama'
+        models: [{ id: 'deepseek-flash', contextWindow: 1_000_000, maxOutputTokens: 32_768 }],
+        defaultModelId: 'deepseek-flash'
       });
       for await (const _event of provider.stream({
-        model: 'llama',
-        messages: [{ role: 'assistant', content: '', reasoning: '先检查工具结果' }]
+        model: 'deepseek-flash',
+        messages: [{ role: 'assistant', content: '', reasoning: '先检查工具结果' }],
+        tools: [{ name: 'read_file', description: 'read', inputSchema: { type: 'object' } }]
       })) {
         // 消费流以触发请求
       }
@@ -73,7 +67,7 @@ describe('AgentService', () => {
     }
   });
 
-  it('does not pass assistant reasoning back for Ollama when disabled', async () => {
+  it('does not pass assistant reasoning back for non-DeepSeek providers', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('data: [DONE]\n\n', {
         status: 200,
@@ -88,19 +82,13 @@ describe('AgentService', () => {
         baseUrl: 'http://localhost:11434',
         apiKey: '',
         enabled: true,
-        models: [
-          {
-            id: 'llama',
-            contextWindow: 8192,
-            maxOutputTokens: 2048,
-            reasoningPassback: false
-          }
-        ],
+        models: [{ id: 'llama', contextWindow: 8192, maxOutputTokens: 2048 }],
         defaultModelId: 'llama'
       });
       for await (const _event of provider.stream({
         model: 'llama',
-        messages: [{ role: 'assistant', content: '', reasoning: '不应回传' }]
+        messages: [{ role: 'assistant', content: '', reasoning: '不应回传' }],
+        tools: [{ name: 'read_file', description: 'read', inputSchema: { type: 'object' } }]
       })) {
         // 消费流以触发请求
       }
@@ -114,33 +102,15 @@ describe('AgentService', () => {
     }
   });
 
-  it('merges model-level extra and thinking params', () => {
-    expect(
-      buildModelExtraParams({
-        extraParams: {
-          thinking: { type: 'enabled' },
-          reasoning_effort: 'max',
-          custom: true
-        },
-        thinkingMode: 'disabled',
-        reasoningEffort: 'high'
-      })
-    ).toEqual({
-      thinking: { type: 'disabled' },
-      custom: true,
-      reasoning_effort: 'high'
-    });
-    expect(buildModelExtraParams({ thinkingMode: 'default' })).toBeUndefined();
-    expect(
-      buildModelExtraParams(
-        {
-          extraParams: { thinking: { type: 'enabled' }, custom: true },
-          thinkingMode: 'disabled',
-          reasoningEffort: 'high'
-        },
-        'anthropic'
-      )
-    ).toEqual({ thinking: { type: 'enabled' }, custom: true });
+  it('passes model JSON params through without interpreting thinking', () => {
+    const params = {
+      thinking: { type: 'enabled' },
+      reasoning_effort: 'max',
+      custom: true
+    };
+    expect(buildModelExtraParams({ extraParams: params })).toEqual(params);
+    expect(buildModelExtraParams({})).toBeUndefined();
+    expect(buildModelExtraParams({ extraParams: {} })).toBeUndefined();
   });
 
   it('prepends session history and persists the current user message', async () => {

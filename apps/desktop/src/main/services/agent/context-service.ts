@@ -10,7 +10,7 @@ import {
   type ContextPreparation
 } from '@nexus/core';
 import type { ChatMessage, ChatProvider, ProviderRequest, ToolSchema } from '@nexus/providers';
-import { stripManagedThinkingParams, type UsageSummary } from '@nexus/shared';
+import type { UsageSummary } from '@nexus/shared';
 import type { ArtifactService } from '../artifacts/artifact-service';
 
 /**
@@ -314,7 +314,6 @@ export class AgentContextService {
     let summary = '';
     let usage: UsageSummary | undefined;
 
-    const utilityExtraParams = stripManagedThinkingParams(this.options.extraParams);
     try {
       const request: ProviderRequest = {
         model: this.options.model,
@@ -331,7 +330,7 @@ export class AgentContextService {
             content: split.middle.map((message) => this.formatForSummary(message)).join('\n\n')
           }
         ],
-        ...(utilityExtraParams ? { extraParams: utilityExtraParams } : {}),
+        ...(this.options.extraParams ? { extraParams: this.options.extraParams } : {}),
         ...(this.options.signal ? { signal: this.options.signal } : {})
       };
 

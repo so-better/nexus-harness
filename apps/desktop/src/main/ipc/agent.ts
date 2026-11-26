@@ -309,7 +309,7 @@ export const registerAgentIpc = (): void => {
               '',
             (() => {
               const model = provider.models.find((item) => item.id === parsed.data.modelId);
-              return model ? buildModelExtraParams(model, provider.protocol) : undefined;
+              return model ? buildModelExtraParams(model) : undefined;
             })()
           )
             .then(({ title, usage }) => {

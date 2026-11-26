@@ -25,24 +25,37 @@ describe('context budget', () => {
     );
   });
 
-  it('counts reasoning tokens that providers may pass back', () => {
-    const base = estimateMessagesTokens([{ role: 'assistant' as const, content: 'hi' }]);
-    const withReasoning = estimateMessagesTokens([
-      { role: 'assistant' as const, content: 'hi', reasoning: 'x'.repeat(400) }
-    ]);
+  it('counts reasoning tokens that providers pass back with tools', () => {
+    const tools = [{ name: 'read_file', description: 'read', inputSchema: {} }];
+    const base = estimateMessagesTokens([{ role: 'assistant' as const, content: 'hi' }], tools);
+    const withReasoning = estimateMessagesTokens(
+      [{ role: 'assistant' as const, content: 'hi', reasoning: 'x'.repeat(400) }],
+      tools
+    );
 
     expect(withReasoning).toBe(base + 100);
   });
 
-  it('only counts reasoning for the most recent assistant messages', () => {
+  it('does not count reasoning when tools are absent', () => {
     const plain = Array.from({ length: 10 }, () => ({
       role: 'assistant' as const,
       content: 'hi'
     }));
     const withReasoning = plain.map((message) => ({ ...message, reasoning: 'x'.repeat(400) }));
 
-    // 只有最近 8 条 reasoning 会被回传并计入预算
-    expect(estimateMessagesTokens(withReasoning)).toBe(estimateMessagesTokens(plain) + 8 * 100);
+    // 不带 tools 时不回传 reasoning，因此不计入预算
+    expect(estimateMessagesTokens(withReasoning)).toBe(estimateMessagesTokens(plain));
+  });
+
+  it('counts all reasoning when tools are present', () => {
+    const tools = [{ name: 'read_file', description: 'read', inputSchema: {} }];
+    const plain = Array.from({ length: 10 }, () => ({ role: 'assistant' as const, content: 'hi' }));
+    const withReasoning = plain.map((message) => ({ ...message, reasoning: 'x'.repeat(400) }));
+
+    // 携带 tools 时 Provider 全量回传 reasoning，预算必须全部计入
+    expect(estimateMessagesTokens(withReasoning, tools)).toBe(
+      estimateMessagesTokens(plain, tools) + 10 * 100
+    );
   });
 
   it('reserves output and safety tokens', () => {
