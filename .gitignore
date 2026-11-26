@@ -16,5 +16,5 @@ coverage/
 !apps/desktop/resources/plugins/**/dist/**
 
 # 发布产物归档需要入库（覆盖上面对 "release/" 的忽略）
-!guide/release/
-!guide/release/**
+!archive/release/
+!archive/release/**
