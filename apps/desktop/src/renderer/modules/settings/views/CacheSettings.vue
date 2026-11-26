@@ -12,13 +12,7 @@
       </div>
       <NPopconfirm @positive-click="clear('all')">
         <template #trigger>
-          <NButton
-            size="small"
-            type="error"
-            secondary
-            :loading="clearing === 'all'"
-            :disabled="isBusy"
-          >
+          <NButton size="small" type="error" :loading="clearing === 'all'" :disabled="isBusy">
             <template #icon>
               <AppIcon name="trash" :size="14" />
             </template>

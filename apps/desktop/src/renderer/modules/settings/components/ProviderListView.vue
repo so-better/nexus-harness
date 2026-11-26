@@ -2,7 +2,7 @@
   <div class="nh-provider-list">
     <div class="nh-provider-list__header">
       <span> {{ providers.length }} {{ providerCountLabel }} </span>
-      <NButton type="primary" secondary @click="emit('create')">
+      <NButton type="primary" @click="emit('create')">
         <template #icon>
           <AppIcon name="plus" :size="14" />
         </template>

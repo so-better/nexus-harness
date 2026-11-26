@@ -14,7 +14,7 @@
           {{ configs.length }}
           {{ configs.length === 1 ? t('settings.modelCountOne') : t('settings.modelCountMany') }}
         </span>
-        <NButton type="primary" secondary @click="startNew">
+        <NButton type="primary" @click="startNew">
           <template #icon>
             <AppIcon name="plus" :size="14" />
           </template>

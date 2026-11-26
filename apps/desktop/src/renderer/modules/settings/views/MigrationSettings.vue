@@ -23,7 +23,6 @@
         </div>
         <NButton
           class="nh-migration__action"
-          secondary
           type="primary"
           :loading="exporting"
           :disabled="migrationBusy || pendingRestart"
@@ -48,7 +47,6 @@
           <template #trigger>
             <NButton
               class="nh-migration__action"
-              secondary
               type="primary"
               :loading="importing"
               :disabled="migrationBusy || pendingRestart"
