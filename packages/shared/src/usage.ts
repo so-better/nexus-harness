@@ -36,6 +36,7 @@ export const usageStatsInputSchema = z
 
 import type {
   PluginUsageBreakdown,
+  PluginUsageContext,
   PluginUsageQuery,
   PluginUsageSeriesPoint,
   PluginUsageSession,
@@ -53,5 +54,7 @@ export type UsageSeriesPoint = PluginUsageSeriesPoint;
 export type UsageBreakdown = PluginUsageBreakdown;
 /** 单会话用量。 */
 export type UsageSessionStat = PluginUsageSession;
+/** 会话上下文占用快照。 */
+export type UsageContext = PluginUsageContext;
 /** 用量统计结果。 */
 export type UsageStats = PluginUsageStats;

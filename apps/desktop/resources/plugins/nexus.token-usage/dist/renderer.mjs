@@ -37,10 +37,16 @@ const labels = () =>
         allTime: 'All time',
         input: 'Input',
         output: 'Output',
+        cacheHit: 'Cache hit rate',
         cacheRead: 'Cache read',
         cacheWrite: 'Cache write',
         total: 'Total',
         calls: 'Calls',
+        context: 'Context',
+        contextUsed: 'Used',
+        contextRemaining: 'Remaining',
+        contextWindow: 'Window',
+        reservedOutput: 'Reserved output',
         byModel: 'By model',
         byProvider: 'By provider',
         sessions: 'Sessions',
@@ -59,10 +65,16 @@ const labels = () =>
         allTime: '全部时间',
         input: '输入',
         output: '输出',
+        cacheHit: '缓存命中率',
         cacheRead: '缓存读',
         cacheWrite: '缓存写',
         total: '总计',
         calls: '调用',
+        context: '上下文',
+        contextUsed: '已用',
+        contextRemaining: '剩余',
+        contextWindow: '窗口',
+        reservedOutput: '预留输出',
         byModel: '按模型',
         byProvider: '按 Provider',
         sessions: '会话排行',
@@ -471,13 +483,21 @@ const buildMetrics = (totals, text) => {
     [text.input, formatCompact(totals.inputTokens), formatNumber(totals.inputTokens)],
     [text.output, formatCompact(totals.outputTokens), formatNumber(totals.outputTokens)]
   ];
-  // 仅在存在缓存用量时展示，避免常见的 0 值占位
+  // 缓存读/写入/命中率三张卡：只要出现缓存活动就同时展示，缺失字段按 0 显示
+  const inputTokens = totals.inputTokens ?? 0;
   const cacheRead = totals.cacheReadTokens ?? 0;
   const cacheWrite = totals.cacheWriteTokens ?? 0;
-  if (cacheRead) {
+  if (cacheRead || cacheWrite) {
+    // 缓存命中率 = 缓存读 / 输入；inputTokens 含缓存读，两个协议口径一致
+    if (cacheRead && inputTokens) {
+      const rate = Math.round((cacheRead / inputTokens) * 100);
+      metrics.push([
+        text.cacheHit,
+        `${rate}%`,
+        `${formatNumber(cacheRead)} / ${formatNumber(inputTokens)}`
+      ]);
+    }
     metrics.push([text.cacheRead, formatCompact(cacheRead), formatNumber(cacheRead)]);
-  }
-  if (cacheWrite) {
     metrics.push([text.cacheWrite, formatCompact(cacheWrite), formatNumber(cacheWrite)]);
   }
   metrics.push([text.calls, formatNumber(totals.calls), formatNumber(totals.calls)]);
@@ -490,6 +510,51 @@ const buildMetrics = (totals, text) => {
     grid.appendChild(card);
   }
   return grid;
+};
+
+/**
+ * 构建当前会话的上下文占用区块：窗口、已用、剩余与预留输出。
+ * 未知窗口时返回 null，由调用方跳过渲染。
+ */
+const buildContext = (context, text) => {
+  const contextWindow = context.contextWindow ?? 0;
+  if (!contextWindow) return null;
+  const used = Math.max(0, context.contextTokens ?? 0);
+  const reserved = Math.max(0, context.maxOutputTokens ?? 0);
+  // 剩余可用输入 = 窗口 − 已用 − 预留输出，与上下文预算口径一致
+  const remaining = Math.max(0, contextWindow - used - reserved);
+  const percent = Math.min(100, Math.round((used / contextWindow) * 100));
+  const panel = create('section', 'nh-token-usage__panel nh-token-usage__context');
+  if (context.modelId) panel.title = context.modelId;
+  const head = create('div', 'nh-token-usage__panel-head');
+  head.append(create('h3', '', text.context), create('span', '', `${percent}%`));
+  panel.appendChild(head);
+  const bar = create('div', 'nh-token-usage__context-bar');
+  bar.setAttribute('role', 'progressbar');
+  bar.setAttribute('aria-label', text.context);
+  bar.setAttribute('aria-valuemin', '0');
+  bar.setAttribute('aria-valuemax', String(contextWindow));
+  bar.setAttribute('aria-valuenow', String(Math.min(used, contextWindow)));
+  const fill = create('span', 'nh-token-usage__context-fill');
+  // 按占用比例提示压力：>=90% 危险，>=70% 警告
+  if (percent >= 90) fill.classList.add('nh-token-usage__context-fill--danger');
+  else if (percent >= 70) fill.classList.add('nh-token-usage__context-fill--warn');
+  fill.style.width = `${Math.max(1, percent)}%`;
+  bar.appendChild(fill);
+  const metrics = create('div', 'nh-token-usage__context-metrics');
+  for (const [label, value, title] of [
+    [text.contextUsed, formatCompact(used), formatNumber(used)],
+    [text.contextRemaining, formatCompact(remaining), formatNumber(remaining)],
+    [text.contextWindow, formatCompact(contextWindow), formatNumber(contextWindow)],
+    [text.reservedOutput, formatCompact(reserved), formatNumber(reserved)]
+  ]) {
+    const item = create('div', 'nh-token-usage__context-metric');
+    item.append(create('span', '', label), create('strong', '', value));
+    item.title = title;
+    metrics.appendChild(item);
+  }
+  panel.append(bar, metrics);
+  return panel;
 };
 
 const injectStyles = (element) => {
@@ -637,6 +702,14 @@ const injectStyles = (element) => {
     }
     .nh-token-usage__metric-label { display: block; color: var(--nh-color-text-secondary); font-size: 11px; }
     .nh-token-usage__metric strong { display: block; margin-top: 5px; font-size: 20px; font-weight: 650; letter-spacing: .04em; font-variant-numeric: tabular-nums; }
+    .nh-token-usage__context-bar { height: 8px; overflow: hidden; border-radius: 6px; background: color-mix(in srgb, var(--nh-color-border) 45%, transparent); }
+    .nh-token-usage__context-fill { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--nh-color-accent), var(--nh-color-idle)); transition: width 200ms ease; }
+    .nh-token-usage__context-fill--warn { background: linear-gradient(90deg, var(--nh-color-warning), var(--nh-color-danger)); }
+    .nh-token-usage__context-fill--danger { background: var(--nh-color-danger); }
+    .nh-token-usage__context-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 12px; margin-top: 12px; }
+    .nh-token-usage__context-metric { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+    .nh-token-usage__context-metric span { color: var(--nh-color-text-secondary); font-size: 11px; }
+    .nh-token-usage__context-metric strong { font-family: var(--nh-font-mono); font-size: 16px; font-weight: 600; letter-spacing: .03em; font-variant-numeric: tabular-nums; }
     .nh-token-usage__grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(260px, .8fr); gap: 18px; }
     .nh-token-usage__grid-stack { display: flex; min-width: 0; flex-direction: column; gap: 18px; }
     .nh-token-usage__panel {
@@ -789,6 +862,11 @@ const mountDashboard = (element, ctx) => {
     hero.append(heroCopy, heroStat);
     content.appendChild(hero);
     content.appendChild(buildMetrics(stats.totals, text));
+    // 上下文占用仅当前会话有意义，缺失模型配置时 stats.context 不存在
+    if (state.scope === 'session' && stats.context) {
+      const contextBlock = buildContext(stats.context, text);
+      if (contextBlock) content.appendChild(contextBlock);
+    }
 
     const grid = create('div', 'nh-token-usage__grid');
     const chartPanel = create('section', 'nh-token-usage__panel');

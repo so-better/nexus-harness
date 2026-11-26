@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDatabase } from '../storage/database';
-import { getUsageStats } from './usage-stats-service';
+import { getUsageStats, getSessionContextTokens } from './usage-stats-service';
 
 const DAY = 24 * 60 * 60 * 1000;
 const START = Date.UTC(2026, 0, 1, 12);
@@ -139,5 +139,84 @@ describe('getUsageStats', () => {
 
     expect(result.totals.totalTokens).toBe(0);
     expect(result.series).toHaveLength(0);
+  });
+});
+
+describe('getSessionContextTokens', () => {
+  let directory = '';
+  let db: ReturnType<typeof createDatabase>;
+
+  /**
+   * 插入一条 usage.recorded；messageId 缺失表示辅助调用，parentToolCallId 非空表示子代理。
+   */
+  const insertUsage = (input: {
+    id: string;
+    seq: number;
+    inputTokens: number;
+    messageId?: string;
+    parentToolCallId?: string;
+  }): void => {
+    db.prepare(
+      `INSERT INTO events (id, session_id, run_id, seq, type, version, ts, payload, parent_tool_call_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      input.id,
+      'session-ctx',
+      'run-1',
+      input.seq,
+      'usage.recorded',
+      1,
+      START + input.seq,
+      JSON.stringify({
+        provider: 'openai',
+        model: 'model-a',
+        inputTokens: input.inputTokens,
+        outputTokens: 1,
+        ...(input.messageId ? { messageId: input.messageId } : {})
+      }),
+      input.parentToolCallId ?? null
+    );
+  };
+
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'nexus-usage-context-'));
+    db = createDatabase(join(directory, 'nexus.db'));
+    db.prepare(
+      'INSERT INTO sessions (id, title, created_at, updated_at, last_active_at) VALUES (?, ?, ?, ?, ?)'
+    ).run('session-ctx', 'Context', START, START, START);
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(directory, { recursive: true, force: true });
+  });
+
+  it('returns the latest main-conversation input tokens', () => {
+    insertUsage({ id: 'e1', seq: 1, inputTokens: 100, messageId: 'msg-1' });
+    insertUsage({ id: 'e2', seq: 2, inputTokens: 250, messageId: 'msg-2' });
+
+    expect(getSessionContextTokens(db, 'session-ctx')).toBe(250);
+  });
+
+  it('ignores subagent events and auxiliary calls without a messageId', () => {
+    insertUsage({ id: 'e1', seq: 1, inputTokens: 100, messageId: 'msg-1' });
+    // 子代理事件：parent_tool_call_id 非空
+    insertUsage({
+      id: 'e2',
+      seq: 2,
+      inputTokens: 900,
+      messageId: 'sub-1',
+      parentToolCallId: 'tool-1'
+    });
+    // 辅助调用：无 messageId
+    insertUsage({ id: 'e3', seq: 3, inputTokens: 777 });
+
+    expect(getSessionContextTokens(db, 'session-ctx')).toBe(100);
+  });
+
+  it('returns 0 when there is no main-conversation usage', () => {
+    insertUsage({ id: 'e1', seq: 1, inputTokens: 500 });
+
+    expect(getSessionContextTokens(db, 'session-ctx')).toBe(0);
   });
 });

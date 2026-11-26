@@ -125,12 +125,29 @@ export interface PluginUsageSession extends PluginUsageTotals {
   lastUsedAt: number;
 }
 
+/**
+ * 会话的上下文占用快照：仅在按 sessionId 查询用量时返回。
+ * contextTokens 取最近一次主对话模型调用的输入 token 数，可近似视为当前上下文占用。
+ */
+export interface PluginUsageContext {
+  providerId?: string;
+  modelId?: string;
+  /** 模型上下文窗口；未知时为 0 */
+  contextWindow: number;
+  /** 模型单次输出上限（max_tokens） */
+  maxOutputTokens: number;
+  /** 当前上下文占用（最近一次主对话调用的输入 token） */
+  contextTokens: number;
+}
+
 export interface PluginUsageStats {
   totals: PluginUsageTotals;
   series: PluginUsageSeriesPoint[];
   sessions: PluginUsageSession[];
   models: PluginUsageBreakdown[];
   providers: PluginUsageBreakdown[];
+  /** 会话上下文占用快照；仅按 sessionId 查询且可解析模型时返回 */
+  context?: PluginUsageContext;
 }
 
 export interface PluginContext {

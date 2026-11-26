@@ -59,6 +59,26 @@ const totalsFrom = (row: AggregateRow | undefined): UsageTotals => {
 };
 
 /**
+ * 读取会话最近一次主对话模型调用的输入 token 数，近似表示当前上下文占用。
+ * 仅统计主对话事件：排除子代理事件（parent_tool_call_id 非空）与无 messageId 的辅助调用。
+ */
+export const getSessionContextTokens = (db: DatabaseSync, sessionId: string): number => {
+  const row = db
+    .prepare(
+      `SELECT CAST(json_extract(payload, '$.inputTokens') AS INTEGER) AS inputTokens
+       FROM events
+       WHERE type = 'usage.recorded'
+         AND session_id = ?
+         AND parent_tool_call_id IS NULL
+         AND json_type(payload, '$.messageId') = 'text'
+       ORDER BY seq DESC
+       LIMIT 1`
+    )
+    .get(sessionId) as { inputTokens: number | null } | undefined;
+  return toNumber(row?.inputTokens);
+};
+
+/**
  * 查询并聚合 usage.recorded；筛选、分组和求和全部在 SQLite 内完成。
  */
 export const getUsageStats = (db: DatabaseSync, input: UsageStatsInput = {}): UsageStats => {

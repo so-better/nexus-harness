@@ -977,7 +977,7 @@ ctx.notifications.show(message: string, level?: 'info' | 'warning' | 'error'): v
 ctx.notifications.message(message: string, level?: 'info' | 'warning' | 'error'): void; // 应用内消息
 ctx.workspace.readFile(path: string): Promise<string>;
 ctx.workspace.list(dir: string): Promise<WorkspaceEntry[]>;
-ctx.usage.getStats(query?: UsageStatsQuery): Promise<UsageStats>;
+ctx.usage.getStats(query?: UsageStatsQuery): Promise<UsageStats>; // 按 sessionId 查询时附带 context 快照（模型窗口与当前上下文占用）
 ctx.net.fetch(url: string, init?: PluginNetRequestInit): Promise<PluginNetResponse>;
 ctx.jobs.every(intervalMs: number, handler: () => void | Promise<void>): Disposable;
 ctx.composer.insert(text: string): void;
@@ -1046,7 +1046,7 @@ interface SlotContext {
 
 - 通过 `messageSlots` 在会话标题栏和每条 AI 回复尾部分别显示会话与消息 token 用量；耗时（秒）与字符数通过插件设置 `showDuration` / `showChars` 控制，默认关闭。
 - 通过只读 `SlotContext.usage` 读取宿主投影的用量，不自行累计跨会话总量。
-- 通过 `usage:read` 和 `ctx.usage.getStats` 读取会话/全局统计，通过 `views` 与 `ctx.views.open` 打开看板。
+- 通过 `usage:read` 和 `ctx.usage.getStats` 读取会话/全局统计（按 sessionId 查询附带上下文窗口与当前占用），通过 `views` 与 `ctx.views.open` 打开看板；看板展示总量、缓存读/写与缓存命中率，会话范围额外展示上下文窗口占用区块。
 - 通过 `events:usage.recorded` 与事件元数据在看板打开时刷新。
 - 视图入口由插件自己提供，宿主不在扩展弹窗自动列出。
 - 正确处理启用、禁用、热重载。
