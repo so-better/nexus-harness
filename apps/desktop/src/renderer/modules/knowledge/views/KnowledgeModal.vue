@@ -14,11 +14,11 @@
         <p class="nh-knowledge__limit">{{ t('knowledge.limitHint') }}</p>
       </div>
       <div class="nh-knowledge__actions">
-        <NButton type="primary" secondary :loading="importing === 'files'" @click="importFiles">
+        <NButton type="primary" :loading="importing === 'files'" @click="importFiles">
           <template #icon><AppIcon name="upload" :size="14" /></template>
           {{ t('knowledge.importFiles') }}
         </NButton>
-        <NButton secondary :loading="scanning" @click="scanFolder">
+        <NButton type="primary" secondary :loading="scanning" @click="scanFolder">
           <template #icon><AppIcon name="folder" :size="14" /></template>
           {{ t('knowledge.importFolder') }}
         </NButton>

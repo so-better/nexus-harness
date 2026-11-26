@@ -1,18 +1,9 @@
 <template>
-  <div
-    class="nh-session-item"
-    :class="{
-      'nh-session-item--active': active,
-      'nh-session-item--actions-visible': menuOpen || deleteConfirmVisible
-    }"
-    role="button"
-    tabindex="0"
-    :title="session.title"
-    :aria-current="active ? 'page' : undefined"
-    @click="select"
-    @keydown.enter="select"
-    @keydown.space.prevent="select"
-  >
+  <div class="nh-session-item" :class="{
+    'nh-session-item--active': active,
+    'nh-session-item--actions-visible': menuOpen || deleteConfirmVisible
+  }" role="button" tabindex="0" :title="session.title" :aria-current="active ? 'page' : undefined" @click="select"
+    @keydown.enter="select" @keydown.space.prevent="select">
     <span class="nh-session-item__icon">
       <AppIcon name="message" :size="15" />
     </span>
@@ -21,28 +12,13 @@
       <div class="nh-session-item__title-row">
         <span v-if="!renaming" class="nh-session-item__title">{{ session.title }}</span>
         <span v-else class="nh-session-item__rename" @click.stop @keydown.stop>
-          <NInput
-            ref="renameInput"
-            size="tiny"
-            :value="draft"
-            @update:value="(value: string) => (draft = value)"
-            @keydown.enter.prevent="commitRename"
-            @keydown.esc.prevent="cancelRename"
-            @blur="commitRename"
-          />
+          <NInput ref="renameInput" size="tiny" :value="draft" @update:value="(value: string) => (draft = value)"
+            @keydown.enter.prevent="commitRename" @keydown.esc.prevent="cancelRename" @blur="commitRename" />
         </span>
-        <AppIcon
-          v-if="session.pinned && !renaming"
-          class="nh-session-item__pin"
-          name="pin"
-          :size="12"
-        />
+        <AppIcon v-if="session.pinned && !renaming" class="nh-session-item__pin" name="pin" :size="12" />
       </div>
       <div v-if="!renaming" class="nh-session-item__meta">
-        <span
-          class="nh-session-item__status"
-          :class="`nh-session-item__status--${sessionStatusTone(session.status)}`"
-        >
+        <span class="nh-session-item__status" :class="`nh-session-item__status--${sessionStatusTone(session.status)}`">
           <span class="nh-session-item__status-dot" />
           {{ statusLabel }}
         </span>
@@ -52,37 +28,18 @@
     </div>
 
     <div v-if="!renaming" class="nh-session-item__actions" @click.stop>
-      <PluginSlot
-        location="session.item.actions"
-        :context="{ location: 'session.item.actions', sessionId: session.id }"
-      />
-      <NPopconfirm
-        v-model:show="deleteConfirmVisible"
-        trigger="manual"
-        placement="right"
-        @positive-click="emit('remove')"
-      >
+      <PluginSlot location="session.item.actions"
+        :context="{ location: 'session.item.actions', sessionId: session.id }" />
+      <NPopconfirm v-model:show="deleteConfirmVisible" trigger="manual" placement="right"
+        @positive-click="emit('remove')">
         <template #trigger>
           <span class="nh-session-item__more">
-            <NDropdown
-              trigger="click"
-              placement="bottom-end"
-              :options="menuOptions"
-              :menu-props="dropdownMenuProps"
-              scrollable
-              @select="handleMenu"
-              @update:show="menuOpen = $event"
-            >
-              <NButton
-                text
-                size="tiny"
-                class="nh-session-item__action"
-                :title="t('session.more')"
-                :aria-label="t('session.more')"
-                @click.stop
-              >
+            <NDropdown trigger="click" placement="bottom-end" :options="menuOptions" :menu-props="dropdownMenuProps"
+              scrollable @select="handleMenu" @update:show="menuOpen = $event">
+              <NButton text size="tiny" class="nh-session-item__action" :title="t('session.more')"
+                :aria-label="t('session.more')" @click.stop>
                 <template #icon>
-                  <AppIcon name="more" :size="15" />
+                  <AppIcon name="more" :size="20" />
                 </template>
               </NButton>
             </NDropdown>
@@ -252,11 +209,9 @@ const relativeTime = computed(() => {
 
 .nh-session-item--active {
   border-color: color-mix(in srgb, var(--nh-color-accent) 50%, var(--nh-border-subtle));
-  background: color-mix(
-    in srgb,
-    var(--nh-color-accent) 14%,
-    color-mix(in srgb, var(--nh-surface-base) 72%, transparent)
-  );
+  background: color-mix(in srgb,
+      var(--nh-color-accent) 14%,
+      color-mix(in srgb, var(--nh-surface-base) 72%, transparent));
   box-shadow: var(--nh-highlight);
 }
 
@@ -407,6 +362,11 @@ const relativeTime = computed(() => {
   padding: 0;
   border-radius: 6px;
   color: var(--nh-color-text-secondary);
+}
+
+/* 三个点加粗放大，便于识别为可点击的操作入口 */
+.nh-session-item__action :deep(.nh-icon) {
+  stroke-width: 3;
 }
 
 .nh-session-item__action:hover {

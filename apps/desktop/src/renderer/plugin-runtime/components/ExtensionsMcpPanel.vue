@@ -6,17 +6,17 @@
         <p class="nh-mcp__token-hint">{{ t('mcp.tokenHint') }}</p>
       </div>
       <div class="nh-extension-panel__actions">
-        <NButton type="primary" secondary :loading="saving" @click="save()">
+        <NButton type="primary" :loading="saving" @click="save()">
           <template #icon><AppIcon name="check" :size="14" /></template>
           {{ t('mcp.save') }}
+        </NButton>
+        <NButton type="primary" secondary :loading="loading" @click="load">
+          <template #icon><AppIcon name="refresh" :size="14" /></template>
+          {{ t('mcp.refresh') }}
         </NButton>
         <NButton type="primary" tertiary :loading="testing" @click="test">
           <template #icon><AppIcon name="play" :size="14" /></template>
           {{ t('mcp.test') }}
-        </NButton>
-        <NButton secondary :loading="loading" @click="load">
-          <template #icon><AppIcon name="refresh" :size="14" /></template>
-          {{ t('mcp.refresh') }}
         </NButton>
         <NButton secondary @click="openFolder">
           <template #icon><AppIcon name="folder" :size="14" /></template>

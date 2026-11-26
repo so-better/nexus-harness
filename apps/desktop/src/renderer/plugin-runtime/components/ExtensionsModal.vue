@@ -13,11 +13,11 @@
         <div class="nh-extensions__header">
           <p>{{ t('plugins.hint') }}</p>
           <div class="nh-extensions__header-actions">
-            <NButton type="primary" secondary :loading="importing" @click="importPlugin">
+            <NButton type="primary" :loading="importing" @click="importPlugin">
               <template #icon><AppIcon name="upload" :size="14" /></template>
               {{ t('plugins.import') }}
             </NButton>
-            <NButton secondary :loading="reloading" @click="reloadPlugins">
+            <NButton type="primary" secondary :loading="reloading" @click="reloadPlugins">
               <template #icon><AppIcon name="refresh" :size="14" /></template>
               {{ t('plugins.reload') }}
             </NButton>

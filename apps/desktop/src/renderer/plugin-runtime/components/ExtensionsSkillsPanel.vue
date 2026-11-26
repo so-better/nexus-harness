@@ -3,11 +3,11 @@
     <div class="nh-extension-panel__header">
       <p>{{ t('skills.hint') }}</p>
       <div class="nh-extension-panel__actions">
-        <NButton type="primary" secondary :loading="busy" @click="importSkill">
+        <NButton type="primary" :loading="busy" @click="importSkill">
           <template #icon><AppIcon name="upload" :size="14" /></template>
           {{ t('skills.import') }}
         </NButton>
-        <NButton secondary :loading="loading" @click="load">
+        <NButton type="primary" secondary :loading="loading" @click="load">
           <template #icon><AppIcon name="refresh" :size="14" /></template>
           {{ t('skills.refresh') }}
         </NButton>
