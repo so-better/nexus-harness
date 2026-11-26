@@ -6,6 +6,7 @@ import { BrowserWindow, clipboard, dialog, ipcMain } from 'electron';
 import type { OpenDialogOptions } from 'electron';
 import { statSync } from 'node:fs';
 import { createNexusEvent } from '@nexus/core';
+import { isBareShellName } from '@nexus/runtime-utils';
 import { IPC_CHANNELS } from '@shared/ipc/channels';
 import {
   terminalAiAccessInputSchema,
@@ -225,6 +226,14 @@ export const registerTerminalIpc = (): void => {
   );
 
   ipcMain.handle(
+    IPC_CHANNELS.terminalGetAiShellInfo,
+    async (): Promise<Result<ReturnType<typeof terminalService.getAiShellInfo>>> => {
+      const settings = await loadTerminalSettings();
+      return ok(terminalService.getAiShellInfo(settings.aiShell));
+    }
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.terminalSetSettings,
     async (
       _event,
@@ -239,6 +248,16 @@ export const registerTerminalIpc = (): void => {
           }
         } catch {
           return fail('TERMINAL_SETTINGS_INVALID', 'Shell 路径不存在');
+        }
+      }
+      // AI shell 的路径形态需真实存在；裸命令名交由系统 PATH 解析，跳过校验
+      if (parsed.data.aiShell && !isBareShellName(parsed.data.aiShell)) {
+        try {
+          if (!statSync(parsed.data.aiShell).isFile()) {
+            return fail('TERMINAL_SETTINGS_INVALID', 'AI Shell 路径不存在');
+          }
+        } catch {
+          return fail('TERMINAL_SETTINGS_INVALID', 'AI Shell 路径不存在');
         }
       }
       try {

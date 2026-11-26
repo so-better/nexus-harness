@@ -45,6 +45,7 @@ import { collectSupersededMessageIds } from '../services/session/branch-supersed
 import { AttachmentService } from '../services/attachments/attachment-service';
 import { loadImageSettings } from '../services/settings/image-settings';
 import { loadSearchSettings } from '../services/settings/search-settings';
+import { loadTerminalSettings } from '../services/settings/terminal-settings';
 import { loadAgentSettings } from '../services/settings/agent-settings';
 import {
   getRun,
@@ -107,6 +108,7 @@ export const registerAgentIpc = (): void => {
     mcp: getMcpService(),
     imageSettings: loadImageSettings,
     searchSettings: loadSearchSettings,
+    terminalSettings: loadTerminalSettings,
     memoryExtraction: true,
     generalSettings: {
       onChange: (state) => {

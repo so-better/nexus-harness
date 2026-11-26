@@ -171,6 +171,12 @@ export const getTerminalSettings = async (): Promise<TerminalSettings> =>
 export const getTerminalShellInfo = async (): Promise<TerminalShellInfo> =>
   unwrap(await nexus.terminal.getShellInfo());
 
+/**
+ * 读取 AI 命令将使用的 shell 信息（未配置时为平台默认）。
+ */
+export const getTerminalAiShellInfo = async (): Promise<TerminalShellInfo> =>
+  unwrap(await nexus.terminal.getAiShellInfo());
+
 export const selectTerminalShell = async (): Promise<string | undefined> =>
   unwrap(await nexus.terminal.selectShell()).path;
 

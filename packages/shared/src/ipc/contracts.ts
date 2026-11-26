@@ -415,6 +415,7 @@ export interface NexusBridge {
     getSettings: () => Promise<Result<TerminalSettings>>;
     setAiAccess: (input: { id: string; allowed: boolean }) => Promise<Result<{ ok: boolean }>>;
     getShellInfo: () => Promise<Result<TerminalShellInfo>>;
+    getAiShellInfo: () => Promise<Result<TerminalShellInfo>>;
     setSettings: (settings: TerminalSettings) => Promise<Result<TerminalSettings>>;
     onSettingsChanged: (handler: (settings: TerminalSettings) => void) => Unsubscribe;
     readClipboard: () => Promise<Result<string>>;
@@ -481,6 +482,7 @@ export const terminalBusyResultSchema = z.object({
 
 export const terminalSettingsSchema = z.object({
   shell: z.string().nullable(),
+  aiShell: z.string().nullable().default(null),
   fontSize: z.number().int().min(9).max(32),
   scrollback: z.number().int().min(1000).max(100_000),
   copyOnSelect: z.boolean(),
@@ -491,6 +493,7 @@ export type TerminalSettings = z.infer<typeof terminalSettingsSchema>;
 
 export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   shell: null,
+  aiShell: null,
   fontSize: 12,
   scrollback: 5000,
   copyOnSelect: false,

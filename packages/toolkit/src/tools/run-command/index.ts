@@ -39,7 +39,7 @@ export const runCommandToolDefinition: FileToolDefinition = {
 };
 
 export const runRunCommandTool = async (
-  { roots, primaryRoot }: FileToolContext,
+  { roots, primaryRoot, shell }: FileToolContext,
   input: unknown
 ): Promise<FileToolResult> => {
   const parsed = validateInput(runCommandInputSchema, input);
@@ -52,7 +52,7 @@ export const runRunCommandTool = async (
 
   const timeoutMs = parsed.timeoutMs ?? 30_000;
   const maxOutputBytes = 200_000;
-  const invocation = buildShellInvocation(parsed.command);
+  const invocation = buildShellInvocation(parsed.command, shell);
   const env = createShellEnvironment();
 
   return new Promise<FileToolResult>((resolve) => {

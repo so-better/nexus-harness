@@ -73,6 +73,7 @@ describe('terminal store', () => {
     vi.mocked(subscribeTerminalSettings).mockReturnValue(() => undefined);
     vi.mocked(getTerminalSettings).mockResolvedValue({
       shell: null,
+      aiShell: null,
       fontSize: 12,
       scrollback: 1000,
       copyOnSelect: false,

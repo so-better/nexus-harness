@@ -1212,7 +1212,7 @@ export function activate(ctx) {
 ### 4.8 设置与配置
 
 - 设置分三个层级，优先级为 **Session > Workspace > App**；读取时逐层合并，写入时记录 scope。
-- 设置分类：通用、记忆、模型与提供商、终端、外观、缓存、权限与审批、快捷键、高级；终端设置包含 shell、字号、滚回、选中即复制与 WebGL；字体使用默认等宽字体，默认字号 12px，自动检测的 shell 路径需回显。
+- 设置分类：通用、记忆、模型与提供商、终端、外观、缓存、权限与审批、快捷键、高级；终端设置包含交互式 shell、AI 命令 shell（`aiShell`，`run_command` 使用的 shell，可填完整路径或 PATH 命令名，留空按平台自动：Windows 默认 PowerShell，macOS/Linux 默认系统 shell）、字号、滚回、选中即复制与 WebGL；字体使用默认等宽字体，默认字号 12px，自动检测的 shell 路径需回显。
 - 模型与提供商：对话 Provider 保持协议（OpenAI 兼容 / Anthropic）、Base URL、API Key、自定义 headers（可编辑），以及每个模型的窗口/输出上限字段、回传思考开关/字段名/无签名容错和一个额外请求参数 JSON（JSON 原样透传）；图像模型在独立入口配置完整请求 URL、模型、Key、headers、请求体模板与结果路径；媒体搜索在通用设置中配置 Pexels API Key；联网搜索配置 AnySearch API Key（可选，匿名访问也可用，但有更严格的限速与每日额度）。当前不做本地 token 单价配置，费用仅记录 Provider 返回的 cost。
 - 支持连接测试与模型列表刷新；API Key 随本地 Provider 配置保存；不写死默认模型。
 - 图像模型可选；未配置时不注册 `generate_image`，设置页提供引导。

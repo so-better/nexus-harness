@@ -33,6 +33,8 @@ export interface FileToolset {
 export interface FileToolContext {
   roots: readonly string[];
   primaryRoot: string;
+  /** 执行命令使用的 shell 可执行路径；缺省按平台自动选择 */
+  shell?: string | null;
 }
 
 export class FileToolError extends Error {

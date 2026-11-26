@@ -10,7 +10,7 @@ import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import * as pty from 'node-pty';
 import type { TerminalEvent, TerminalSessionPublic } from '@shared/ipc/contracts';
-import { buildShellInvocation, createShellEnvironment } from '@nexus/runtime-utils';
+import { buildShellInvocation, createShellEnvironment, resolveShellFile } from '@nexus/runtime-utils';
 
 const MAX_OUTPUT_BYTES = 200_000;
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -80,10 +80,12 @@ interface CreateTerminalOptions {
 }
 
 /**
- * 选择用户当前 shell；命令终端按平台使用非交互式 shell。
+ * 选择用户当前 shell；命令终端按平台或指定 shell 使用非交互式调用。
  */
-const shellForCommand = (command: string): { file: string; args: string[] } =>
-  buildShellInvocation(command);
+const shellForCommand = (
+  command: string,
+  configuredShell?: string | null
+): { file: string; args: string[] } => buildShellInvocation(command, configuredShell);
 
 const shellForInteractive = (configuredShell?: string | null): { file: string; args: string[] } => {
   if (configuredShell && existsSync(configuredShell)) {
@@ -195,6 +197,34 @@ export class TerminalService {
       available: existsSync(shell.file),
       source,
       name: basename(shell.file)
+    };
+  }
+
+  /**
+   * 返回 AI 命令将使用的 shell 信息；未配置时按平台默认（Windows 为 powershell.exe）。
+   */
+  getAiShellInfo(configuredShell?: string | null): {
+    path: string;
+    available: boolean;
+    source: 'settings' | 'environment' | 'auto';
+    name: string;
+  } {
+    // 配置值被接受（路径存在或裸命令名）时以配置为准，否则走平台默认
+    const resolved = resolveShellFile(configuredShell);
+    if (configuredShell && resolved === configuredShell) {
+      return {
+        path: configuredShell,
+        available: true,
+        source: 'settings',
+        name: basename(configuredShell)
+      };
+    }
+    return {
+      path: resolved,
+      // Windows 默认 powershell.exe 走 PATH 解析，无法用 existsSync 判定，按可用处理
+      available: process.platform === 'win32' ? true : existsSync(resolved),
+      source: 'auto',
+      name: basename(resolved)
     };
   }
 
@@ -416,7 +446,7 @@ export class TerminalService {
     options: CreateTerminalOptions & { command: string; timeoutMs?: number }
   ): { terminal: TerminalSessionPublic; done: Promise<CommandResult> } {
     const previous = record.pty;
-    const invocation = shellForCommand(options.command);
+    const invocation = shellForCommand(options.command, options.shell);
     const cols = options.cols ?? record.cols;
     const rows = options.rows ?? record.rows;
     const child = pty.spawn(invocation.file, invocation.args, {
@@ -516,7 +546,7 @@ export class TerminalService {
 
   private createRecord(options: CreateTerminalOptions): TerminalRecord {
     const invocation = options.command
-      ? shellForCommand(options.command)
+      ? shellForCommand(options.command, options.shell)
       : shellForInteractive(options.shell);
     const id = randomUUID();
     const title = (options.title ?? basename(options.cwd)) || '终端';

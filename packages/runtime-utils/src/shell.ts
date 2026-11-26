@@ -2,6 +2,9 @@
  * Shell 命令执行辅助：危险命令识别、平台调用与环境变量白名单。
  */
 
+import { existsSync } from 'node:fs';
+import { basename } from 'node:path';
+
 const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   {
     pattern: /\brm\s+-[^\s]*[rf][^\s]*\s+(\/|~\/?|\*|\.\.?)(\s|$)/,
@@ -29,14 +32,46 @@ export const detectDangerousCommand = (command: string): string | undefined =>
   DANGEROUS_PATTERNS.find((item) => item.pattern.test(command))?.reason;
 
 /**
- * 按平台生成 Shell 调用参数。
+ * 按可执行文件名推断非交互式调用参数；无法识别时回退到 POSIX 风格 `-c`。
  */
-export const buildShellInvocation = (command: string): { file: string; args: string[] } => {
-  if (process.platform === 'win32') {
-    return { file: 'powershell.exe', args: ['-NoProfile', '-NonInteractive', '-Command', command] };
+const commandArgsFor = (file: string, command: string): string[] => {
+  const name = basename(file).toLowerCase();
+  if (/^(pwsh|powershell)(\.exe)?$/.test(name)) {
+    return ['-NoProfile', '-NonInteractive', '-Command', command];
   }
-  const file = process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash';
-  return { file, args: ['-c', command] };
+  if (/^cmd(\.exe)?$/.test(name)) {
+    return ['/d', '/s', '/c', command];
+  }
+  return ['-c', command];
+};
+
+/**
+ * 判断是否为裸命令名（不含路径分隔符）；裸命令名交由系统 PATH 解析。
+ */
+export const isBareShellName = (value: string): boolean =>
+  !value.includes('/') && !value.includes('\\');
+
+/**
+ * 解析执行命令使用的 shell 文件：配置值可用时优先，否则按平台默认。
+ * 路径形态需真实存在；裸命令名（如 `pwsh`）不校验存在性，交给系统 PATH。
+ */
+export const resolveShellFile = (configuredShell?: string | null): string => {
+  if (configuredShell) {
+    if (isBareShellName(configuredShell) || existsSync(configuredShell)) return configuredShell;
+  }
+  if (process.platform === 'win32') return 'powershell.exe';
+  return process.platform === 'darwin' ? '/bin/zsh' : '/bin/bash';
+};
+
+/**
+ * 按平台与可选配置生成 Shell 调用参数；配置的 shell 必须是真实存在的文件。
+ */
+export const buildShellInvocation = (
+  command: string,
+  configuredShell?: string | null
+): { file: string; args: string[] } => {
+  const file = resolveShellFile(configuredShell);
+  return { file, args: commandArgsFor(file, command) };
 };
 
 /**

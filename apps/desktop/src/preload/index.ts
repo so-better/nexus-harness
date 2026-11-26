@@ -273,6 +273,7 @@ const bridge: NexusBridge = {
     reorder: (ids) => ipcRenderer.invoke(IPC_CHANNELS.terminalReorder, ids),
     getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.terminalGetSettings),
     getShellInfo: () => ipcRenderer.invoke(IPC_CHANNELS.terminalGetShellInfo),
+    getAiShellInfo: () => ipcRenderer.invoke(IPC_CHANNELS.terminalGetAiShellInfo),
     setSettings: (settings) => ipcRenderer.invoke(IPC_CHANNELS.terminalSetSettings, settings),
     onSettingsChanged: (handler) => {
       const listener = (_event: IpcRendererEvent, settings: TerminalSettings): void =>

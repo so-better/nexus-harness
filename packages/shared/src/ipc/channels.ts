@@ -137,6 +137,7 @@ export const IPC_CHANNELS = {
   terminalReorder: 'terminal:reorder',
   terminalGetSettings: 'terminal:getSettings',
   terminalGetShellInfo: 'terminal:getShellInfo',
+  terminalGetAiShellInfo: 'terminal:getAiShellInfo',
   terminalSetSettings: 'terminal:setSettings',
   terminalSettingsChanged: 'terminal:settingsChanged',
   terminalReadClipboard: 'terminal:readClipboard',

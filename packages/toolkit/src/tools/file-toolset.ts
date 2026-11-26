@@ -39,9 +39,12 @@ export const fileToolDefinitions: FileToolDefinition[] = Object.values(tools).ma
 );
 
 /**
- * 创建绑定到 roots 的文件工具集。
+ * 创建绑定到 roots 的文件工具集；shell 为执行命令使用的可选 shell 路径。
  */
-export const createFileToolset = async (rootPaths: readonly string[]): Promise<FileToolset> => {
+export const createFileToolset = async (
+  rootPaths: readonly string[],
+  options: { shell?: string | null } = {}
+): Promise<FileToolset> => {
   if (rootPaths.length === 0) throw new Error('至少需要一个授权 root');
   const settled = await Promise.allSettled(rootPaths.map((root) => realpath(root)));
   const roots = settled
@@ -51,7 +54,11 @@ export const createFileToolset = async (rootPaths: readonly string[]): Promise<F
   const primaryRoot = roots[0];
   if (!primaryRoot) throw new Error('没有可用的授权 root');
 
-  const context: FileToolContext = { roots, primaryRoot };
+  const context: FileToolContext = {
+    roots,
+    primaryRoot,
+    ...(options.shell ? { shell: options.shell } : {})
+  };
   const definitions = Object.values(tools).map((item) => item.definition);
 
   const execute = async (name: string, input: unknown): Promise<FileToolResult> => {

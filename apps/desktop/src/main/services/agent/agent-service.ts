@@ -70,7 +70,8 @@ import type {
   AgentRunInput,
   AgentRunResult,
   GeneralSettingsState,
-  ProviderModel
+  ProviderModel,
+  TerminalSettings
 } from '@shared/ipc/contracts';
 import { askUserInputSchema, type AskQuestion, type AskUserAnswer } from '@shared/ask-user';
 import { parseExplicitSkill } from '@shared/skills';
@@ -116,6 +117,7 @@ export interface AgentServiceOptions {
   mcp?: McpService;
   imageSettings?: () => Promise<ImageSettings | null>;
   searchSettings?: () => Promise<SearchSettings | null>;
+  terminalSettings?: () => Promise<TerminalSettings | null>;
   generalSettings?: { onChange?: (state: GeneralSettingsState) => void };
   memoryExtraction?: boolean;
 }
@@ -929,6 +931,7 @@ export class AgentService {
   private readonly mcp: McpService | undefined;
   private readonly imageSettings: (() => Promise<ImageSettings | null>) | undefined;
   private readonly searchSettings: (() => Promise<SearchSettings | null>) | undefined;
+  private readonly terminalSettings: (() => Promise<TerminalSettings | null>) | undefined;
   private readonly generalSettings:
     { onChange?: (state: GeneralSettingsState) => void } | undefined;
   private readonly memoryExtraction: boolean;
@@ -945,6 +948,7 @@ export class AgentService {
     this.mcp = options.mcp;
     this.imageSettings = options.imageSettings;
     this.searchSettings = options.searchSettings;
+    this.terminalSettings = options.terminalSettings;
     this.generalSettings = options.generalSettings;
     this.memoryExtraction = options.memoryExtraction === true;
   }
@@ -1126,13 +1130,18 @@ ${assistant.slice(0, 3_000)}`;
       const searchSettings = this.searchSettings ? await this.searchSettings() : null;
       const pexelsApiKey = searchSettings?.pexelsApiKey?.trim() ?? '';
       const anysearchApiKey = searchSettings?.anysearchApiKey?.trim() ?? '';
+      // AI 命令使用的 shell：由终端设置指定，缺省按平台自动选择
+      const terminalSettings = this.terminalSettings ? await this.terminalSettings() : null;
+      const aiShell = terminalSettings?.aiShell ?? null;
       let generatedImageCount = 0;
 
       const mode = input.mode ?? 'build';
       const activatedSkills = new Set<string>();
       const extraParams = buildModelExtraParams(modelConfig);
       let toolset =
-        input.rootPaths.length > 0 ? await createFileToolset(input.rootPaths) : undefined;
+        input.rootPaths.length > 0
+          ? await createFileToolset(input.rootPaths, { shell: aiShell })
+          : undefined;
       const provider = this.createProvider(providerConfig);
       // 并行子代理的写/执行/联网工具通过该互斥器串行化，避免并发副作用
       const mutationLock = createMutex();
@@ -1966,7 +1975,7 @@ ${assistant.slice(0, 3_000)}`;
                 ...(scope ? { parentToolCallId: scope.parentToolCallId } : {})
               });
               if (roots?.length) {
-                toolset = await createFileToolset(roots);
+                toolset = await createFileToolset(roots, { shell: aiShell });
                 checkpointRoot = await toolset.resolvePath('.');
               } else {
                 workspaceDenied = true;
@@ -2019,6 +2028,7 @@ ${assistant.slice(0, 3_000)}`;
               command: parsed.data.command,
               title: parsed.data.command.slice(0, 40),
               openView: false,
+              ...(aiShell ? { shell: aiShell } : {}),
               ...(reusableTerminalId ? { reuseTerminalId: reusableTerminalId } : {}),
               ...(detached ? { detached: true } : {}),
               ...(hooks.terminalOwnerId === undefined ? {} : { ownerId: hooks.terminalOwnerId }),

@@ -3,6 +3,9 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const spawnMock = vi.hoisted(() => vi.fn());
 vi.mock('node-pty', () => ({ spawn: spawnMock }));
@@ -377,5 +380,54 @@ describe('TerminalService', () => {
     expect(service.reorder(1, [b.id, a.id])).toBe(true);
     expect(service.list(1).map((terminal) => terminal.id)).toEqual([b.id, a.id]);
     expect(service.list(2)).toHaveLength(1);
+  });
+
+  it('uses the configured shell for AI commands', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'nexus-terminal-shell-'));
+    const shellPath = join(directory, 'pwsh');
+    await writeFile(shellPath, '', 'utf8');
+    try {
+      const commandPty = makePty();
+      const shellPty = makePty();
+      shellPty.pid = 999_998;
+      spawnMock.mockReturnValueOnce(commandPty).mockReturnValueOnce(shellPty);
+      const service = new TerminalService();
+
+      const task = service.startCommand({
+        sessionId: 'session-1',
+        cwd: '/tmp',
+        command: 'echo hi',
+        openView: false,
+        shell: shellPath
+      });
+
+      expect(spawnMock).toHaveBeenCalledWith(
+        shellPath,
+        ['-NoProfile', '-NonInteractive', '-Command', 'echo hi'],
+        expect.anything()
+      );
+      commandPty.emitExit(0);
+      await task.done;
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('reports configured and automatic AI shell info', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'nexus-terminal-shell-'));
+    const shellPath = join(directory, 'pwsh');
+    await writeFile(shellPath, '', 'utf8');
+    try {
+      const service = new TerminalService();
+
+      expect(service.getAiShellInfo(shellPath)).toMatchObject({
+        path: shellPath,
+        source: 'settings',
+        available: true
+      });
+      expect(service.getAiShellInfo(null)).toMatchObject({ source: 'auto', available: true });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

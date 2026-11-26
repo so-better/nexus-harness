@@ -4,7 +4,7 @@
 import { realpath, stat } from 'node:fs/promises';
 import { sep } from 'node:path';
 import { z } from 'zod';
-import { detectDangerousCommand } from '@nexus/runtime-utils';
+import { detectDangerousCommand, isBareShellName } from '@nexus/runtime-utils';
 import type { AgentToolDefinition, ToolExecutionResult } from '@nexus/core';
 import {
   terminalSettingsSchema,
@@ -339,6 +339,9 @@ export const executeTerminalTool = async (
     const current = await loadTerminalSettings(options.settingsDir);
     const next: TerminalSettings = {
       shell: parsed.data.shell !== undefined ? parsed.data.shell : current.shell,
+      // 空串归一化为 null，避免配置里出现无意义的空值
+      aiShell:
+        parsed.data.aiShell === undefined ? current.aiShell : parsed.data.aiShell || null,
       fontSize: parsed.data.fontSize ?? current.fontSize,
       scrollback: parsed.data.scrollback ?? current.scrollback,
       copyOnSelect: parsed.data.copyOnSelect ?? current.copyOnSelect,
@@ -351,6 +354,16 @@ export const executeTerminalTool = async (
         }
       } catch {
         return failure('TERMINAL_SETTINGS_INVALID', 'Shell 路径不存在');
+      }
+    }
+    // AI shell 的路径形态需真实存在；裸命令名交由系统 PATH 解析
+    if (next.aiShell && !isBareShellName(next.aiShell)) {
+      try {
+        if (!(await stat(next.aiShell)).isFile()) {
+          return failure('TERMINAL_SETTINGS_INVALID', 'AI Shell 路径不存在');
+        }
+      } catch {
+        return failure('TERMINAL_SETTINGS_INVALID', 'AI Shell 路径不存在');
       }
     }
     try {

@@ -35,6 +35,43 @@
 
     <section class="nh-terminal-settings__section">
       <header class="nh-terminal-settings__section-header">
+        <h3>{{ t('settings.terminalAiShell') }}</h3>
+        <p>{{ t('settings.terminalAiShellHint') }}</p>
+      </header>
+      <NForm
+        class="nh-terminal-settings__form"
+        label-placement="left"
+        label-width="80"
+        :show-feedback="false"
+      >
+        <NFormItem :label="t('settings.terminalAiShellLabel')">
+          <div class="nh-terminal-settings__shell">
+            <NInput
+              :value="aiShellPath"
+              clearable
+              :placeholder="t('settings.pleaseInput')"
+              @update:value="updateAiShellPath"
+              @blur="saveAiShell"
+              @keydown.enter.prevent="saveAiShell"
+            />
+            <NButton secondary @click="chooseAiShell">
+              <template #icon><AppIcon name="folder" :size="14" /></template>
+              {{ t('settings.terminalChooseShell') }}
+            </NButton>
+            <NButton secondary :disabled="aiUsingAuto" @click="useAutoAiShell">
+              {{ t('settings.terminalUseAuto') }}
+            </NButton>
+          </div>
+        </NFormItem>
+      </NForm>
+      <p v-if="isWindows" class="nh-terminal-settings__tip">
+        <AppIcon name="info" :size="13" />
+        <span>{{ t('settings.terminalAiShellTip') }}</span>
+      </p>
+    </section>
+
+    <section class="nh-terminal-settings__section">
+      <header class="nh-terminal-settings__section-header">
         <h3>{{ t('settings.terminalDisplay') }}</h3>
         <p>{{ t('settings.terminalDisplayHint') }}</p>
       </header>
@@ -91,63 +128,69 @@
 
 import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useMessage, NButton, NForm, NFormItem, NInput, NInputNumber, NSwitch } from 'naive-ui';
-import type { TerminalSettings, TerminalShellInfo } from '@shared/ipc/contracts';
+import type { TerminalSettings } from '@shared/ipc/contracts';
 import { DEFAULT_TERMINAL_SETTINGS } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import {
+  getAppInfo,
+  getTerminalAiShellInfo,
   getTerminalSettings,
   getTerminalShellInfo,
   selectTerminalShell,
   setTerminalSettings
 } from '../api/settings.api';
+import { useShellField } from '../composables/use-shell-field';
 import AppIcon from '@/components/AppIcon.vue';
 
 const message = useMessage();
-const usingAuto = ref(true);
-const shellPath = ref('');
-const shellInfo = ref<TerminalShellInfo>();
-let shellDirty = false;
-let shellRevision = 0;
+const isWindows = ref(false);
 const draft = reactive<TerminalSettings>({ ...DEFAULT_TERMINAL_SETTINGS });
+
+const requestSave = (): void => {
+  persist().catch(() => undefined);
+};
+const onChooseError = (): void => {
+  message.error(t('settings.terminalChooseShellFailed'));
+};
+
+// 交互式 shell 与 AI 命令 shell 共用同一套状态机
+const shellField = useShellField({ choosePath: selectTerminalShell, requestSave, onChooseError });
+const aiShellField = useShellField({ choosePath: selectTerminalShell, requestSave, onChooseError });
+
+const {
+  path: shellPath,
+  usingAuto,
+  updatePath: updateShellPath,
+  useAuto: useAutoShell,
+  choose: chooseShell
+} = shellField;
+const {
+  path: aiShellPath,
+  usingAuto: aiUsingAuto,
+  updatePath: updateAiShellPath,
+  useAuto: useAutoAiShell,
+  choose: chooseAiShell
+} = aiShellField;
 
 const load = async (): Promise<void> => {
   try {
-    const [settings, info] = await Promise.all([getTerminalSettings(), getTerminalShellInfo()]);
+    const [settings, info, aiInfo] = await Promise.all([
+      getTerminalSettings(),
+      getTerminalShellInfo(),
+      getTerminalAiShellInfo()
+    ]);
     Object.assign(draft, settings);
-    shellInfo.value = info;
-    usingAuto.value = !settings.shell;
-    shellPath.value = settings.shell ?? info.path;
+    shellField.load(settings.shell, info);
+    aiShellField.load(settings.aiShell, aiInfo);
   } catch {
     message.error(t('settings.terminalLoadFailed'));
   }
-};
-
-const updateShellPath = (value: string): void => {
-  shellPath.value = value;
-  usingAuto.value = false;
-  shellDirty = true;
-  shellRevision += 1;
-};
-
-const useAutoShell = (): void => {
-  usingAuto.value = true;
-  shellPath.value = shellInfo.value?.path ?? '';
-  shellDirty = true;
-  shellRevision += 1;
-  persist().catch(() => undefined);
-};
-
-const chooseShell = async (): Promise<void> => {
+  // 平台仅用于提示显隐，失败不影响设置加载
   try {
-    const path = await selectTerminalShell();
-    if (!path) return;
-    usingAuto.value = false;
-    shellPath.value = path;
-    shellDirty = true;
-    shellRevision += 1;
-    await persist();
+    const appInfo = await getAppInfo();
+    isWindows.value = appInfo.platform === 'win32';
   } catch {
-    message.error(t('settings.terminalChooseShellFailed'));
+    isWindows.value = false;
   }
 };
 
@@ -155,26 +198,26 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let saveSequence = 0;
 let saveQueue: Promise<void> = Promise.resolve();
 
-const currentShell = (): string | null =>
-  usingAuto.value || !shellPath.value.trim() ? null : shellPath.value.trim();
-
-const persist = async (): Promise<void> => {
+async function persist(): Promise<void> {
   if (saveTimer !== undefined) {
     clearTimeout(saveTimer);
     saveTimer = undefined;
   }
   const requestId = ++saveSequence;
-  const shellRevisionAtRequest = shellRevision;
-  const snapshot: TerminalSettings = { ...draft, shell: currentShell() };
+  const shellRevisionAtRequest = shellField.revision();
+  const aiShellRevisionAtRequest = aiShellField.revision();
+  const snapshot: TerminalSettings = {
+    ...draft,
+    shell: shellField.current(),
+    aiShell: aiShellField.current()
+  };
   saveQueue = saveQueue.then(async () => {
     try {
       const saved = await setTerminalSettings(snapshot);
       if (requestId !== saveSequence) return;
-      usingAuto.value = !saved.shell;
-      const info = await getTerminalShellInfo();
-      shellInfo.value = info;
-      shellPath.value = saved.shell ?? info.path;
-      if (shellRevisionAtRequest === shellRevision) shellDirty = false;
+      const [info, aiInfo] = await Promise.all([getTerminalShellInfo(), getTerminalAiShellInfo()]);
+      shellField.applySaved(saved.shell, info, shellRevisionAtRequest);
+      aiShellField.applySaved(saved.aiShell, aiInfo, aiShellRevisionAtRequest);
     } catch (error) {
       if (requestId === saveSequence) {
         message.error(error instanceof Error ? error.message : t('settings.terminalSaveFailed'));
@@ -182,7 +225,7 @@ const persist = async (): Promise<void> => {
     }
   });
   await saveQueue;
-};
+}
 
 const updateNumber = (key: 'fontSize' | 'scrollback', value: number | null): void => {
   draft[key] =
@@ -211,8 +254,12 @@ const saveShell = (): void => {
   persist().catch(() => undefined);
 };
 
+const saveAiShell = (): void => {
+  persist().catch(() => undefined);
+};
+
 onBeforeUnmount(() => {
-  if (saveTimer !== undefined || shellDirty) {
+  if (saveTimer !== undefined || shellField.isDirty() || aiShellField.isDirty()) {
     if (saveTimer !== undefined) clearTimeout(saveTimer);
     saveTimer = undefined;
     persist().catch(() => undefined);
@@ -264,6 +311,21 @@ onMounted(load);
 .nh-terminal-settings__shell :deep(.n-input) {
   min-width: 0;
   flex: 1;
+}
+
+.nh-terminal-settings__tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 10px 0 0;
+  color: var(--nh-color-text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.nh-terminal-settings__tip :deep(.nh-icon) {
+  flex: none;
+  margin-top: 1px;
 }
 
 .nh-terminal-settings__form :deep(.n-form-item) {

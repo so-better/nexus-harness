@@ -442,6 +442,12 @@ const zhCN = {
   'settings.terminalShellAuto': '留空自动检测',
   'settings.terminalChooseShell': '选择',
   'settings.terminalChooseShellFailed': '选择 Shell 失败',
+  'settings.terminalAiShell': 'AI 命令 Shell',
+  'settings.terminalAiShellHint':
+    'AI 执行 run_command 时使用的 shell；可填完整路径或 PATH 中的命令名，留空按平台自动（Windows 默认 PowerShell，macOS/Linux 默认系统 shell）。',
+  'settings.terminalAiShellLabel': 'Shell 路径',
+  'settings.terminalAiShellTip':
+    'Windows 若自带 PowerShell 出现兼容问题，可安装 PowerShell 7 后把路径指向 pwsh.exe。',
   'settings.terminalFont': '字体',
   'settings.terminalFontSize': '字号',
   'settings.terminalScrollback': '滚回行数',
@@ -1115,6 +1121,12 @@ const enUS: Record<MessageKey, string> = {
   'settings.terminalShellAuto': 'Leave empty to auto-detect',
   'settings.terminalChooseShell': 'Choose',
   'settings.terminalChooseShellFailed': 'Failed to choose shell',
+  'settings.terminalAiShell': 'AI command shell',
+  'settings.terminalAiShellHint':
+    'Shell used when AI runs run_command; a full path or a command name on PATH. Leave empty to auto-select (PowerShell on Windows, system shell on macOS/Linux).',
+  'settings.terminalAiShellLabel': 'Shell path',
+  'settings.terminalAiShellTip':
+    'On Windows, if the built-in PowerShell causes compatibility issues, install PowerShell 7 and point this to pwsh.exe.',
   'settings.terminalFont': 'Font family',
   'settings.terminalFontSize': 'Font size',
   'settings.terminalScrollback': 'Scrollback lines',
