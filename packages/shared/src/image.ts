@@ -4,6 +4,9 @@
 
 import { z } from 'zod';
 
+/**
+ * 结果解析规则：从响应中提取图片地址或编码内容。
+ */
 export const imageResultSchema = z.object({
   format: z.enum(['auto', 'json', 'sse']).optional(),
   path: z.string().optional(),
@@ -12,6 +15,9 @@ export const imageResultSchema = z.object({
   encoding: z.enum(['auto', 'url', 'base64', 'binary']).optional()
 });
 
+/**
+ * 异步任务的轮询规则：任务地址、状态字段与结果字段。
+ */
 export const imagePollSchema = z.object({
   path: z.string().min(1),
   method: z.string().optional(),
@@ -27,6 +33,9 @@ export const imagePollSchema = z.object({
   timeout_ms: z.number().int().positive().optional()
 });
 
+/**
+ * 请求模板：完整 URL、可选请求头/请求体，以及结果与轮询规则。
+ */
 export const imageTemplateSchema = z.object({
   url: z.string().url(),
   method: z.string().optional(),
@@ -36,6 +45,9 @@ export const imageTemplateSchema = z.object({
   poll: imagePollSchema.optional()
 });
 
+/**
+ * 单个图像模型的配置。
+ */
 export const imageConfigSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -45,12 +57,16 @@ export const imageConfigSchema = z.object({
   template: imageTemplateSchema
 });
 
+/**
+ * 图像模型设置：所有已配置模型的集合。
+ */
 export const imageSettingsSchema = z.object({
   configs: z.array(imageConfigSchema)
 });
 
-export type ImageResultConfig = z.infer<typeof imageResultSchema>;
-export type ImagePollConfig = z.infer<typeof imagePollSchema>;
+/** 请求模板类型。 */
 export type ImageTemplate = z.infer<typeof imageTemplateSchema>;
+/** 单个图像模型配置类型。 */
 export type ImageConfig = z.infer<typeof imageConfigSchema>;
+/** 图像模型设置类型。 */
 export type ImageSettings = z.infer<typeof imageSettingsSchema>;

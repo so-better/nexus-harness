@@ -36,7 +36,6 @@ export const usageStatsInputSchema = z
 
 import type {
   PluginUsageBreakdown,
-  PluginUsageBucket,
   PluginUsageQuery,
   PluginUsageSeriesPoint,
   PluginUsageSession,
@@ -44,23 +43,15 @@ import type {
   PluginUsageTotals
 } from './plugin-api';
 
-export type UsageBucket = PluginUsageBucket;
+/** 用量统计查询输入。 */
 export type UsageStatsInput = PluginUsageQuery;
+/** 用量汇总。 */
 export type UsageTotals = PluginUsageTotals;
+/** 时间序列数据点。 */
 export type UsageSeriesPoint = PluginUsageSeriesPoint;
+/** 按维度拆分的用量。 */
 export type UsageBreakdown = PluginUsageBreakdown;
+/** 单会话用量。 */
 export type UsageSessionStat = PluginUsageSession;
+/** 用量统计结果。 */
 export type UsageStats = PluginUsageStats;
-
-/**
- * 空汇总，供服务初始化与测试复用。
- */
-export const emptyUsageTotals = (): UsageTotals => ({
-  inputTokens: 0,
-  outputTokens: 0,
-  totalTokens: 0,
-  cacheReadTokens: 0,
-  cacheWriteTokens: 0,
-  cost: 0,
-  calls: 0
-});

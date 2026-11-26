@@ -5,7 +5,6 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { safeStorage } from 'electron';
 import type {
   AgentProviderConfig,
   ProviderModel,
@@ -13,7 +12,6 @@ import type {
   ProviderPublic,
   ProviderSettings
 } from '@shared/ipc/contracts';
-import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_OUTPUT_TOKENS } from '@nexus/core';
 import {
   findReservedProviderParams,
   findSensitiveProviderParams,
@@ -29,15 +27,8 @@ interface StoredProvider {
   enabled: boolean;
   models?: ProviderModel[];
   defaultModelId?: string;
-  model?: string;
-  contextWindow?: number;
-  maxOutputTokens?: number;
   apiKey?: string;
   headers?: Record<string, string>;
-  extraParams?: Record<string, unknown>;
-  encryptedApiKey?: string;
-  encryptedHeaders?: string;
-  encryptedExtraParams?: string;
 }
 
 interface ProviderFile {
@@ -47,102 +38,9 @@ interface ProviderFile {
 
 const emptyFile = (): ProviderFile => ({ version: 1, providers: [] });
 
-const defaultMaxOutput = (contextWindow: number): number =>
-  Math.min(DEFAULT_MAX_OUTPUT_TOKENS, Math.max(256, Math.floor(contextWindow / 4)));
-
 /**
- * 把旧版单模型配置迁移为模型数组。
+ * 过滤保留/敏感字段；用于读取手工编辑过的模型额外参数。
  */
-const normalizeModels = (
-  provider: StoredProvider
-): {
-  models: ProviderModel[];
-  defaultModelId: string;
-} => {
-  const models = Array.isArray(provider.models)
-    ? provider.models.filter(
-        (model) =>
-          model &&
-          typeof model.id === 'string' &&
-          Number.isFinite(model.contextWindow) &&
-          Number.isFinite(model.maxOutputTokens) &&
-          model.contextWindow > 0 &&
-          model.maxOutputTokens > 0 &&
-          model.maxOutputTokens < model.contextWindow
-      )
-    : [];
-
-  if (models.length > 0) {
-    const cleanModels = models.map((model) => ({
-      id: model.id,
-      contextWindow: model.contextWindow,
-      maxOutputTokens: model.maxOutputTokens,
-      ...(model.extraParams ? { extraParams: publicExtraParams(model.extraParams) } : {}),
-      ...(model.role ? { role: model.role } : {}),
-      ...(model.endpoint ? { endpoint: model.endpoint } : {}),
-      ...(model.reasoningPassback === undefined
-        ? {}
-        : { reasoningPassback: model.reasoningPassback }),
-      ...(model.reasoningField ? { reasoningField: model.reasoningField } : {})
-    }));
-    const defaultModelId = models.some((model) => model.id === provider.defaultModelId)
-      ? (provider.defaultModelId as string)
-      : models[0]!.id;
-    return { models: cleanModels, defaultModelId };
-  }
-
-  if (provider.model) {
-    const contextWindow = provider.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
-    const maxOutputTokens = provider.maxOutputTokens ?? defaultMaxOutput(contextWindow);
-    return {
-      models: [{ id: provider.model, contextWindow, maxOutputTokens }],
-      defaultModelId: provider.model
-    };
-  }
-
-  return { models: [], defaultModelId: '' };
-};
-
-/**
- * 读取旧版 safeStorage 加密值；仅用于把历史配置迁移为本地明文。
- */
-const decryptLegacy = (value: string): string => {
-  if (!safeStorage.isEncryptionAvailable()) throw new Error('无法读取旧版加密配置');
-  return safeStorage.decryptString(Buffer.from(value, 'base64'));
-};
-
-/**
- * 读取旧版 JSON 加密字段；仅用于历史配置迁移。
- */
-const decryptLegacyJson = <T>(value: string): T => JSON.parse(decryptLegacy(value)) as T;
-
-/**
- * 把旧版加密字段就地迁移为明文；返回是否发生变更。
- */
-const migrateLegacySecrets = (provider: StoredProvider): boolean => {
-  let changed = false;
-
-  if (!provider.apiKey && provider.encryptedApiKey) {
-    provider.apiKey = decryptLegacy(provider.encryptedApiKey);
-    delete provider.encryptedApiKey;
-    changed = true;
-  }
-  if (!provider.headers && provider.encryptedHeaders) {
-    provider.headers = decryptLegacyJson<Record<string, string>>(provider.encryptedHeaders);
-    delete provider.encryptedHeaders;
-    changed = true;
-  }
-  if (!provider.extraParams && provider.encryptedExtraParams) {
-    provider.extraParams = decryptLegacyJson<Record<string, unknown>>(
-      provider.encryptedExtraParams
-    );
-    delete provider.encryptedExtraParams;
-    changed = true;
-  }
-
-  return changed;
-};
-
 function publicExtraParams(params: Record<string, unknown>): Record<string, unknown> | undefined {
   const entries = Object.entries(params).filter(
     ([key]) =>
@@ -153,55 +51,52 @@ function publicExtraParams(params: Record<string, unknown>): Record<string, unkn
 }
 
 /**
- * 旧版模型级思考字段已废弃，读取时从配置中剔除，避免文件残留死配置。
+ * 归一化模型列表：过滤无效模型，并清理额外参数中的保留/敏感字段。
  */
-const LEGACY_MODEL_FIELDS = ['thinkingMode', 'reasoningEffort'] as const;
-
-const stripLegacyModelFields = (provider: StoredProvider): boolean => {
-  let changed = false;
-  for (const model of provider.models ?? []) {
-    const record = model as unknown as Record<string, unknown>;
-    for (const key of LEGACY_MODEL_FIELDS) {
-      if (key in record) {
-        delete record[key];
-        changed = true;
-      }
-    }
-  }
-  return changed;
-};
-
-/**
- * 把旧 Provider 级 extraParams 迁移到每个模型。
- */
-const migrateLegacyProviderParams = (provider: StoredProvider): boolean => {
-  let changed = false;
-  if (provider.extraParams) {
-    for (const model of provider.models ?? []) {
-      if (model.extraParams === undefined) model.extraParams = { ...provider.extraParams };
-    }
-    delete provider.extraParams;
-    changed = true;
-  }
-  return changed;
-};
+const normalizeModels = (provider: StoredProvider): ProviderModel[] =>
+  (Array.isArray(provider.models) ? provider.models : [])
+    .filter(
+      (model) =>
+        model &&
+        typeof model.id === 'string' &&
+        Number.isFinite(model.contextWindow) &&
+        Number.isFinite(model.maxOutputTokens) &&
+        model.contextWindow > 0 &&
+        model.maxOutputTokens > 0 &&
+        model.maxOutputTokens < model.contextWindow
+    )
+    .map((model) => ({
+      id: model.id,
+      contextWindow: model.contextWindow,
+      maxOutputTokens: model.maxOutputTokens,
+      ...(model.extraParams ? { extraParams: publicExtraParams(model.extraParams) } : {}),
+      ...(model.role ? { role: model.role } : {}),
+      ...(model.reasoningPassback === undefined
+        ? {}
+        : { reasoningPassback: model.reasoningPassback }),
+      ...(model.reasoningField ? { reasoningField: model.reasoningField } : {}),
+      ...(model.reasoningAllowUnsigned === undefined
+        ? {}
+        : { reasoningAllowUnsigned: model.reasoningAllowUnsigned })
+    }));
 
 const toPublic = (provider: StoredProvider): ProviderPublic => {
-  const normalized = normalizeModels(provider);
-  const legacyExtra = provider.extraParams ? publicExtraParams(provider.extraParams) : undefined;
-  const models = normalized.models.map((model) => ({
-    ...model,
-    ...(model.extraParams || !legacyExtra ? {} : { extraParams: legacyExtra })
-  }));
+  const models = normalizeModels(provider);
+  const defaultModelId = models.some((model) => model.id === provider.defaultModelId)
+    ? (provider.defaultModelId as string)
+    : (models[0]?.id ?? '');
   return {
     id: provider.id,
     protocol: provider.protocol ?? 'openai',
     name: provider.name,
     baseUrl: provider.baseUrl,
     apiKey: provider.apiKey ?? '',
+    ...(provider.headers && Object.keys(provider.headers).length
+      ? { headers: provider.headers }
+      : {}),
     enabled: provider.enabled,
     models,
-    defaultModelId: normalized.defaultModelId
+    defaultModelId
   };
 };
 
@@ -228,7 +123,7 @@ export class ProviderStore {
       const providers = 'providers' in parsed ? parsed.providers : undefined;
       if (!Array.isArray(providers)) return emptyFile();
 
-      const file: ProviderFile = {
+      return {
         version: 1,
         providers: providers.filter((item): item is StoredProvider => {
           if (!item || typeof item !== 'object') return false;
@@ -238,30 +133,10 @@ export class ProviderStore {
             typeof record['name'] === 'string' &&
             typeof record['baseUrl'] === 'string' &&
             typeof record['enabled'] === 'boolean' &&
-            (typeof record['apiKey'] === 'string' || typeof record['encryptedApiKey'] === 'string')
+            typeof record['apiKey'] === 'string'
           );
         })
       };
-
-      let changed = false;
-      for (const provider of file.providers) {
-        try {
-          changed = migrateLegacySecrets(provider) || changed;
-          changed = migrateLegacyProviderParams(provider) || changed;
-          changed = stripLegacyModelFields(provider) || changed;
-        } catch {
-          // 单个旧配置无法迁移时保留原数据，不阻断其他 Provider
-        }
-      }
-      if (changed) {
-        try {
-          await this.writeFile(file);
-        } catch {
-          // 迁移写回失败时仍返回内存中的明文配置，下次启动再试
-        }
-      }
-
-      return file;
     } catch {
       return emptyFile();
     }
@@ -297,7 +172,7 @@ export class ProviderStore {
 
     const protocol = input.protocol ?? existing?.protocol ?? 'openai';
     const apiKey = input.apiKey || existing?.apiKey || '';
-    if (!apiKey && protocol !== 'ollama') throw new Error('保存 Provider 需要 API Key');
+    if (!apiKey) throw new Error('保存 Provider 需要 API Key');
 
     const headers = input.headers !== undefined ? input.headers : existing?.headers;
     for (const model of input.models) {
@@ -323,7 +198,7 @@ export class ProviderStore {
       models: input.models,
       defaultModelId,
       apiKey,
-      ...(headers === undefined ? {} : { headers })
+      ...(headers && Object.keys(headers).length ? { headers } : {})
     };
 
     if (existing) {
@@ -344,12 +219,7 @@ export class ProviderStore {
     const provider = file.providers.find((item) => item.id === id);
     if (!provider) return undefined;
 
-    const publicConfig = toPublic(provider);
-
-    return {
-      ...publicConfig,
-      ...(provider.headers ? { headers: provider.headers } : {})
-    };
+    return toPublic(provider);
   }
 
   /**

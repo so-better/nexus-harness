@@ -71,6 +71,28 @@
                 @update:value="(value: string) => (providerForm.apiKey = value)"
               />
             </NFormItem>
+
+            <NFormItem
+              class="nh-provider-settings__item"
+              :label="t('settings.headers')"
+              path="headers"
+            >
+              <div class="nh-provider-settings__headers">
+                <NInput
+                  :value="providerForm.headers"
+                  type="textarea"
+                  size="small"
+                  :autosize="{ minRows: 2, maxRows: 8 }"
+                  :placeholder="t('settings.headersPlaceholder')"
+                  v-bind="headersError ? { status: 'error' } : {}"
+                  @update:value="(value: string) => (providerForm.headers = value)"
+                />
+                <small class="nh-provider-settings__hint">{{ t('settings.headersHint') }}</small>
+                <small v-if="headersError" class="nh-provider-settings__error">
+                  {{ headersError }}
+                </small>
+              </div>
+            </NFormItem>
           </div>
         </div>
 
@@ -95,7 +117,7 @@
 
       <ProviderSettingsActions
         :saving="saving"
-        :disabled="!modelsExtraValid"
+        :disabled="!modelsExtraValid || Boolean(headersError)"
         @back="backToList"
         @save="handleSave"
       />
@@ -120,6 +142,7 @@ import ProviderSettingsActions from '../components/ProviderSettingsActions.vue';
 import { useProviderSettings } from '../composables/use-provider-settings';
 import { useProviderFormControls } from '../composables/use-provider-form-controls';
 import { createProviderRules } from '../validation/provider-validation';
+import { parseHeaders } from '../validation/provider-headers';
 
 const emit = defineEmits<{ changed: [] }>();
 
@@ -146,9 +169,21 @@ const {
 const rules = createProviderRules(selectedId, providerForm);
 const protocolOptions = computed(() => [
   { label: 'OpenAI', value: 'openai' },
-  { label: 'Anthropic', value: 'anthropic' },
-  { label: 'Ollama', value: 'ollama' }
+  { label: 'Anthropic', value: 'anthropic' }
 ]);
+
+/**
+ * 自定义 Headers 校验：为空或合法字符串键值对象时通过。
+ */
+const headersError = computed(() => {
+  try {
+    parseHeaders(providerForm.value.headers, '');
+    return '';
+  } catch {
+    return t('settings.headersInvalid');
+  }
+});
+
 const formRef = ref<FormInst | null>(null);
 const nameInputRef = ref<InputInst | null>(null);
 
@@ -256,5 +291,22 @@ const editProvider = (id: string): void => {
   color: var(--nh-color-text-secondary);
   font-size: 11px;
   line-height: 1.5;
+}
+
+.nh-provider-settings__headers {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nh-provider-settings__hint {
+  color: var(--nh-color-text-disabled);
+  font-size: 11px;
+}
+
+.nh-provider-settings__error {
+  color: var(--nh-color-danger);
+  font-size: 11px;
 }
 </style>

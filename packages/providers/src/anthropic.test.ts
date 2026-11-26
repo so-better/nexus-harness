@@ -4,7 +4,6 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { AnthropicProvider, toAnthropicMessages } from './anthropic';
-import { normalizeOllamaBaseUrl } from './ollama';
 import type { ProviderStreamEvent } from './types';
 
 const sse = (payload: unknown): string => `data: ${JSON.stringify(payload)}\n\n`;
@@ -60,21 +59,29 @@ describe('AnthropicProvider', () => {
       content: [{ type: 'tool_use', id: 'call-1', name: 'read_file' }]
     });
 
-    // 无签名的块会被跳过（避免官方 Anthropic 400）
-    const unsigned = toAnthropicMessages(
-      [
-        {
-          role: 'assistant' as const,
-          content: '',
-          reasoning: '无签名思考',
-          toolCalls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'a.txt' } }]
-        }
-      ],
-      true
-    );
+    // 无签名默认跳过（避免官方 Anthropic 400）
+    const unsignedMessages = [
+      {
+        role: 'assistant' as const,
+        content: '',
+        reasoning: '无签名思考',
+        toolCalls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'a.txt' } }]
+      }
+    ];
+    const unsigned = toAnthropicMessages(unsignedMessages, true);
     expect(unsigned.messages[0]).toMatchObject({
       role: 'assistant',
       content: [{ type: 'tool_use', id: 'call-1', name: 'read_file' }]
+    });
+
+    // 开启容错后，带无签名 thinking block 回传
+    const forcedUnsigned = toAnthropicMessages(unsignedMessages, true, true);
+    expect(forcedUnsigned.messages[0]).toMatchObject({
+      role: 'assistant',
+      content: [
+        { type: 'thinking', thinking: '无签名思考' },
+        { type: 'tool_use', id: 'call-1', name: 'read_file' }
+      ]
     });
   });
 
@@ -157,11 +164,6 @@ describe('AnthropicProvider', () => {
         }
       ]
     });
-  });
-
-  it('normalizes Ollama base urls', () => {
-    expect(normalizeOllamaBaseUrl('http://127.0.0.1:11434')).toBe('http://127.0.0.1:11434/v1');
-    expect(normalizeOllamaBaseUrl('http://127.0.0.1:11434/v1/')).toBe('http://127.0.0.1:11434/v1');
   });
 
   it('adds prompt cache control and counts cache tokens in usage', async () => {

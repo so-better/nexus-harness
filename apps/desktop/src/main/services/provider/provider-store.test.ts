@@ -1,22 +1,11 @@
 /**
- * Provider 配置存储测试：本地明文落盘、多模型、兼容迁移与删除。
+ * Provider 配置存储测试：本地明文落盘、多模型与删除。
  */
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const encryption = vi.hoisted(() => ({ available: true }));
-
-vi.mock('electron', () => ({
-  safeStorage: {
-    isEncryptionAvailable: () => encryption.available,
-    encryptString: (value: string) => Buffer.from(`enc:${value}`, 'utf8'),
-    decryptString: (value: Buffer) => value.toString('utf8').replace(/^enc:/, '')
-  }
-}));
-
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ProviderStore } from './provider-store';
 
 const model = (id: string, contextWindow = 128_000, maxOutputTokens = 4_096) => ({
@@ -32,7 +21,6 @@ describe('ProviderStore', () => {
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'nexus-provider-'));
     store = new ProviderStore(directory);
-    encryption.available = true;
   });
 
   afterEach(async () => {
@@ -61,18 +49,16 @@ describe('ProviderStore', () => {
     expect(full?.models).toEqual([model('gpt-test')]);
   });
 
-  it('persists protocol and allows keyless Ollama configs', async () => {
+  it('persists protocol', async () => {
     const saved = await save({
-      protocol: 'ollama',
-      name: 'Ollama',
-      baseUrl: 'http://127.0.0.1:11434/v1',
-      apiKey: ''
+      protocol: 'anthropic',
+      name: 'Anthropic',
+      baseUrl: 'https://api.anthropic.com'
     });
 
-    expect(saved.protocol).toBe('ollama');
-    expect(saved.apiKey).toBe('');
+    expect(saved.protocol).toBe('anthropic');
     const full = await store.get(saved.id);
-    expect(full).toMatchObject({ protocol: 'ollama', apiKey: '' });
+    expect(full?.protocol).toBe('anthropic');
   });
 
   it('persists model-level extra params', async () => {
@@ -83,40 +69,6 @@ describe('ProviderStore', () => {
     expect(saved.models[0]?.extraParams).toEqual({ custom: 1 });
     const full = await store.get(saved.id);
     expect(full?.models[0]?.extraParams).toEqual({ custom: 1 });
-  });
-
-  it('migrates legacy provider extra params into models', async () => {
-    await mkdir(directory, { recursive: true });
-    await writeFile(
-      join(directory, 'providers.json'),
-      JSON.stringify({
-        version: 1,
-        providers: [
-          {
-            id: 'legacy-extra',
-            name: 'Legacy',
-            baseUrl: 'https://example.com/v1',
-            enabled: true,
-            apiKey: 'secret',
-            extraParams: { thinking: { type: 'enabled' } },
-            models: [model('legacy-model')],
-            defaultModelId: 'legacy-model'
-          }
-        ]
-      })
-    );
-
-    const providers = await store.list();
-    expect(providers[0]?.models[0]?.extraParams).toEqual({
-      thinking: { type: 'enabled' }
-    });
-    const raw = JSON.parse(await readFile(join(directory, 'providers.json'), 'utf8')) as {
-      providers: Array<Record<string, unknown>>;
-    };
-    expect(raw.providers[0]).not.toHaveProperty('extraParams');
-    expect(raw.providers[0]?.['models']).toEqual([
-      expect.objectContaining({ extraParams: { thinking: { type: 'enabled' } } })
-    ]);
   });
 
   it('allows thinking params in model extra params', async () => {
@@ -156,59 +108,31 @@ describe('ProviderStore', () => {
     ).rejects.toThrow('敏感字段');
   });
 
-  it('drops legacy thinking fields but keeps reasoning passback config', async () => {
-    await mkdir(directory, { recursive: true });
-    await writeFile(
-      join(directory, 'providers.json'),
-      JSON.stringify({
-        version: 1,
-        providers: [
-          {
-            id: 'legacy-thinking',
-            name: 'Legacy',
-            baseUrl: 'https://example.com/v1',
-            enabled: true,
-            apiKey: 'secret',
-            models: [
-              {
-                ...model('deepseek-flash'),
-                thinkingMode: 'disabled',
-                reasoningEffort: 'high',
-                reasoningPassback: true,
-                reasoningField: 'reasoning'
-              }
-            ],
-            defaultModelId: 'deepseek-flash'
-          }
-        ]
-      })
-    );
-
-    const providers = await store.list();
-    expect(providers[0]?.models[0]).toMatchObject({
-      reasoningPassback: true,
-      reasoningField: 'reasoning'
-    });
-
-    const raw = JSON.parse(await readFile(join(directory, 'providers.json'), 'utf8')) as {
-      providers: Array<{ models: Array<Record<string, unknown>> }>;
-    };
-    const stored = raw.providers[0]?.models[0] ?? {};
-    expect(stored).not.toHaveProperty('thinkingMode');
-    expect(stored).not.toHaveProperty('reasoningEffort');
-    expect(stored['reasoningPassback']).toBe(true);
-    expect(stored['reasoningField']).toBe('reasoning');
-  });
-
-  it('stores custom headers locally and keeps them out of public configs', async () => {
+  it('stores custom headers locally and returns them for editing', async () => {
     const saved = await save({ headers: { Authorization: 'Bearer header-secret' } });
 
-    expect(saved).not.toHaveProperty('headers');
+    expect(saved.headers).toEqual({ Authorization: 'Bearer header-secret' });
     const raw = await readFile(join(directory, 'providers.json'), 'utf8');
     expect(raw).toContain('header-secret');
 
     const full = await store.get(saved.id);
     expect(full?.headers).toEqual({ Authorization: 'Bearer header-secret' });
+  });
+
+  it('clears headers when saved empty', async () => {
+    const saved = await save({ headers: { Authorization: 'Bearer x' } });
+    const cleared = await store.save({
+      id: saved.id,
+      name: saved.name,
+      baseUrl: saved.baseUrl,
+      models: saved.models,
+      defaultModelId: saved.defaultModelId,
+      headers: {}
+    });
+
+    expect(cleared.headers).toBeUndefined();
+    const full = await store.get(saved.id);
+    expect(full).not.toHaveProperty('headers');
   });
 
   it('keeps the existing api key when updating without one', async () => {
@@ -226,33 +150,6 @@ describe('ProviderStore', () => {
     expect(updated.models[0]?.id).toBe('gpt-test-2');
     const full = await store.get(saved.id);
     expect(full?.apiKey).toBe('secret');
-  });
-
-  it('migrates legacy single-model providers', async () => {
-    await mkdir(directory, { recursive: true });
-    await writeFile(
-      join(directory, 'providers.json'),
-      JSON.stringify({
-        version: 1,
-        providers: [
-          {
-            id: 'legacy',
-            name: 'Legacy',
-            baseUrl: 'https://example.com/v1',
-            enabled: true,
-            model: 'legacy-model',
-            contextWindow: 32_000,
-            maxOutputTokens: 4_000,
-            encryptedApiKey: Buffer.from('enc:legacy-secret').toString('base64')
-          }
-        ]
-      })
-    );
-
-    const providers = await store.list();
-
-    expect(providers[0]?.models).toEqual([model('legacy-model', 32_000, 4_000)]);
-    expect(providers[0]?.defaultModelId).toBe('legacy-model');
   });
 
   it('preserves multiple models and default selection', async () => {
@@ -273,29 +170,4 @@ describe('ProviderStore', () => {
     await expect(store.list()).resolves.toEqual([]);
   });
 
-  it('migrates legacy encrypted values to plaintext', async () => {
-    await mkdir(directory, { recursive: true });
-    await writeFile(
-      join(directory, 'providers.json'),
-      JSON.stringify({
-        version: 1,
-        providers: [
-          {
-            id: 'legacy',
-            name: 'Legacy',
-            baseUrl: 'https://example.com/v1',
-            enabled: true,
-            models: [model('legacy-model')],
-            defaultModelId: 'legacy-model',
-            encryptedApiKey: Buffer.from('enc:legacy-secret').toString('base64')
-          }
-        ]
-      })
-    );
-
-    await expect(store.list()).resolves.toMatchObject([{ apiKey: 'legacy-secret' }]);
-    const raw = await readFile(join(directory, 'providers.json'), 'utf8');
-    expect(raw).toContain('"apiKey": "legacy-secret"');
-    expect(raw).not.toContain('encryptedApiKey');
-  });
 });

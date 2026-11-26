@@ -12,12 +12,15 @@ import type {
 } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import { listProviders, removeProvider, saveProvider, testProvider } from '../api/settings.api';
+import { parseHeaders } from '../validation/provider-headers';
 
 export interface ProviderFormState {
   protocol: ProviderProtocol;
   name: string;
   baseUrl: string;
   apiKey: string;
+  /** 自定义请求头 JSON 文本 */
+  headers: string;
   enabled: boolean;
   models: ProviderModel[];
   defaultModelId: string;
@@ -59,6 +62,7 @@ export const useProviderSettings = (
     name: '',
     baseUrl: '',
     apiKey: '',
+    headers: '',
     enabled: true,
     models: [],
     defaultModelId: ''
@@ -96,6 +100,10 @@ export const useProviderSettings = (
       name: provider.name,
       baseUrl: provider.baseUrl,
       apiKey: provider.apiKey,
+      headers:
+        provider.headers && Object.keys(provider.headers).length
+          ? JSON.stringify(provider.headers, null, 2)
+          : '',
       enabled: provider.enabled,
       models: provider.models.map((model) => ({ ...model })),
       defaultModelId: provider.defaultModelId
@@ -117,6 +125,7 @@ export const useProviderSettings = (
       name: '',
       baseUrl: '',
       apiKey: '',
+      headers: '',
       enabled: true,
       models: [],
       defaultModelId: ''
@@ -135,17 +144,20 @@ export const useProviderSettings = (
         contextWindow: model.contextWindow,
         maxOutputTokens: model.maxOutputTokens,
         ...(model.role ? { role: model.role } : {}),
-        ...(model.endpoint ? { endpoint: model.endpoint } : {}),
         ...(model.extraParams ? { extraParams: model.extraParams } : {}),
         ...(model.reasoningPassback === undefined
           ? {}
           : { reasoningPassback: model.reasoningPassback }),
-        ...(model.reasoningField ? { reasoningField: model.reasoningField } : {})
+        ...(model.reasoningField ? { reasoningField: model.reasoningField } : {}),
+        ...(model.reasoningAllowUnsigned === undefined
+          ? {}
+          : { reasoningAllowUnsigned: model.reasoningAllowUnsigned })
       }));
       const defaultModelId = models.some((model) => model.id === providerForm.value.defaultModelId)
         ? providerForm.value.defaultModelId
         : (models[0]?.id ?? '');
 
+      const headers = parseHeaders(providerForm.value.headers, t('settings.headersInvalid'));
       const input: ProviderSettings = {
         protocol: providerForm.value.protocol,
         name: providerForm.value.name.trim(),
@@ -154,7 +166,8 @@ export const useProviderSettings = (
         models,
         defaultModelId,
         ...(selectedId.value ? { id: selectedId.value } : {}),
-        ...(providerForm.value.apiKey.trim() ? { apiKey: providerForm.value.apiKey.trim() } : {})
+        ...(providerForm.value.apiKey.trim() ? { apiKey: providerForm.value.apiKey.trim() } : {}),
+        headers
       };
       const result = await saveProvider(input);
       selectedId.value = result.id;
@@ -173,14 +186,19 @@ export const useProviderSettings = (
    */
   const testConnection = async (silent = false): Promise<void> => {
     if (testing.value) return;
-    if (
-      !silent &&
-      providerForm.value.protocol !== 'ollama' &&
-      !providerForm.value.apiKey.trim() &&
-      !selectedId.value
-    ) {
+    if (!silent && !providerForm.value.apiKey.trim() && !selectedId.value) {
       message.warning(t('settings.testRequiresApiKey'));
       return;
+    }
+
+    let headers: Record<string, string> = {};
+    try {
+      headers = parseHeaders(providerForm.value.headers, t('settings.headersInvalid'));
+    } catch (reason) {
+      if (!silent) {
+        message.error(reason instanceof Error ? reason.message : t('settings.headersInvalid'));
+        return;
+      }
     }
 
     testing.value = true;
@@ -189,6 +207,7 @@ export const useProviderSettings = (
         protocol: providerForm.value.protocol,
         baseUrl: providerForm.value.baseUrl.trim(),
         ...(providerForm.value.apiKey.trim() ? { apiKey: providerForm.value.apiKey.trim() } : {}),
+        ...(Object.keys(headers).length ? { headers } : {}),
         ...(selectedId.value ? { id: selectedId.value } : {})
       });
       availableModels.value = result.models;

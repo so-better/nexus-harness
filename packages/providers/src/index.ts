@@ -4,6 +4,5 @@
 
 export * from './anthropic';
 export * from './mock-provider';
-export * from './ollama';
 export * from './openai-compatible';
 export * from './types';

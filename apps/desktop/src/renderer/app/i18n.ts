@@ -518,7 +518,7 @@ const zhCN = {
   'settings.loadFailed': '读取设置失败',
   'settings.provider': '模型提供商',
   'settings.providerHint':
-    '配置 OpenAI、Anthropic 或 Ollama 服务；API Key 保存在本地 Provider 配置中。',
+    '配置 OpenAI 兼容或 Anthropic 服务；API Key 保存在本地 Provider 配置中。',
   'settings.newProvider': '新增提供商',
   'settings.providerCountOne': '个供应商',
   'settings.providerCountMany': '个供应商',
@@ -554,8 +554,7 @@ const zhCN = {
   'settings.modelReasoningPassback': '回传思考内容',
   'settings.modelReasoningField': '思考内容字段',
   'settings.modelReasoningFieldInvalid': '字段名不合法，或用到了 role/content 等保留字段',
-  'settings.modelReasoningAnthropicHint':
-    'Anthropic 固定用 thinking block（需模型开启 thinking），仅回传带签名的块',
+  'settings.modelReasoningUnsigned': '无签名也回传',
   'settings.modelExtraParams': '请求参数（JSON）',
   'settings.modelExtraParamsHint':
     '原样合并进请求体透传给模型，可写 thinking / reasoning_effort 等任意参数',
@@ -587,6 +586,10 @@ const zhCN = {
   'settings.validationContextWindow': '上下文窗口必须大于 0',
   'settings.validationMaxOutput': '输出预留必须小于上下文窗口',
   'settings.apiKey': 'API Key',
+  'settings.headers': '自定义 Headers（JSON）',
+  'settings.headersHint': '按需添加自定义请求头，键值均为字符串',
+  'settings.headersPlaceholder': '{\n  "X-Api-Version": "2024-01"\n}',
+  'settings.headersInvalid': '自定义 Headers 必须是字符串键值的 JSON 对象',
   'settings.contextWindow': '上下文窗口',
   'settings.maxOutputTokens': '输出预留',
   'settings.enabled': '启用',
@@ -1190,7 +1193,7 @@ const enUS: Record<MessageKey, string> = {
   'settings.loadFailed': 'Failed to load settings',
   'settings.provider': 'Model providers',
   'settings.providerHint':
-    'Configure OpenAI, Anthropic or Ollama. API keys are stored in the local provider config.',
+    'Configure an OpenAI-compatible or Anthropic service. API keys are stored in the local provider config.',
   'settings.newProvider': 'Add provider',
   'settings.providerCountOne': 'provider',
   'settings.providerCountMany': 'providers',
@@ -1227,8 +1230,7 @@ const enUS: Record<MessageKey, string> = {
   'settings.modelReasoningField': 'Reasoning field',
   'settings.modelReasoningFieldInvalid':
     'Invalid field name, or a reserved field such as role/content was used',
-  'settings.modelReasoningAnthropicHint':
-    'Anthropic uses a thinking block (requires thinking enabled); only signed blocks are passed back',
+  'settings.modelReasoningUnsigned': 'Pass back without signature',
   'settings.modelExtraParams': 'Request params (JSON)',
   'settings.modelExtraParamsHint':
     'Merged into the request body and passed through; any params such as thinking / reasoning_effort are allowed.',
@@ -1260,6 +1262,10 @@ const enUS: Record<MessageKey, string> = {
   'settings.validationContextWindow': 'Context window must be greater than 0',
   'settings.validationMaxOutput': 'Output reserve must be less than the context window',
   'settings.apiKey': 'API Key',
+  'settings.headers': 'Custom headers (JSON)',
+  'settings.headersHint': 'Add optional request headers; keys and values are strings',
+  'settings.headersPlaceholder': '{\n  "X-Api-Version": "2024-01"\n}',
+  'settings.headersInvalid': 'Custom headers must be a JSON object of string values',
   'settings.contextWindow': 'Context window',
   'settings.maxOutputTokens': 'Output reserve',
   'settings.enabled': 'Enabled',

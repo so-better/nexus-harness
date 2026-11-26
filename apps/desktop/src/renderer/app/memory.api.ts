@@ -2,19 +2,11 @@
  * 全局记忆 API：设置页和输入命令共用。
  */
 
-import type {
-  MemoryCreateInput,
-  MemoryItem,
-  MemorySettings,
-  MemoryUpdateInput
-} from '@shared/memory';
+import type { MemoryItem, MemorySettings, MemoryUpdateInput } from '@shared/memory';
 import { unwrap } from './ipc';
 import { nexus } from './nexus-bridge';
 
 export const listMemories = async (): Promise<MemoryItem[]> => unwrap(await nexus.memory.list());
-
-export const createMemory = async (input: MemoryCreateInput): Promise<MemoryItem> =>
-  unwrap(await nexus.memory.create(input));
 
 export const updateMemory = async (input: MemoryUpdateInput): Promise<MemoryItem> =>
   unwrap(await nexus.memory.update(input));

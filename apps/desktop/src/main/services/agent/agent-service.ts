@@ -18,7 +18,6 @@ import {
 import { z } from 'zod';
 import {
   AnthropicProvider,
-  OllamaProvider,
   OpenAICompatibleProvider,
   type ChatImage,
   type ChatMessage,
@@ -889,12 +888,11 @@ export const createAgentProvider: ProviderFactory = (config) => {
   const reasoningField = (modelId: string): string =>
     config.models.find((item) => item.id === modelId)?.reasoningField?.trim() ||
     'reasoning_content';
+  const reasoningAllowUnsigned = (modelId: string): boolean =>
+    config.models.find((item) => item.id === modelId)?.reasoningAllowUnsigned === true;
 
   if (config.protocol === 'anthropic') {
-    return new AnthropicProvider({ ...shared, reasoningPassback });
-  }
-  if (config.protocol === 'ollama') {
-    return new OllamaProvider({ ...shared, reasoningPassback, reasoningField });
+    return new AnthropicProvider({ ...shared, reasoningPassback, reasoningAllowUnsigned });
   }
   return new OpenAICompatibleProvider({ ...shared, reasoningPassback, reasoningField });
 };

@@ -62,7 +62,7 @@ export const registerProviderIpc = (): void => {
 
       const protocol = parsed.data.protocol ?? stored?.protocol ?? 'openai';
       const apiKey = parsed.data.apiKey ?? stored?.apiKey;
-      if (!apiKey && protocol !== 'ollama') {
+      if (!apiKey) {
         return fail('PROVIDER_INVALID_INPUT', '连接测试需要 API Key');
       }
 

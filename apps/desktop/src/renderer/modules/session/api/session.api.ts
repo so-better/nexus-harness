@@ -3,7 +3,6 @@
  */
 
 import { nexus } from '@/app/nexus-bridge';
-import type { NexusEvent } from '@shared/events';
 import type {
   AgentMode,
   ApprovalPolicy,
@@ -27,12 +26,6 @@ export const listSessions = async (): Promise<SessionSummary[]> =>
  */
 export const createSession = async (input: SessionCreateInput = {}): Promise<SessionSummary> =>
   unwrap(await nexus.session.create(input));
-
-/**
- * 读取会话事件流。
- */
-export const getSessionEvents = async (id: string): Promise<NexusEvent[]> =>
-  unwrap(await nexus.session.events(id));
 
 /**
  * 重命名会话。

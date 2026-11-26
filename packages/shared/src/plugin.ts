@@ -46,7 +46,6 @@ export const pluginPermissionSchema = z.enum([
   'usage:read',
   'workspace:read'
 ]);
-export type PluginPermission = z.infer<typeof pluginPermissionSchema>;
 export const pluginEventPermissionSchema = z.string().regex(/^events:[\w.*-]+$/);
 
 const eventPermission = pluginEventPermissionSchema;

@@ -289,17 +289,4 @@ export interface NexusEvent<T extends NexusEventType = NexusEventType> {
   parentToolCallId?: string;
 }
 
-/**
- * 事件信封的基础 zod schema；payload 由具体事件 schema 再校验。
- */
-export const nexusEventEnvelopeSchema = z.object({
-  id: z.string(),
-  sessionId: z.string(),
-  runId: z.string().optional(),
-  seq: z.number().int().nonnegative(),
-  type: z.string(),
-  version: z.number().int().positive(),
-  ts: z.number().int().nonnegative(),
-  payload: z.unknown(),
-  parentToolCallId: z.string().optional()
-});
+

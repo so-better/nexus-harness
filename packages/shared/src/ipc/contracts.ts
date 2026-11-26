@@ -64,9 +64,9 @@ export const openDataLocationSchema = z.enum(['plugins', 'skills', 'mcp', 'knowl
 export type OpenDataLocation = z.infer<typeof openDataLocationSchema>;
 
 /**
- * Provider 协议：OpenAI 兼容、Anthropic 原生或 Ollama。
+ * Provider 协议：OpenAI 兼容或 Anthropic 原生。
  */
-export const providerProtocolSchema = z.enum(['openai', 'anthropic', 'ollama']);
+export const providerProtocolSchema = z.enum(['openai', 'anthropic']);
 
 /**
  * Provider 下的单个模型配置。
@@ -75,7 +75,6 @@ export const providerModelSchema = z
   .object({
     id: z.string().min(1),
     role: z.enum(['chat', 'image']).optional(),
-    endpoint: z.string().url().optional(),
     contextWindow: z.number().int().min(4_096).max(2_000_000),
     maxOutputTokens: z.number().int().min(256).max(131_072),
     /** 模型级额外请求参数，原样透传给模型 */
@@ -83,7 +82,9 @@ export const providerModelSchema = z
     /** 携带 tools 时是否回传 assistant 的历史思考内容 */
     reasoningPassback: z.boolean().optional(),
     /** 思考内容在消息中使用的字段名，默认 reasoning_content；仅 OpenAI 兼容端点使用 */
-    reasoningField: z.string().min(1).optional()
+    reasoningField: z.string().min(1).optional(),
+    /** Anthropic：无签名时也回传 thinking block（best-effort，部分网关不返回签名） */
+    reasoningAllowUnsigned: z.boolean().optional()
   })
   .refine((value) => value.maxOutputTokens < value.contextWindow, {
     message: 'maxOutputTokens 必须小于 contextWindow',
@@ -119,16 +120,10 @@ export const providerPublicSchema = z.object({
   name: z.string().min(1),
   baseUrl: z.string().min(1),
   apiKey: z.string(),
+  headers: z.record(z.string(), z.string()).optional(),
   enabled: z.boolean(),
   models: z.array(providerModelSchema).min(1),
   defaultModelId: z.string().min(1)
-});
-
-/**
- * 主进程内部使用的完整 Provider 配置；headers 视为敏感字段，模型 extraParams 只允许非敏感请求参数。
- */
-export const agentProviderConfigSchema = providerPublicSchema.extend({
-  headers: z.record(z.string(), z.string()).optional()
 });
 
 export const providerRemoveResultSchema = z.object({ id: z.string().min(1) });
@@ -566,7 +561,7 @@ export const agentRunResultSchema = z.object({
 export type ProviderSettings = z.infer<typeof providerSettingsSchema>;
 export type ProviderPublic = z.infer<typeof providerPublicSchema>;
 export type ProviderRemoveResult = z.infer<typeof providerRemoveResultSchema>;
-export type AgentProviderConfig = z.infer<typeof agentProviderConfigSchema>;
+export type AgentProviderConfig = ProviderPublic;
 export type AgentRunInput = z.infer<typeof agentRunInputSchema>;
 export type AgentStartResult = z.infer<typeof agentStartResultSchema>;
 export type AgentCancelResult = z.infer<typeof agentCancelResultSchema>;

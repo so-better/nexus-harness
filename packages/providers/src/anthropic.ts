@@ -10,7 +10,6 @@ import type {
   ProviderCapabilities,
   ProviderRequest,
   ProviderStreamEvent,
-  ProviderToolCall,
   ToolSchema
 } from './types';
 
@@ -21,6 +20,8 @@ export interface AnthropicConfig {
   capabilities?: Partial<ProviderCapabilities>;
   /** Anthropic 兼容端点：带 tools 时回传历史 thinking 内容（可按模型判断） */
   reasoningPassback?: boolean | ((model: string) => boolean);
+  /** 无签名时也回传 thinking block（best-effort，可按模型判断） */
+  reasoningAllowUnsigned?: boolean | ((model: string) => boolean);
   fetchImpl?: typeof fetch;
 }
 
@@ -67,7 +68,8 @@ const endpoint = (baseUrl: string): string => {
  */
 export const toAnthropicMessages = (
   messages: readonly ChatMessage[],
-  passReasoning = false
+  passReasoning = false,
+  allowUnsigned = false
 ): AnthropicConversion => {
   const system: string[] = [];
   const result: AnthropicMessage[] = [];
@@ -108,11 +110,19 @@ export const toAnthropicMessages = (
 
     if (message.role === 'assistant' && (message.toolCalls?.length || (passReasoning && message.reasoning?.trim()))) {
       const content: AnthropicContentBlock[] = [];
-      // Anthropic 带工具时要求原样回传带签名的 thinking block；无签名的块会返回 400，故跳过
+      // Anthropic 带工具时要求回传 thinking block；无签名可能 400，只有开启容错才回传
       if (passReasoning) {
-        for (const block of message.reasoningBlocks ?? []) {
-          if (block.text.trim() && block.signature) {
+        const blocks = message.reasoningBlocks?.length
+          ? message.reasoningBlocks
+          : message.reasoning?.trim()
+            ? [{ text: message.reasoning }]
+            : [];
+        for (const block of blocks) {
+          if (!block.text.trim()) continue;
+          if (block.signature) {
             content.push({ type: 'thinking', thinking: block.text, signature: block.signature });
+          } else if (allowUnsigned) {
+            content.push({ type: 'thinking', thinking: block.text });
           }
         }
       }
@@ -205,7 +215,15 @@ export class AnthropicProvider implements ChatProvider {
       typeof this.config.reasoningPassback === 'function'
         ? this.config.reasoningPassback(request.model)
         : this.config.reasoningPassback === true;
-    const converted = toAnthropicMessages(request.messages, reasoningPassback);
+    const reasoningAllowUnsigned =
+      typeof this.config.reasoningAllowUnsigned === 'function'
+        ? this.config.reasoningAllowUnsigned(request.model)
+        : this.config.reasoningAllowUnsigned === true;
+    const converted = toAnthropicMessages(
+      request.messages,
+      reasoningPassback,
+      reasoningAllowUnsigned
+    );
     const endpointUrl = endpoint(this.config.baseUrl);
     const headers = {
       'Content-Type': 'application/json',
@@ -478,16 +496,3 @@ export class AnthropicProvider implements ChatProvider {
     }
   }
 }
-
-/**
- * 测试与构造辅助：解析 Anthropic 工具参数。
- */
-export const parseAnthropicToolCall = (
-  id: string,
-  name: string,
-  argumentsText: string
-): ProviderToolCall => ({
-  id,
-  name,
-  arguments: parseToolArguments(argumentsText)
-});

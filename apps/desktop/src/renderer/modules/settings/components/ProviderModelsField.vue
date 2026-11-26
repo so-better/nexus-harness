@@ -126,9 +126,18 @@
                   {{ t('settings.modelReasoningFieldInvalid') }}
                 </small>
               </label>
-              <small v-else class="nh-model-row__hint">
-                {{ t('settings.modelReasoningAnthropicHint') }}
-              </small>
+              <label v-else class="nh-model-row__field">
+                <span>{{ t('settings.modelReasoningUnsigned') }}</span>
+                <span class="nh-model-row__switch">
+                  <NSwitch
+                    size="small"
+                    :value="model.reasoningAllowUnsigned === true"
+                    @update:value="
+                      (value: boolean) => updateModel(model.id, 'reasoningAllowUnsigned', value)
+                    "
+                  />
+                </span>
+              </label>
             </div>
 
             <label class="nh-model-row__field nh-model-row__field--extra">
@@ -224,7 +233,7 @@ const props = defineProps<{
   availableModels: string[];
   defaultModelId: string;
   testing: boolean;
-  protocol: 'openai' | 'anthropic' | 'ollama';
+  protocol: 'openai' | 'anthropic';
 }>();
 
 const emit = defineEmits<{
@@ -238,7 +247,7 @@ const emit = defineEmits<{
  * 新建模型的默认上下文窗口与输出预算（不同网关自行调整）。
  */
 const DEFAULT_CONTEXT_WINDOW = 1_000_000;
-const DEFAULT_MAX_OUTPUT_TOKENS = 65_536;
+const DEFAULT_MAX_OUTPUT_TOKENS = 131_072;
 
 /**
  * 已获取模型与已保存模型的合集，保持配置存在。
@@ -270,9 +279,15 @@ const budgetInvalid = (model: ProviderModel): boolean =>
 const reasoningFieldInvalid = (model: ProviderModel): boolean =>
   props.protocol !== 'anthropic' && !isValidReasoningField(model.reasoningField);
 
+/**
+ * 透传参数编辑框的当前文本：优先草稿，否则序列化已保存的参数。
+ */
 const extraText = (model: ProviderModel): string =>
   extraDrafts[model.id] ?? JSON.stringify(model.extraParams ?? {}, null, 2);
 
+/**
+ * 解析透传参数 JSON；非法、含保留字段或敏感字段时记录表单错误。
+ */
 const updateExtraDraft = (model: ProviderModel, text: string): void => {
   extraDrafts[model.id] = text;
   try {
@@ -293,6 +308,9 @@ const updateExtraDraft = (model: ProviderModel, text: string): void => {
   }
 };
 
+/**
+ * 失焦且无错误时丢弃草稿，重新按已保存参数渲染。
+ */
 const resetExtraDraft = (model: ProviderModel): void => {
   if (extraErrors[model.id]) return;
   delete extraDrafts[model.id];
@@ -342,7 +360,13 @@ const someSelected = computed(() => selectedCount.value > 0 && !allSelected.valu
  */
 const updateModel = (
   id: string,
-  key: 'contextWindow' | 'maxOutputTokens' | 'reasoningPassback' | 'reasoningField' | 'extraParams',
+  key:
+    | 'contextWindow'
+    | 'maxOutputTokens'
+    | 'reasoningPassback'
+    | 'reasoningField'
+    | 'reasoningAllowUnsigned'
+    | 'extraParams',
   value: number | boolean | string | Record<string, unknown> | undefined | null
 ): void => {
   if (value === null) return;
@@ -355,6 +379,8 @@ const updateModel = (
         if (typeof value === 'number') next[key] = value;
       } else if (key === 'reasoningPassback') {
         if (typeof value === 'boolean') next.reasoningPassback = value;
+      } else if (key === 'reasoningAllowUnsigned') {
+        if (typeof value === 'boolean') next.reasoningAllowUnsigned = value;
       } else if (key === 'reasoningField') {
         const field = typeof value === 'string' ? value.trim() : '';
         if (field) next.reasoningField = field;

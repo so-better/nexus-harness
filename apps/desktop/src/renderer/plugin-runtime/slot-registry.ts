@@ -4,10 +4,7 @@
 
 import type { Unsubscribe } from '@shared/ipc/contracts';
 import type { PluginSlotLocation } from '@shared/plugin';
-import { PLUGIN_SLOT_LOCATIONS } from '@shared/plugin';
 import type { UsageSummary } from '@shared/usage';
-
-export const SLOT_LOCATIONS = PLUGIN_SLOT_LOCATIONS;
 
 export type SlotLocation = PluginSlotLocation;
 

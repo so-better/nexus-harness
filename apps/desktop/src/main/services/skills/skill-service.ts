@@ -9,7 +9,6 @@ import { parse as parseYaml } from 'yaml';
 import type { SkillDetail, SkillSummary } from '@shared/skills';
 import { getAppDataPaths, getBuiltinSkillsDirectory } from '../storage/paths';
 
-export type SkillMeta = SkillSummary;
 export type { SkillDetail };
 
 const MAX_SKILL_BYTES = 200_000;

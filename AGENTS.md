@@ -167,7 +167,7 @@ Nexus 是一个桌面端 AI Agent 工作台：不是聊天框，也不是只服�
 | Agent | 模型驱动的执行循环；主 Agent 可派生受限子代理（`explore` 只读 / `general` 完整工具，写/执行仍需审批） |
 | Agent 模式 | `plan` 只读规划，`build` 执行变更 |
 | Ask User | Agent 的结构化提问，暂停 Run 等待用户选择或输入 |
-| Provider | 模型服务商适配器，如 OpenAI 兼容、Anthropic、Ollama |
+| Provider | 模型服务商适配器，如 OpenAI 兼容、Anthropic |
 | Workspace | 单个工作区目录与信任设置，作为项目级预设 |
 | Session | 一次持续的工作上下文，可选绑定一个 Workspace |
 | Session 标题 | 会话名称，自动摘要或用户重命名 |
@@ -487,7 +487,6 @@ interface ProviderCapabilities {
 | --- | --- | --- | --- | --- | --- |
 | OpenAI 兼容 | 必须 | 视模型 | 视模型 | 视模型 | 可选 |
 | Anthropic | 必须 | 必须 | 必须 | 视模型 | 否 |
-| Ollama | 必须 | 视模型 | 视模型 | 视模型 | 必须 |
 
 规则：
 
@@ -529,7 +528,7 @@ interface ProviderCapabilities {
 
 系统提示由宿主统一组装：身份与安全约束、工具使用规则、工作区规则与当前任务；提供商适配层只做格式转换，不允许各提供商各自实现一套。
 
-模型配置由结构化字段（`contextWindow`、`maxOutputTokens`、`reasoningPassback`、`reasoningField`、可选 `role` / `endpoint`）与一个额外请求参数 JSON 组成。`contextWindow` 用于上下文预算与压缩；`maxOutputTokens` 作为 `max_tokens` 下发并用于输出预算；`reasoningPassback` 是模型级开关，控制携带 tools 时是否回传历史思考内容（默认关闭）；`reasoningField` 指定 OpenAI 兼容端点回传时的消息字段名（默认 `reasoning_content`），Anthropic 兼容端点固定使用 `thinking` content block，并原样回传带 `signature` 的 thinking block（签名来自流式 `signature_delta`，随 `message.completed` 持久化并在会话历史中恢复）。额外参数 JSON **原样并入请求体**透传给模型，宿主不解析或改写 `thinking` / `reasoning_effort` 等具体字段。新建模型默认 `contextWindow = 1M`、`maxOutputTokens = 64K`，不区分厂商，由用户按实际网关调整。透传参数不得覆盖 `model`、`messages`、`stream`、`tools`、`max_tokens` 等协议保留字段，也不得写入密钥。
+模型配置由结构化字段（`contextWindow`、`maxOutputTokens`、`reasoningPassback`、`reasoningField`、`reasoningAllowUnsigned`、可选 `role`）与一个额外请求参数 JSON 组成。`contextWindow` 用于上下文预算与压缩；`maxOutputTokens` 作为 `max_tokens` 下发并用于输出预算；`reasoningPassback` 是模型级开关，控制携带 tools 时是否回传历史思考内容（默认关闭）；`reasoningField` 指定 OpenAI 兼容端点回传时的消息字段名（默认 `reasoning_content`）；Anthropic 兼容端点固定使用 `thinking` content block，并原样回传带 `signature` 的 thinking block（签名来自流式 `signature_delta`，随 `message.completed` 持久化并在会话历史中恢复）；`reasoningAllowUnsigned` 控制 Anthropic 无签名时是否也回传（best-effort，默认关闭）。额外参数 JSON **原样并入请求体**透传给模型，宿主不解析或改写 `thinking` / `reasoning_effort` 等具体字段。新建模型默认 `contextWindow = 1M`、`maxOutputTokens = 128K`，不区分厂商，由用户按实际网关调整。透传参数不得覆盖 `model`、`messages`、`stream`、`tools`、`max_tokens` 等协议保留字段，也不得写入密钥。
 
 系统提示保持稳定的静态前缀；平台、时间、全局记忆等动态上下文追加到最后一条用户消息（`<environment>` 块），避免破坏 prompt cache。用户自定义提示词可追加，但与默认系统提示冲突时以默认提示为准；场景模式提示词按需追加。
 
@@ -1214,7 +1213,7 @@ export function activate(ctx) {
 
 - 设置分三个层级，优先级为 **Session > Workspace > App**；读取时逐层合并，写入时记录 scope。
 - 设置分类：通用、记忆、模型与提供商、终端、外观、缓存、权限与审批、快捷键、高级；终端设置包含 shell、字号、滚回、选中即复制与 WebGL；字体使用默认等宽字体，默认字号 12px，自动检测的 shell 路径需回显。
-- 模型与提供商：对话 Provider 保持协议（OpenAI / Anthropic / Ollama）、Base URL、API Key、模型名、自定义 headers，以及每个模型的窗口/输出上限字段、回传思考开关/字段名和一个额外请求参数 JSON（JSON 原样透传）；图像模型在独立入口配置完整请求 URL、模型、Key、headers、请求体模板与结果路径；媒体搜索在通用设置中配置 Pexels API Key；联网搜索配置 AnySearch API Key（可选，匿名访问也可用，但有更严格的限速与每日额度）。当前不做本地 token 单价配置，费用仅记录 Provider 返回的 cost。
+- 模型与提供商：对话 Provider 保持协议（OpenAI 兼容 / Anthropic）、Base URL、API Key、自定义 headers（可编辑），以及每个模型的窗口/输出上限字段、回传思考开关/字段名/无签名容错和一个额外请求参数 JSON（JSON 原样透传）；图像模型在独立入口配置完整请求 URL、模型、Key、headers、请求体模板与结果路径；媒体搜索在通用设置中配置 Pexels API Key；联网搜索配置 AnySearch API Key（可选，匿名访问也可用，但有更严格的限速与每日额度）。当前不做本地 token 单价配置，费用仅记录 Provider 返回的 cost。
 - 支持连接测试与模型列表刷新；API Key 随本地 Provider 配置保存；不写死默认模型。
 - 图像模型可选；未配置时不注册 `generate_image`，设置页提供引导。
 - 权限与审批：默认审批策略、命令白名单、敏感路径策略、工作区信任管理。
