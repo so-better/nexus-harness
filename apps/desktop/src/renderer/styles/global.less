@@ -145,12 +145,30 @@ body:has(.n-modal-mask) .nh-titlebar {
 
 /**
  * 全局卡片式模态框：用独立表面色和描边与主界面拉开层级。
+ * 整体最高 95vh；主体区自适应剩余高度（总高 − header − footer）并自身滚动，
+ * 标题与底部操作区保持可见。
  */
 .n-modal.n-card {
+  display: flex;
+  overflow: hidden;
+  max-height: 95vh;
+  flex-direction: column;
   background: var(--nh-surface-overlay);
   box-shadow:
     var(--nh-shadow-float),
     inset 0 0 0 1px color-mix(in srgb, var(--nh-border-subtle) 68%, transparent);
+}
+
+.n-modal.n-card > .n-card-header,
+.n-modal.n-card > .n-card__footer,
+.n-modal.n-card > .n-card__action {
+  flex: none;
+}
+
+.n-modal.n-card > .n-card-content {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 
 .n-popover:not(.n-tooltip, .n-popconfirm),

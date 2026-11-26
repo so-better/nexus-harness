@@ -82,7 +82,7 @@
                   :value="providerForm.headers"
                   type="textarea"
                   size="small"
-                  :autosize="{ minRows: 2, maxRows: 8 }"
+                  :autosize="{ minRows: 4, maxRows: 12 }"
                   :placeholder="t('settings.headersPlaceholder')"
                   v-bind="headersError ? { status: 'error' } : {}"
                   @update:value="(value: string) => (providerForm.headers = value)"

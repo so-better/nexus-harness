@@ -8,7 +8,7 @@
     :bordered="false"
     @update:show="emit('update:show', $event)"
   >
-    <NTabs default-value="provider" type="line" animated>
+    <NTabs default-value="provider" type="line">
       <NTabPane name="provider" :tab="t('settings.provider')">
         <p class="nh-settings__hint">{{ t('settings.providerHint') }}</p>
         <ProviderSettingsPanel @changed="emit('changed')" />
@@ -72,10 +72,6 @@ const emit = defineEmits<{ 'update:show': [show: boolean]; changed: [] }>();
 </script>
 
 <style scoped lang="less">
-.nh-settings {
-  width: min(760px, calc(100vw - 48px));
-}
-
 .nh-settings__hint {
   margin: 0 0 16px;
   color: var(--nh-color-text-secondary);
