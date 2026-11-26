@@ -30,7 +30,8 @@ beforeEach(async () => {
     plugins: join(root, 'plugins'),
     skills: join(root, 'skills'),
     mcp: join(root, 'mcp'),
-    knowledge: join(root, 'knowledge')
+    knowledge: join(root, 'knowledge'),
+    python: join(root, 'python')
   };
   await mkdir(paths.files, { recursive: true });
   await mkdir(paths.artifacts, { recursive: true });

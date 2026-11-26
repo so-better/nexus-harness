@@ -23,6 +23,7 @@ describe('backup service', () => {
       skills: join(root, 'skills'),
       mcp: join(root, 'mcp'),
       knowledge: join(root, 'knowledge'),
+      python: join(root, 'python'),
       settings: join(root, 'settings'),
       files: join(root, 'files'),
       attachments: join(root, 'attachments'),
@@ -88,6 +89,7 @@ describe('backup service', () => {
       skills: join(targetRoot, 'skills'),
       mcp: join(targetRoot, 'mcp'),
       knowledge: join(targetRoot, 'knowledge'),
+      python: join(targetRoot, 'python'),
       logs: join(targetRoot, 'logs')
     };
     await stageBackup(exported.path, targetPaths);

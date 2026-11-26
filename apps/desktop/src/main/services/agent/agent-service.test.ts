@@ -268,6 +268,7 @@ describe('AgentService', () => {
       'read_artifact',
       'task',
       'open_url',
+      'run_python',
       'save_file',
       'save_word',
       'save_excel',

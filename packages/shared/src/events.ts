@@ -139,6 +139,15 @@ export const eventPayloadSchemas = {
     toolCallId: z.string(),
     error: z.object({ code: z.string(), message: z.string() })
   }),
+  'tool.progress': z.object({
+    toolCallId: z.string(),
+    /** 阶段：与渲染层 i18n 对应，避免宿主硬编码文案 */
+    phase: z.enum(['fetch', 'download', 'verify', 'extract', 'packages', 'done']),
+    /** 可选进度比例 0–1；无确定总量时省略 */
+    ratio: z.number().min(0).max(1).optional(),
+    /** 可选补充信息（如依赖包名），不参与翻译 */
+    detail: z.string().optional()
+  }),
   'checkpoint.created': z.object({
     checkpointId: z.string(),
     label: z.string(),

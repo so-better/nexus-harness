@@ -32,7 +32,8 @@ describe('backup tools', () => {
       plugins: join(root, 'plugins'),
       skills: join(root, 'skills'),
       mcp: join(root, 'mcp'),
-      knowledge: join(root, 'knowledge')
+      knowledge: join(root, 'knowledge'),
+      python: join(root, 'python')
     };
     database = createDatabase(join(root, 'nexus.db'));
   });

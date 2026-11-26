@@ -10,6 +10,12 @@
             <span class="nh-tool__name" :title="tool.name">{{ tool.name }}</span>
           </span>
           <span class="nh-tool__tail">
+            <span v-if="showProgress" class="nh-tool__progress">
+              <span class="nh-tool__progress-text">{{ progressLabel }}</span>
+              <span v-if="progressPercent !== null" class="nh-tool__progress-track">
+                <span class="nh-tool__progress-fill" :style="{ width: `${progressPercent}%` }" />
+              </span>
+            </span>
             <span class="nh-tool__status" :class="'nh-tool__status--' + statusTone">
               <span class="nh-tool__dot" />
               {{ statusLabel }}
@@ -447,6 +453,34 @@ const statusTone = computed<'success' | 'error' | 'warning' | 'info'>(() => {
       return 'info';
   }
 });
+
+const progress = computed(() => props.tool.progress ?? null);
+
+// 仅在执行中的状态显示进度，完成后隐藏避免残留
+const showProgress = computed(() => {
+  if (!progress.value) return false;
+  const status = displayStatus.value;
+  return status === 'running' || status === 'approved' || status === 'requested';
+});
+
+const progressPercent = computed(() =>
+  progress.value?.ratio === undefined ? null : Math.round(progress.value.ratio * 100)
+);
+
+const progressLabel = computed(() => {
+  const value = progress.value;
+  if (!value) return '';
+  const map = {
+    fetch: t('tool.progress.fetch'),
+    download: t('tool.progress.download'),
+    verify: t('tool.progress.verify'),
+    extract: t('tool.progress.extract'),
+    packages: t('tool.progress.packages'),
+    done: t('tool.progress.done')
+  } as const;
+  const base = map[value.phase];
+  return value.detail ? `${base} ${value.detail}` : base;
+});
 </script>
 
 <style scoped lang="less">
@@ -544,6 +578,45 @@ const statusTone = computed<'success' | 'error' | 'warning' | 'info'>(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
+}
+
+.nh-tool__progress {
+  display: inline-flex;
+  max-width: 220px;
+  align-items: center;
+  gap: 6px;
+  color: var(--nh-color-text-secondary);
+  font-size: 11px;
+}
+
+.nh-tool__progress-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nh-tool__progress-track {
+  display: inline-block;
+  width: 56px;
+  height: 4px;
+  flex: none;
+  overflow: hidden;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--nh-color-border) 45%, transparent);
+}
+
+.nh-tool__progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--nh-color-accent);
+  transition: width var(--nh-duration-base) var(--nh-ease-standard);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nh-tool__progress-fill {
+    transition: none;
+  }
 }
 
 .nh-tool__status--success .nh-tool__dot {

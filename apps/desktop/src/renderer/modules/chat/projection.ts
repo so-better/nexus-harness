@@ -574,6 +574,18 @@ export const projectEvents = (
       continue;
     }
 
+    if (event.type === 'tool.progress') {
+      const payload = event.payload as EventPayloadMap['tool.progress'];
+      updateTool(messages, payload.toolCallId, (tool) => {
+        tool.progress = {
+          phase: payload.phase,
+          ...(payload.ratio === undefined ? {} : { ratio: payload.ratio }),
+          ...(payload.detail === undefined ? {} : { detail: payload.detail })
+        };
+      });
+      continue;
+    }
+
     if (event.type === 'subagent.started') {
       const payload = event.payload as EventPayloadMap['subagent.started'];
       updateTool(messages, payload.parentToolCallId, (tool) => {

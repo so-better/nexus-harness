@@ -78,6 +78,11 @@ import { parseExplicitSkill } from '@shared/skills';
 import { executeThemeTool, themeToolDefinitions } from './theme-tools';
 import { executeSkinTool, skinToolDefinitions } from './skin-tools';
 import { executeTerminalTool, terminalToolDefinitions } from './terminal-tools';
+import {
+  executeRunPythonTool,
+  runPythonToolDefinition,
+  type RunPythonProgress
+} from './run-python-tool';
 import { executeCacheTool, cacheToolDefinitions } from './cache-tools';
 import { executeBackupTool, backupToolDefinitions } from './backup-tools';
 import { executePluginTool, pluginToolDefinitions } from './plugin-tools';
@@ -1260,6 +1265,67 @@ ${assistant.slice(0, 3_000)}`;
           }) => Promise<ToolExecutionResult>)
         | undefined;
 
+      /**
+       * 宿主发起的结构化提问：写入事件并等待用户回答，供 ask_user 与运行时安装确认复用。
+       */
+      const askHostQuestion = async (
+        questions: AskQuestion[],
+        toolCallId?: string
+      ): Promise<AskUserAnswer[] | undefined> => {
+        if (!hooks.askUser) return undefined;
+        const requestId = randomUUID();
+        eventBus.publish(
+          createNexusEvent({
+            sessionId: input.sessionId,
+            runId,
+            seq: 1,
+            type: 'ask_user.requested',
+            payload: {
+              requestId,
+              questions,
+              ...(toolCallId ? { toolCallId } : {})
+            }
+          })
+        );
+        const answers = await hooks.askUser(requestId, questions);
+        eventBus.publish(
+          createNexusEvent({
+            sessionId: input.sessionId,
+            runId,
+            seq: 1,
+            type: 'ask_user.resolved',
+            payload: { requestId, answers: answers ?? [], cancelled: !answers }
+          })
+        );
+        return answers;
+      };
+
+      /**
+       * 发布工具进度事件；在子代理作用域内带上 parentToolCallId，供嵌套时间线归位。
+       */
+      const reportToolProgress = (
+        toolCallId: string | undefined,
+        progress: RunPythonProgress
+      ): void => {
+        if (!toolCallId) return;
+        const scope = subagentEventScope.getStore();
+        eventBus.publish(
+          createNexusEvent({
+            sessionId: input.sessionId,
+            runId: scope ? scope.childRunId : runId,
+            seq: 1,
+            type: 'tool.progress',
+            payload: {
+              toolCallId,
+              phase: progress.phase,
+              ...(progress.ratio === undefined ? {} : { ratio: progress.ratio }),
+              ...(progress.detail === undefined ? {} : { detail: progress.detail })
+            },
+            ...(scope ? { parentToolCallId: scope.parentToolCallId } : {})
+          })
+        );
+      };
+
       const executeTool = async (call: { id?: string; name: string; arguments: unknown }) => {
         if (call.name === 'task') {
           if (!runTaskTool) {
@@ -1375,30 +1441,7 @@ ${assistant.slice(0, 3_000)}`;
             };
           }
 
-          const requestId = randomUUID();
-          eventBus.publish(
-            createNexusEvent({
-              sessionId: input.sessionId,
-              runId,
-              seq: 1,
-              type: 'ask_user.requested',
-              payload: {
-                requestId,
-                questions: parsed.data.questions,
-                ...(call.id ? { toolCallId: call.id } : {})
-              }
-            })
-          );
-          const answers = await hooks.askUser(requestId, parsed.data.questions);
-          eventBus.publish(
-            createNexusEvent({
-              sessionId: input.sessionId,
-              runId,
-              seq: 1,
-              type: 'ask_user.resolved',
-              payload: { requestId, answers: answers ?? [], cancelled: !answers }
-            })
-          );
+          const answers = await askHostQuestion(parsed.data.questions, call.id);
           if (!answers) {
             return {
               ok: false,
@@ -1997,6 +2040,37 @@ ${assistant.slice(0, 3_000)}`;
           }
         }
 
+        if (call.name === 'run_python') {
+          // 闭包内需要稳定的工具集引用；此处已通过上方工作区校验
+          const localToolset = toolset;
+          // 子代理不触发安装，缺失时由主 Agent 安装一次后复用
+          const inSubagent = Boolean(subagentEventScope.getStore());
+          return executeRunPythonTool(call.arguments, {
+            resolveCwd: (target) => localToolset.resolvePath(target),
+            onProgress: (progress) => reportToolProgress(call.id, progress),
+            ...(inSubagent ? { allowInstall: false } : {}),
+            confirm: async (request) => {
+              if (!hooks.askUser) return false;
+              const answers = await askHostQuestion(
+                [
+                  {
+                    id: 'confirm',
+                    question: `${request.title}：${request.description}`,
+                    options: [
+                      { id: 'yes', label: '允许' },
+                      { id: 'no', label: '拒绝' }
+                    ],
+                    required: true
+                  }
+                ],
+                call.id
+              );
+              return answers?.some((answer) => answer.selectedOptionIds?.includes('yes')) ?? false;
+            },
+            ...(hooks.signal ? { signal: hooks.signal } : {})
+          });
+        }
+
         if (call.name === 'run_command' && process.versions.electron) {
           const parsed = runCommandInputSchema.safeParse(call.arguments);
           if (!parsed.success) {
@@ -2271,6 +2345,7 @@ ${assistant.slice(0, 3_000)}`;
         readArtifactToolDefinition,
         taskToolDefinition,
         openUrlToolDefinition,
+        runPythonToolDefinition,
         ...(this.memory && this.memory.settings().retrieval
           ? [memorySearchToolDefinition, memoryReadToolDefinition]
           : []),

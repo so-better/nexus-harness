@@ -317,6 +317,38 @@ describe('projectEvents', () => {
     expect(projection.messages[0]).toMatchObject({ id: 'user-2', content: '新问题' });
   });
 
+  it('attaches tool.progress to the running tool call', () => {
+    const events: NexusEvent[] = [
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: { messageId: 'assistant-1', role: 'assistant', content: '' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'tool.requested',
+        payload: { toolCallId: 'call-1', name: 'run_python', input: { code: 'print(1)' } }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'tool.progress',
+        payload: { toolCallId: 'call-1', phase: 'download', ratio: 0.5 }
+      })
+    ];
+
+    const projection = projectEvents(events);
+    const tool = projection.messages
+      .flatMap((message) => message.toolCalls)
+      .find((call) => call.id === 'call-1');
+    expect(tool?.progress).toEqual({ phase: 'download', ratio: 0.5 });
+  });
+
   it('projects messages, tool calls, approvals and usage', () => {
     const events: NexusEvent[] = [
       event({

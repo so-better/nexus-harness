@@ -323,6 +323,8 @@ nexus-harness/
 │        │     ├─ knowledge/     # 知识库来源、切分与检索
 │        │     ├─ memory/        # 全局长期记忆
 │        │     ├─ terminal/      # 内置终端 PTY 管理
+│        │     ├─ net/           # 受控下载（SSRF/大小/超时）
+│        │     ├─ python/        # Python 运行时探测、安装与依赖
 │        │     ├─ usage/         # 用量统计
 │        │     ├─ cache/         # 缓存统计与清理
 │        │     └─ notifications/ # 系统通知与 Dock/托盘提醒
@@ -637,6 +639,7 @@ interface ProviderCapabilities {
 | `write_file` | write | 是 |
 | `apply_patch` | write | 是 |
 | `run_command` / `open_system_terminal` | execute | 是 |
+| `run_python` | execute | 是（缺少运行时时先确认再安装到 `<userData>/python`；`packages` 依赖经 pip 联网安装亦需确认） |
 | `ask_user` | read | 否（等待用户） |
 | `open_url` | network | 是 |
 | `memory_search` / `memory_read` | read | 否 |
@@ -773,6 +776,7 @@ interface ProviderCapabilities {
 - AI 命令必须在已授权目录内执行，`cwd` 必须来自目录 root；用户显式打开的终端可位于工作区，无工作区时为根目录；AI 命令环境变量做白名单清理，禁止继承无关密钥。
 - 危险命令必须拦截：提权、关机/重启、格式化磁盘、`rm -rf` 根目录或通配符、`curl | sh`、fork 炸弹等；解释器 `-c` 内嵌命令递归检查。
 - 内置终端由 node-pty 持有 PTY，支持多标签与进程组终止；macOS 支持 `Cmd+K` 清屏；用户终端默认 cwd 为当前工作区，无工作区时为文件系统根目录。
+- `run_python` 在授权工作目录内以子进程执行脚本（不占用终端标签），沿用审批、超时与输出上限；缺少运行时时先经用户确认再安装到 `<userData>/python`，`packages` 依赖经 pip 联网安装同样需确认；安装进度通过 `tool.progress` 事件展示（子代理内带 `parentToolCallId` 归入嵌套时间线）；子代理可运行但不可触发安装：缺运行时或依赖时返回可操作错误，由主 Agent 安装一次后复用。
 - AI 的 `run_command` 在终端标签中执行并捕获输出；连续命令复用同一空闲命令标签（用户输入过或终端有前台进程时不复用），`detach: true` 才新建独立标签；复用标签时 `terminal_read` 只返回当前命令输出，面板保留历史。不主动打开面板、不主动启动外部终端程序；用户可打开面板查看，命令仍受审批、危险命令拦截、超时与输出上限约束。常驻服务可传 `detach: true`，立即返回 terminalId，不设置超时，退出后标签保留为已退出状态。AI 可通过 `terminal_read` / `terminal_wait` 读取当前会话内已授予 AI 访问权限的用户终端或 AI 终端输出，通过 `terminal_write` 写入文本或按键；用户终端需在面板中显式授予 AI 访问，或由 AI 调用 `terminal_request_access` 发起审批；写入与关闭需要审批，终端内容可能包含敏感信息；未授权时工具返回 `TERMINAL_ACCESS_DENIED` 并提示用户在终端标签右键授权。AI 的 `terminal_create` 和 `terminal_write` 只能使用已授权工作区目录，并受危险命令拦截约束。仅在用户明确要求时，可经审批调用 `open_system_terminal` 打开系统终端（macOS Terminal / Windows 命令提示符）并投递命令；不捕获输出、不接管后续交互，结果由用户在系统终端查看。
 - 关闭正在运行的终端必须二次确认；命令内不允许自行追加 `&` 或 `nohup`。
 - 超时后终止整个进程树；Windows 使用 ConPTY，macOS/Linux 使用 PTY。
@@ -1103,6 +1107,7 @@ export function activate(ctx) {
 ├─ mcp/mcp.json         # 标准 MCP 配置，启动时扫描
 ├─ mcp/workdir/         # stdio MCP 子进程固定工作目录与自动产物
 ├─ mcp/cache/uv/        # uvx/uv 依赖缓存，不随运行缓存清理
+├─ python/               # 独立 Python 运行时（缺失时按需安装），不随运行缓存清理
 ├─ settings/             # 启动设置（主题等，后续迁移到 settings 表）
 ├─ files/                # AI 输出文件与会话导出，按会话存放
 ├─ knowledge/            # 知识库导入文件副本，按来源 ID 存放
@@ -1160,7 +1165,7 @@ export function activate(ctx) {
 - 单实例锁，禁止两个进程同时写同一个 `userData`。
 - 迁移前自动备份数据库；迁移失败保留备份并拒绝启动写入。
 - 数据保留：events 随会话保留；AI 输出文件默认永久保留、不自动清理；artifacts/checkpoints/logs/usage 可设保留期与磁盘配额；清理不得删除仍被引用的文件。
-- 设置中的“清理缓存”只清 `files`、`artifacts`、`logs`、MCP 运行缓存（`mcp/workdir` 内容）与浏览器 HTTP 缓存；会话、事件、检查点、工作区文件、`mcp/mcp.json` 和 `mcp/status.json` 必须保留。AI 缓存清理同样同步删除 `files` / `artifacts` 数据库记录，MCP 清理只清空目录内容、保留目录本身。
+- 设置中的“清理缓存”只清 `files`、`artifacts`、`logs`、MCP 运行缓存（`mcp/workdir` 内容）与浏览器 HTTP 缓存；会话、事件、检查点、工作区文件、`mcp/mcp.json` 和 `mcp/status.json`、`python/` 运行时必须保留。AI 缓存清理同样同步删除 `files` / `artifacts` 数据库记录，MCP 清理只清空目录内容、保留目录本身。
 - 每条 Usage 记录 provider、model、输入与输出 token、缓存读写、reasoning token、步数、状态与耗时。
 - 日志轮转，避免无限增长。
 - API Key 随本地 Provider 配置保存，不写入事件流。
@@ -1202,7 +1207,8 @@ export function activate(ctx) {
 ### 4.7.1 网络策略
 
 - 默认拒绝所有出站网络；按 provider、域名、端口显式放行。
-- 图像生成、媒体搜索、AnySearch 联网搜索与 MCP HTTP 分别配置域名白名单；`localhost` 也需要显式允许。
+- 图像生成、媒体搜索、AnySearch 联网搜索与 MCP HTTP 分别配置域名白名单；`localhost` 也需要显式允许。Python 运行时的发行资产下载与 pip 依赖安装同样受白名单约束（`api.github.com` / `github.com` / `objects.githubusercontent.com` 与 `pypi.org` / `files.pythonhosted.org`），并做 SHA256 校验与大小/超时限制。
+- 域名白名单的强制实现目前仅覆盖插件网络（`manifest.network.hosts`）；宿主自身的出站以 SSRF 校验为主，网络工具按各自配置放行。`run_python` 执行的是任意脚本，其内部网络无法在应用层白名单约束，只能靠审批与运行环境控制。
 - URL 经 DNS 解析后拒绝私网、回环、链路本地与云元数据地址；重定向每跳重新校验并限制次数。
 - 网络响应设置大小与超时上限；大文件流式写入 `files`，不整体载入内存。
 - 用户配置的 Base URL、图像模板与 MCP HTTP 地址同样做 SSRF 校验。
@@ -2018,6 +2024,7 @@ CHANGELOG.md         # 版本变更记录
 | `tool.requested` | `toolCallId`、`name`、`input` | 发起工具调用 |
 | `tool.completed` | `toolCallId`、`ok`、`output?`、`artifactId?`、`bytes?` | 工具执行完成，`output` 为完整内容；压缩产物引用记录在 `context.compacted` |
 | `tool.failed` | `toolCallId`、`error` | 工具执行失败 |
+| `tool.progress` | `toolCallId`、`phase`、`ratio?`、`detail?` | 长任务工具的阶段进度（如 Python 运行时安装）；子代理内触发时带 `parentToolCallId` 归入嵌套时间线 |
 | `checkpoint.created` | `checkpointId`、`label`、`path?`、`existed?`、`toolCallId?`、`parentToolCallId?` | 工作区写入前创建检查点 |
 | `checkpoint.restored` | `checkpointId` | 回滚到检查点 |
 | `subagent.started` | `parentToolCallId`、`agent`、`description?` | 子代理开始 |

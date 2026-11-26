@@ -69,6 +69,12 @@ export interface ChatToolCall {
   artifactId?: string;
   approvalId?: string;
   subagent?: ChatSubagent;
+  /** 长任务的阶段进度；仅用于展示 */
+  progress?: {
+    phase: 'fetch' | 'download' | 'verify' | 'extract' | 'packages' | 'done';
+    ratio?: number;
+    detail?: string;
+  };
 }
 
 /**
