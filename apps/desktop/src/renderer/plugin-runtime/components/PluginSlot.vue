@@ -60,19 +60,58 @@ const activate = async (): Promise<void> => {
   render();
 };
 
+/**
+ * 上下文签名：用显式字段拼接，只随内容变化（如 usage 更新）而变。
+ * 避免父组件每次重渲染（引用变化）或对象键顺序变化导致“假变更”而重挂载插槽。
+ */
+const contextSignature = (): string => {
+  const context = props.context;
+  const usage = context.usage;
+  return [
+    runtime.version,
+    props.location,
+    context.sessionId ?? '',
+    context.runId ?? '',
+    context.messageId ?? '',
+    context.role ?? '',
+    context.toolCallId ?? '',
+    context.approvalId ?? '',
+    context.fileId ?? '',
+    context.model ?? '',
+    context.durationMs ?? '',
+    context.contentChars ?? '',
+    usage
+      ? `${usage.inputTokens}/${usage.outputTokens}/${usage.cacheReadTokens ?? ''}/${usage.cacheWriteTokens ?? ''}/${usage.cost ?? ''}`
+      : ''
+  ].join('::');
+};
+
+let frameId: number | undefined;
+let disposed = false;
+const schedule = (): void => {
+  // 合并同一帧内的多次变化，只重挂载一次；卸载后不再触发
+  if (disposed || frameId !== undefined) return;
+  frameId = requestAnimationFrame(() => {
+    frameId = undefined;
+    if (disposed) return;
+    activate().catch(() => undefined);
+  });
+};
+
 onMounted(() => {
   activate().catch(() => undefined);
 });
 
-watch(
-  () => [runtime.version, props.context] as const,
-  () => {
-    activate().catch(() => undefined);
-  },
-  { deep: true }
-);
+watch(contextSignature, schedule);
 
-onBeforeUnmount(clear);
+onBeforeUnmount(() => {
+  disposed = true;
+  if (frameId !== undefined) {
+    cancelAnimationFrame(frameId);
+    frameId = undefined;
+  }
+  clear();
+});
 </script>
 
 <style scoped lang="less">

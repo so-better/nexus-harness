@@ -40,7 +40,7 @@
         </div>
       </section>
 
-      <section class="nh-image-form__section">
+      <section class="nh-image-form__section nh-image-form__section--grow">
         <div class="nh-image-form__section-head">
           <h4 class="nh-image-form__section-title">{{ t('settings.imageTemplate') }}</h4>
           <div class="nh-image-form__presets">
@@ -54,7 +54,9 @@
         </div>
         <div class="nh-image-form__panel">
           <div class="nh-image-form__template">
-            <MonacoEditor v-model="templateText" language="json" height="380px" />
+            <div class="nh-image-form__editor">
+              <MonacoEditor v-model="templateText" language="json" height="100%" />
+            </div>
             <p v-if="templateError" class="nh-image-form__error">{{ templateError }}</p>
             <p class="nh-image-form__hint">{{ t('settings.imageTemplateHint') }}</p>
           </div>
@@ -222,6 +224,12 @@ const submit = (): void => {
   gap: 10px;
 }
 
+/* 模板区撑满剩余高度，让编辑器自适应，避免表单与面板出现双重滚动条 */
+.nh-image-form__section--grow {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
 .nh-image-form__section-head {
   display: flex;
   align-items: center;
@@ -251,6 +259,12 @@ const submit = (): void => {
   margin-bottom: 0;
 }
 
+/* 模板区的面板撑满剩余高度（置于 .nh-image-form__panel 之后，满足选择器顺序要求） */
+.nh-image-form__section--grow > .nh-image-form__panel {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
 .nh-image-form__grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -259,9 +273,23 @@ const submit = (): void => {
 
 .nh-image-form__template {
   display: flex;
+  min-height: 0;
   width: 100%;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 10px;
+}
+
+/* 编辑器容器撑满模板区剩余高度；纵向 flex 让编辑器宽度自然拉伸，高度自适应 */
+.nh-image-form__editor {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.nh-image-form__editor :deep(.nh-monaco-editor) {
+  width: 100%;
 }
 
 .nh-image-form__presets {

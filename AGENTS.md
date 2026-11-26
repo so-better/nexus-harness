@@ -1006,9 +1006,9 @@ interface SlotContext {
   approvalId?: string;
   fileId?: string;
   usage?: UsageSummary;
-  /** 本条助手消息的模型生成耗时（毫秒，不含工具执行与上下文准备） */
+  /** 本条助手消息的模型生成耗时（毫秒，不含工具执行与上下文准备）；流式期间不提供 */
   durationMs?: number;
-  /** 本条助手消息正文的字符数（Unicode 码点） */
+  /** 本条助手消息正文的字符数（Unicode 码点）；流式期间不提供 */
   contentChars?: number;
   model?: string;
 }

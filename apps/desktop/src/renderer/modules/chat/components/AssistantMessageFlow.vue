@@ -281,7 +281,8 @@ const footerContext = computed<SlotContext>(() => ({
   runId: props.message.runId,
   role: 'assistant',
   usage: props.message.usage,
-  ...(props.hideStats || props.message.error
+  // 流式期间不注入耗时/字数：这些值尚未定稿且每帧变化，会令插槽频繁重挂载
+  ...(props.hideStats || props.message.error || props.message.streaming
     ? {}
     : { durationMs: props.message.durationMs, contentChars: props.message.contentChars })
 }));

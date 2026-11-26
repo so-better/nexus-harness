@@ -52,9 +52,9 @@ export interface PluginSlotContext {
   approvalId?: string;
   fileId?: string;
   usage?: PluginUsageSummary;
-  /** 本条助手消息的生成耗时（毫秒） */
+  /** 本条助手消息的生成耗时（毫秒）；流式期间不提供 */
   durationMs?: number;
-  /** 本条助手消息正文的字符数（Unicode 码点） */
+  /** 本条助手消息正文的字符数（Unicode 码点）；流式期间不提供 */
   contentChars?: number;
   model?: string;
 }

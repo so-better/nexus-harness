@@ -16,7 +16,7 @@ metadata:
       usage,
       用户插件
     ]
-  version: 1.3.33
+  version: 1.3.34
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -236,7 +236,7 @@ export function activate(ctx) {
 
 插槽挂载在 Shadow DOM 中，插件只负责容器内部内容，不得改变宿主布局、遮挡宿主操作或劫持点击。
 
-插槽上下文只读，包含 `location`、`sessionId`、`runId`、`messageId`、`role`、`usage` 等；AI 消息插槽额外提供 `durationMs`（本条消息的模型生成耗时，毫秒，不含工具执行与上下文准备）与 `contentChars`（正文字符数，Unicode 码点），可用于展示耗时与字数。错误气泡与子代理消息不提供这两项。
+插槽上下文只读，包含 `location`、`sessionId`、`runId`、`messageId`、`role`、`usage` 等；AI 消息插槽在消息**完成后**额外提供 `durationMs`（本条消息的模型生成耗时，毫秒，不含工具执行与上下文准备）与 `contentChars`（正文字符数，Unicode 码点），可用于展示耗时与字数；**流式生成期间不提供这两项**（值未定稿且每帧变化），错误气泡与子代理消息也不提供。
 
 ## 主进程 ctx
 
