@@ -16,7 +16,7 @@ metadata:
       usage,
       用户插件
     ]
-  version: 1.3.32
+  version: 1.3.33
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -259,7 +259,7 @@ interface MainPluginContext {
 - `ctx.commands.registerProvider` 注册的快速选择项仅在插件**已激活**时出现在命令面板；需要配置相应的 `activationEvents`（如 `onSlot`/`onCommand`/`onEvent`）。
 
 - 声明 `views` 贡献点并申请 `ui.panel`；`ctx.views.register` 挂载视图，`ctx.views.open(id)` 打开宿主大尺寸视图弹窗。视图的入口和展示位置由插件自行设计，宿主不自动列出。
-- 需要分析数据时申请 `usage:read`，调用 `ctx.usage.getStats({ sessionId?, from?, to?, bucket? })`；返回总量（含 `cacheReadTokens` / `cacheWriteTokens` 提示缓存读写的可选字段，`inputTokens` 已含缓存读，缓存命中率可用 `cacheReadTokens / inputTokens` 估算）、时间序列、会话、模型和 Provider 分布，不需要读取数据库。按 `sessionId` 查询时额外返回可选 `context`（`contextWindow`、`maxOutputTokens`、`contextTokens`，取最近一次主对话调用的输入 token 近似当前上下文占用），用于展示上下文窗口占用；模型未解析时该字段缺省。
+- 需要分析数据时申请 `usage:read`，调用 `ctx.usage.getStats({ sessionId?, from?, to?, bucket? })`；返回总量（含 `cacheReadTokens` / `cacheWriteTokens` 提示缓存读写的可选字段，`inputTokens` 已含缓存读，缓存命中率可用 `cacheReadTokens / inputTokens` 估算）、时间序列、会话、模型和 Provider 分布，不需要读取数据库。按 `sessionId` 查询时额外返回可选 `context`（`contextWindow`、`maxOutputTokens`、`contextTokens`，取最近一次主对话调用的输入 token 近似当前上下文占用，并可带 `breakdown`：`systemTokens` / `toolsTokens` / `historyTokens` 三个估算占比，展示时按真实「已用」归一），用于展示上下文窗口占用与构成；模型未解析时该字段缺省。
 - 视图与命令可按需激活；视图打开失败应给出可诊断错误，不要静默失败。
 
 ## 事件

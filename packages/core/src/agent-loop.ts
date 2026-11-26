@@ -15,7 +15,7 @@ import type { EventPayloadMap, NexusEventType } from '@nexus/shared';
 import type { EventBus } from './event-bus';
 import type { PermissionGateway, PermissionLevel } from './permissions';
 import { createNexusEvent } from './event-factory';
-import { ContextLimitError, type ContextPreparer } from './context';
+import { ContextLimitError, type ContextBreakdown, type ContextPreparer } from './context';
 
 export interface ToolExecutionResult {
   ok: boolean;
@@ -111,6 +111,8 @@ export class AgentLoop {
   private readonly approvalStatuses = new Map<string, 'approved' | 'rejected'>();
   /** 上一次模型调用返回的真实输入 token，用于下一步校准上下文估算 */
   private lastInputTokens: number | undefined;
+  /** 本步上下文构成估算，随 usage.recorded 上报，供 UI/插件展示占比 */
+  private lastBreakdown: ContextBreakdown | undefined;
   /** 上一次工具调用的签名、结果与连续次数，用于无进展检测 */
   private lastCallSignature: string | undefined;
   private lastCallOutcome: string | undefined;
@@ -390,6 +392,7 @@ export class AgentLoop {
     }
 
     this.messages = prepared.messages;
+    this.lastBreakdown = prepared.breakdown;
   }
 
   /**
@@ -498,7 +501,14 @@ export class AgentLoop {
                 ...(event.usage.cacheReadTokens === undefined
                   ? {}
                   : { cacheReadTokens: event.usage.cacheReadTokens }),
-                ...(event.usage.cost === undefined ? {} : { cost: event.usage.cost })
+                ...(event.usage.cost === undefined ? {} : { cost: event.usage.cost }),
+                ...(this.lastBreakdown
+                  ? {
+                      systemTokens: this.lastBreakdown.systemTokens,
+                      toolsTokens: this.lastBreakdown.toolsTokens,
+                      historyTokens: this.lastBreakdown.historyTokens
+                    }
+                  : {})
               });
             }
             break;

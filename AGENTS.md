@@ -1050,7 +1050,7 @@ interface SlotContext {
 
 - 通过 `messageSlots` 在会话标题栏和每条 AI 回复尾部分别显示会话与消息 token 用量；耗时（秒）与字符数通过插件设置 `showDuration` / `showChars` 控制，默认关闭。
 - 通过只读 `SlotContext.usage` 读取宿主投影的用量，不自行累计跨会话总量。
-- 通过 `usage:read` 和 `ctx.usage.getStats` 读取会话/全局统计（按 sessionId 查询附带上下文窗口与当前占用），通过 `views` 与 `ctx.views.open` 打开看板；看板展示总量、缓存读/写与缓存命中率，会话范围额外展示上下文窗口占用区块。
+- 通过 `usage:read` 和 `ctx.usage.getStats` 读取会话/全局统计（按 sessionId 查询附带上下文窗口、占用与构成估算），通过 `views` 与 `ctx.views.open` 打开看板；看板展示总量、缓存读/写与缓存命中率，会话范围额外展示上下文窗口占用与构成区块。
 - 通过 `events:usage.recorded` 与事件元数据在看板打开时刷新。
 - 视图入口由插件自己提供，宿主不在扩展弹窗自动列出。
 - 正确处理启用、禁用、热重载。
@@ -2038,7 +2038,7 @@ CHANGELOG.md         # 版本变更记录
 | `terminal.opened` | `terminalId`、`sessionId`、`cwd`、`pid`、`shell` | 用户或 AI 创建内置终端；AI 命令保留标签但不主动打开面板 |
 | `terminal.closed` | `terminalId`、`sessionId` | 关闭内置终端 |
 | `terminal.started` | `terminalId`、`command`、`cwd`、`pid` | AI 命令创建内置终端 |
-| `usage.recorded` | `messageId?`、`provider`、`model`、`inputTokens`、`outputTokens`、`cacheWriteTokens?`、`cacheReadTokens?`、`cost?` | 模型调用结束 |
+| `usage.recorded` | `messageId?`、`provider`、`model`、`inputTokens`、`outputTokens`、`cacheWriteTokens?`、`cacheReadTokens?`、`cost?`、`systemTokens?`、`toolsTokens?`、`historyTokens?` | 模型调用结束（后三个为上下文构成估算） |
 | `file.created` | `fileId`、`name`、`mime`、`bytes`、`source`、`parentToolCallId?` | 生成或下载的文件保存到 `files` |
 | `context.compacted` | `beforeTokens`、`afterTokens`、`strategy`、`summaryRef?`、`snapshotRef?`、`artifactIds?` | 上下文自动或手动压缩 |
 | `skill.activated` | `skillId`、`trigger` | Skill 被显式或自动激活 |

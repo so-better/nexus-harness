@@ -47,6 +47,10 @@ const labels = () =>
         contextRemaining: 'Remaining',
         contextWindow: 'Window',
         reservedOutput: 'Reserved output',
+        breakdown: 'Breakdown (est.)',
+        breakdownSystem: 'System prompt',
+        breakdownTools: 'Tool schemas',
+        breakdownHistory: 'History',
         byModel: 'By model',
         byProvider: 'By provider',
         sessions: 'Sessions',
@@ -75,6 +79,10 @@ const labels = () =>
         contextRemaining: '剩余',
         contextWindow: '窗口',
         reservedOutput: '预留输出',
+        breakdown: '构成（估算）',
+        breakdownSystem: '系统提示',
+        breakdownTools: '工具 schema',
+        breakdownHistory: '历史消息',
         byModel: '按模型',
         byProvider: '按 Provider',
         sessions: '会话排行',
@@ -554,6 +562,37 @@ const buildContext = (context, text) => {
     metrics.appendChild(item);
   }
   panel.append(bar, metrics);
+
+  // 上下文构成：系统提示 / 工具 schema / 历史消息；按真实「已用」归一，三项之和 = 已用
+  const breakdown = context.breakdown;
+  const breakdownTotal = breakdown
+    ? breakdown.systemTokens + breakdown.toolsTokens + breakdown.historyTokens
+    : 0;
+  if (breakdown && breakdownTotal > 0) {
+    const scale = used > 0 ? used / breakdownTotal : 1;
+    const wrap = create('div', 'nh-token-usage__breakdown');
+    wrap.appendChild(create('span', 'nh-token-usage__breakdown-title', text.breakdown));
+    for (const [label, raw] of [
+      [text.breakdownSystem, breakdown.systemTokens],
+      [text.breakdownTools, breakdown.toolsTokens],
+      [text.breakdownHistory, breakdown.historyTokens]
+    ]) {
+      const percent = (raw / breakdownTotal) * 100;
+      const row = create('div', 'nh-token-usage__breakdown-row');
+      const head = create('div', 'nh-token-usage__breakdown-head');
+      head.append(
+        create('span', '', label),
+        create('strong', '', `${formatCompact(Math.round(raw * scale))} · ${Math.round(percent)}%`)
+      );
+      const track = create('div', 'nh-token-usage__breakdown-track');
+      const fill = create('span', 'nh-token-usage__breakdown-fill');
+      fill.style.width = `${Math.max(2, percent)}%`;
+      track.appendChild(fill);
+      row.append(head, track);
+      wrap.appendChild(row);
+    }
+    panel.appendChild(wrap);
+  }
   return panel;
 };
 
@@ -710,6 +749,13 @@ const injectStyles = (element) => {
     .nh-token-usage__context-metric { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
     .nh-token-usage__context-metric span { color: var(--nh-color-text-secondary); font-size: 11px; }
     .nh-token-usage__context-metric strong { font-family: var(--nh-font-mono); font-size: 16px; font-weight: 600; letter-spacing: .03em; font-variant-numeric: tabular-nums; }
+    .nh-token-usage__breakdown { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+    .nh-token-usage__breakdown-title { color: var(--nh-color-text-secondary); font-size: 11px; }
+    .nh-token-usage__breakdown-row { display: flex; flex-direction: column; gap: 4px; }
+    .nh-token-usage__breakdown-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: var(--nh-color-text-secondary); font-size: 11px; }
+    .nh-token-usage__breakdown-head strong { color: var(--nh-color-text-primary); font-family: var(--nh-font-mono); font-weight: 600; letter-spacing: .03em; font-variant-numeric: tabular-nums; }
+    .nh-token-usage__breakdown-track { height: 5px; overflow: hidden; border-radius: 4px; background: color-mix(in srgb, var(--nh-color-border) 45%, transparent); }
+    .nh-token-usage__breakdown-fill { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--nh-color-accent), var(--nh-color-idle)); transition: width 200ms ease; }
     .nh-token-usage__grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(260px, .8fr); gap: 18px; }
     .nh-token-usage__grid-stack { display: flex; min-width: 0; flex-direction: column; gap: 18px; }
     .nh-token-usage__panel {

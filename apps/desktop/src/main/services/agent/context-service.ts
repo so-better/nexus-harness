@@ -6,6 +6,7 @@ import {
   ContextLimitError,
   createContextBudget,
   estimateMessagesTokens,
+  type ContextBreakdown,
   type ContextBudget,
   type ContextPreparation
 } from '@nexus/core';
@@ -117,6 +118,28 @@ export class AgentContextService {
   }
 
   /**
+   * 估算上下文构成：系统消息、工具 schema 与历史消息各自的 token（含校准系数），仅用于展示。
+   */
+  private buildBreakdown(
+    messages: readonly ChatMessage[],
+    tools?: readonly ToolSchema[]
+  ): ContextBreakdown {
+    const systemTokens = Math.round(
+      estimateMessagesTokens(messages.filter((message) => message.role === 'system')) *
+        this.calibration
+    );
+    const toolsTokens = tools?.length
+      ? Math.round(estimateMessagesTokens([], tools) * this.calibration)
+      : 0;
+    const total = this.estimateTokens(messages, tools);
+    return {
+      systemTokens,
+      toolsTokens,
+      historyTokens: Math.max(0, total - systemTokens - toolsTokens)
+    };
+  }
+
+  /**
    * 在模型调用前压缩消息；无法压入预算时抛出 ContextLimitError。
    * actualInputTokens 为上一次真实调用的输入 token，用于校准估算。
    */
@@ -130,7 +153,12 @@ export class AgentContextService {
     const beforeTokens = this.estimateTokens(messages, tools);
     if (beforeTokens <= this.budget.compactAt) {
       this.lastSentEstimate = beforeTokens;
-      return { messages, beforeTokens, afterTokens: beforeTokens };
+      return {
+        messages,
+        beforeTokens,
+        afterTokens: beforeTokens,
+        breakdown: this.buildBreakdown(messages, tools)
+      };
     }
 
     const strategies: string[] = [];
@@ -215,6 +243,7 @@ export class AgentContextService {
       compacted: strategies.length > 0,
       beforeTokens,
       afterTokens,
+      breakdown: this.buildBreakdown(working, tools),
       ...(strategies.length ? { strategies } : {}),
       ...(summaryRef === undefined ? {} : { summaryRef }),
       ...(snapshotRef === undefined ? {} : { snapshotRef }),

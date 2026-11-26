@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDatabase } from '../storage/database';
-import { getUsageStats, getSessionContextTokens } from './usage-stats-service';
+import { getUsageStats, getSessionContextSnapshot } from './usage-stats-service';
 
 const DAY = 24 * 60 * 60 * 1000;
 const START = Date.UTC(2026, 0, 1, 12);
@@ -142,7 +142,7 @@ describe('getUsageStats', () => {
   });
 });
 
-describe('getSessionContextTokens', () => {
+describe('getSessionContextSnapshot', () => {
   let directory = '';
   let db: ReturnType<typeof createDatabase>;
 
@@ -155,6 +155,7 @@ describe('getSessionContextTokens', () => {
     inputTokens: number;
     messageId?: string;
     parentToolCallId?: string;
+    breakdown?: { systemTokens: number; toolsTokens: number; historyTokens: number };
   }): void => {
     db.prepare(
       `INSERT INTO events (id, session_id, run_id, seq, type, version, ts, payload, parent_tool_call_id)
@@ -172,7 +173,8 @@ describe('getSessionContextTokens', () => {
         model: 'model-a',
         inputTokens: input.inputTokens,
         outputTokens: 1,
-        ...(input.messageId ? { messageId: input.messageId } : {})
+        ...(input.messageId ? { messageId: input.messageId } : {}),
+        ...(input.breakdown ?? {})
       }),
       input.parentToolCallId ?? null
     );
@@ -195,7 +197,7 @@ describe('getSessionContextTokens', () => {
     insertUsage({ id: 'e1', seq: 1, inputTokens: 100, messageId: 'msg-1' });
     insertUsage({ id: 'e2', seq: 2, inputTokens: 250, messageId: 'msg-2' });
 
-    expect(getSessionContextTokens(db, 'session-ctx')).toBe(250);
+    expect(getSessionContextSnapshot(db, 'session-ctx').contextTokens).toBe(250);
   });
 
   it('ignores subagent events and auxiliary calls without a messageId', () => {
@@ -211,12 +213,29 @@ describe('getSessionContextTokens', () => {
     // 辅助调用：无 messageId
     insertUsage({ id: 'e3', seq: 3, inputTokens: 777 });
 
-    expect(getSessionContextTokens(db, 'session-ctx')).toBe(100);
+    expect(getSessionContextSnapshot(db, 'session-ctx').contextTokens).toBe(100);
   });
 
   it('returns 0 when there is no main-conversation usage', () => {
     insertUsage({ id: 'e1', seq: 1, inputTokens: 500 });
 
-    expect(getSessionContextTokens(db, 'session-ctx')).toBe(0);
+    expect(getSessionContextSnapshot(db, 'session-ctx').contextTokens).toBe(0);
+  });
+
+  it('returns the context breakdown when present', () => {
+    insertUsage({
+      id: 'e1',
+      seq: 1,
+      inputTokens: 1000,
+      messageId: 'msg-1',
+      breakdown: { systemTokens: 100, toolsTokens: 700, historyTokens: 200 }
+    });
+
+    expect(getSessionContextSnapshot(db, 'session-ctx')).toEqual({
+      contextTokens: 1000,
+      systemTokens: 100,
+      toolsTokens: 700,
+      historyTokens: 200
+    });
   });
 });

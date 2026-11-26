@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => unknown>(),
   stats: vi.fn(),
-  contextTokens: vi.fn(() => 0),
+  contextTokens: vi.fn((): Record<string, number> => ({ contextTokens: 0 })),
   getSession: vi.fn((): unknown => undefined),
   listProviders: vi.fn(async (): Promise<unknown[]> => [])
 }));
@@ -25,7 +25,7 @@ vi.mock('../services/storage/database', () => ({
 
 vi.mock('../services/usage/usage-stats-service', () => ({
   getUsageStats: state.stats,
-  getSessionContextTokens: state.contextTokens
+  getSessionContextSnapshot: state.contextTokens
 }));
 
 vi.mock('../services/session/event-store', () => ({
@@ -62,7 +62,7 @@ describe('usage IPC', () => {
     state.handlers.clear();
     state.stats.mockReset();
     state.contextTokens.mockReset();
-    state.contextTokens.mockReturnValue(0);
+    state.contextTokens.mockReturnValue({ contextTokens: 0 });
     state.getSession.mockReset();
     state.getSession.mockReturnValue(undefined);
     state.listProviders.mockReset();
@@ -101,15 +101,30 @@ describe('usage IPC', () => {
         models: [{ id: 'model-1', contextWindow: 128_000, maxOutputTokens: 8_192 }]
       }
     ]);
-    state.contextTokens.mockReturnValue(42);
+    state.contextTokens.mockReturnValue({
+      contextTokens: 42,
+      systemTokens: 5,
+      toolsTokens: 30,
+      historyTokens: 7
+    });
 
     const result = (await handler()({}, { sessionId: 'session-1' })) as {
       ok: boolean;
-      data: { context?: { contextTokens: number; contextWindow: number } };
+      data: {
+        context?: {
+          contextTokens: number;
+          contextWindow: number;
+          breakdown?: { systemTokens: number; toolsTokens: number; historyTokens: number };
+        };
+      };
     };
 
     expect(result.ok).toBe(true);
-    expect(result.data.context).toMatchObject({ contextTokens: 42, contextWindow: 128_000 });
+    expect(result.data.context).toMatchObject({
+      contextTokens: 42,
+      contextWindow: 128_000,
+      breakdown: { systemTokens: 5, toolsTokens: 30, historyTokens: 7 }
+    });
   });
 
   it('still returns stats when context resolution fails', async () => {

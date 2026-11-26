@@ -59,13 +59,29 @@ const totalsFrom = (row: AggregateRow | undefined): UsageTotals => {
 };
 
 /**
- * 读取会话最近一次主对话模型调用的输入 token 数，近似表示当前上下文占用。
+ * 会话上下文快照：最近一次主对话模型调用的输入 token 与构成估算。
  * 仅统计主对话事件：排除子代理事件（parent_tool_call_id 非空）与无 messageId 的辅助调用。
  */
-export const getSessionContextTokens = (db: DatabaseSync, sessionId: string): number => {
+export interface SessionContextSnapshot {
+  contextTokens: number;
+  systemTokens?: number;
+  toolsTokens?: number;
+  historyTokens?: number;
+}
+
+/**
+ * 读取会话最近一次主对话调用的上下文快照。
+ */
+export const getSessionContextSnapshot = (
+  db: DatabaseSync,
+  sessionId: string
+): SessionContextSnapshot => {
   const row = db
     .prepare(
-      `SELECT CAST(json_extract(payload, '$.inputTokens') AS INTEGER) AS inputTokens
+      `SELECT json_extract(payload, '$.inputTokens') AS inputTokens,
+              json_extract(payload, '$.systemTokens') AS systemTokens,
+              json_extract(payload, '$.toolsTokens') AS toolsTokens,
+              json_extract(payload, '$.historyTokens') AS historyTokens
        FROM events
        WHERE type = 'usage.recorded'
          AND session_id = ?
@@ -74,8 +90,20 @@ export const getSessionContextTokens = (db: DatabaseSync, sessionId: string): nu
        ORDER BY seq DESC
        LIMIT 1`
     )
-    .get(sessionId) as { inputTokens: number | null } | undefined;
-  return toNumber(row?.inputTokens);
+    .get(sessionId) as
+    | {
+        inputTokens: number | null;
+        systemTokens: number | null;
+        toolsTokens: number | null;
+        historyTokens: number | null;
+      }
+    | undefined;
+  return {
+    contextTokens: toNumber(row?.inputTokens),
+    ...(row?.systemTokens == null ? {} : { systemTokens: toNumber(row.systemTokens) }),
+    ...(row?.toolsTokens == null ? {} : { toolsTokens: toNumber(row.toolsTokens) }),
+    ...(row?.historyTokens == null ? {} : { historyTokens: toNumber(row.historyTokens) })
+  };
 };
 
 /**

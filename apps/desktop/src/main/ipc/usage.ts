@@ -9,7 +9,7 @@ import { fail, ok, type Result } from '@shared/ipc/result';
 import { usageStatsInputSchema, type UsageContext, type UsageStats } from '@shared/usage';
 import type { ProviderPublic } from '@shared/ipc/contracts';
 import { getDatabase } from '../services/storage/database';
-import { getSessionContextTokens, getUsageStats } from '../services/usage/usage-stats-service';
+import { getSessionContextSnapshot, getUsageStats } from '../services/usage/usage-stats-service';
 import { EventStore } from '../services/session/event-store';
 import { createSessionService } from '../services/session/create-session-service';
 import { providerStore } from '../services/provider/provider-store';
@@ -36,12 +36,22 @@ const resolveContext = async (
   const model = provider.models.find((item) => item.id === resolvedModelId);
   if (!model) return undefined;
 
+  const snapshot = getSessionContextSnapshot(db, sessionId);
   return {
     providerId: provider.id,
     modelId: model.id,
     contextWindow: model.contextWindow,
     maxOutputTokens: model.maxOutputTokens,
-    contextTokens: getSessionContextTokens(db, sessionId)
+    contextTokens: snapshot.contextTokens,
+    ...(snapshot.systemTokens === undefined
+      ? {}
+      : {
+          breakdown: {
+            systemTokens: snapshot.systemTokens,
+            toolsTokens: snapshot.toolsTokens ?? 0,
+            historyTokens: snapshot.historyTokens ?? 0
+          }
+        })
   };
 };
 

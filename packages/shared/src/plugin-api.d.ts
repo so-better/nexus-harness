@@ -138,6 +138,12 @@ export interface PluginUsageContext {
   maxOutputTokens: number;
   /** 当前上下文占用（最近一次主对话调用的输入 token） */
   contextTokens: number;
+  /** 上下文构成估算：系统提示 / 工具 schema / 历史消息 token */
+  breakdown?: {
+    systemTokens: number;
+    toolsTokens: number;
+    historyTokens: number;
+  };
 }
 
 export interface PluginUsageStats {

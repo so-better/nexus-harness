@@ -32,6 +32,15 @@ export interface ContextBudget {
 }
 
 /**
+ * 上下文构成估算：系统提示、工具 schema 与历史消息各自占比，仅用于展示。
+ */
+export interface ContextBreakdown {
+  systemTokens: number;
+  toolsTokens: number;
+  historyTokens: number;
+}
+
+/**
  * 上下文准备结果；由宿主实现压缩与产物落盘。
  */
 export interface ContextPreparation {
@@ -44,6 +53,8 @@ export interface ContextPreparation {
   snapshotRef?: string;
   artifactIds?: string[];
   usage?: UsageSummary;
+  /** 上下文构成估算，供 UI/插件展示占比 */
+  breakdown?: ContextBreakdown;
 }
 
 /**

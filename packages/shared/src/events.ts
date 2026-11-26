@@ -242,7 +242,11 @@ export const eventPayloadSchemas = {
     outputTokens: z.number().nonnegative(),
     cacheWriteTokens: z.number().nonnegative().optional(),
     cacheReadTokens: z.number().nonnegative().optional(),
-    cost: z.number().nonnegative().optional()
+    cost: z.number().nonnegative().optional(),
+    /** 上下文构成估算：系统提示、工具 schema 与历史消息 token 占比（仅展示） */
+    systemTokens: z.number().nonnegative().optional(),
+    toolsTokens: z.number().nonnegative().optional(),
+    historyTokens: z.number().nonnegative().optional()
   }),
   'file.created': z.object({
     fileId: z.string(),
@@ -297,5 +301,3 @@ export interface NexusEvent<T extends NexusEventType = NexusEventType> {
   /** 子代理事件所属的父 task/工具调用；主会话投影会跳过这些事件 */
   parentToolCallId?: string;
 }
-
-
