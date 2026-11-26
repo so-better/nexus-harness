@@ -147,10 +147,11 @@ body:has(.n-modal-mask) .nh-titlebar {
  * 全局卡片式模态框：用独立表面色和描边与主界面拉开层级。
  * 整体最高 95vh；主体区自适应剩余高度（总高 − header − footer）并自身滚动，
  * 标题与底部操作区保持可见。
+ * 注意：不能给卡片本身加 overflow，Naive UI 会把弹窗内的 Select/Popconfirm/
+ * Dropdown 等浮层 teleport 进 .n-modal 节点，卡片裁剪会导致浮层显示不全。
  */
 .n-modal.n-card {
   display: flex;
-  overflow: hidden;
   max-height: 95vh;
   flex-direction: column;
   background: var(--nh-surface-overlay);

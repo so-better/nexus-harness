@@ -1,14 +1,6 @@
 <template>
-  <NModal
-    :show="visible"
-    preset="card"
-    :title="openedView?.title ?? ''"
-    :bordered="false"
-    class="nh-plugin-view-modal"
-    style="width: min(1120px, calc(100vw - 48px))"
-    @update:show="handleShowChange"
-    @after-leave="handleAfterLeave"
-  >
+  <NModal :show="visible" preset="card" :title="openedView?.title ?? ''" :bordered="false" class="nh-plugin-view-modal"
+    style="width: min(1120px, calc(100vw - 48px))" @update:show="handleShowChange" @after-leave="handleAfterLeave">
     <PluginViewHost v-if="openedView" :view="openedView" />
   </NModal>
 </template>
@@ -52,15 +44,16 @@ const handleAfterLeave = (): void => {
 
 <style scoped lang="less">
 .nh-plugin-view-modal :deep(.n-card) {
-  overflow: hidden;
   border: 1px solid var(--nh-border-subtle);
   border-radius: 14px;
   box-shadow: var(--nh-shadow-float);
 }
 
+// 卡片不裁剪（否则插件视图内的浮层会被截断），由 header/content 自身圆角贴合卡片。
 .nh-plugin-view-modal :deep(.n-card-header) {
   padding: 18px 24px;
   border-bottom: 1px solid var(--nh-border-subtle);
+  border-radius: 14px 14px 0 0;
   background: var(--nh-surface-overlay);
 }
 
@@ -73,6 +66,7 @@ const handleAfterLeave = (): void => {
 .nh-plugin-view-modal :deep(.n-card__content) {
   max-height: min(720px, calc(100vh - 180px));
   padding: 18px 24px 24px;
+  border-radius: 0 0 14px 14px;
   overflow: auto;
   background: var(--nh-surface-overlay);
 }
