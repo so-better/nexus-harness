@@ -529,7 +529,7 @@ interface ProviderCapabilities {
 
 系统提示由宿主统一组装：身份与安全约束、工具使用规则、工作区规则与当前任务；提供商适配层只做格式转换，不允许各提供商各自实现一套。
 
-模型配置由结构化字段（`contextWindow`、`maxOutputTokens`、`reasoningPassback`、`reasoningField`、可选 `role` / `endpoint`）与一个额外请求参数 JSON 组成。`contextWindow` 用于上下文预算与压缩；`maxOutputTokens` 作为 `max_tokens` 下发并用于输出预算；`reasoningPassback` 是模型级开关，控制携带 tools 时是否回传历史思考内容（默认关闭）；`reasoningField` 指定 OpenAI 兼容端点回传时的消息字段名（默认 `reasoning_content`），Anthropic 兼容端点固定使用 `thinking` content block，并原样回传带 `signature` 的 thinking block（签名来自流式 `signature_delta`，随 `message.completed` 持久化并在会话历史中恢复）。额外参数 JSON **原样并入请求体**透传给模型，宿主不解析或改写 `thinking` / `reasoning_effort` 等具体字段。新建模型默认 `contextWindow = 128K`，不区分厂商，由用户按实际网关调整。透传参数不得覆盖 `model`、`messages`、`stream`、`tools`、`max_tokens` 等协议保留字段，也不得写入密钥。
+模型配置由结构化字段（`contextWindow`、`maxOutputTokens`、`reasoningPassback`、`reasoningField`、可选 `role` / `endpoint`）与一个额外请求参数 JSON 组成。`contextWindow` 用于上下文预算与压缩；`maxOutputTokens` 作为 `max_tokens` 下发并用于输出预算；`reasoningPassback` 是模型级开关，控制携带 tools 时是否回传历史思考内容（默认关闭）；`reasoningField` 指定 OpenAI 兼容端点回传时的消息字段名（默认 `reasoning_content`），Anthropic 兼容端点固定使用 `thinking` content block，并原样回传带 `signature` 的 thinking block（签名来自流式 `signature_delta`，随 `message.completed` 持久化并在会话历史中恢复）。额外参数 JSON **原样并入请求体**透传给模型，宿主不解析或改写 `thinking` / `reasoning_effort` 等具体字段。新建模型默认 `contextWindow = 1M`、`maxOutputTokens = 32K`，不区分厂商，由用户按实际网关调整。透传参数不得覆盖 `model`、`messages`、`stream`、`tools`、`max_tokens` 等协议保留字段，也不得写入密钥。
 
 系统提示保持稳定的静态前缀；平台、时间、全局记忆等动态上下文追加到最后一条用户消息（`<environment>` 块），避免破坏 prompt cache。用户自定义提示词可追加，但与默认系统提示冲突时以默认提示为准；场景模式提示词按需追加。
 

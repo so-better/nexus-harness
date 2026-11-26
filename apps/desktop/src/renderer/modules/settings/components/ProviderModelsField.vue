@@ -235,9 +235,10 @@ const emit = defineEmits<{
 }>();
 
 /**
- * 新建模型的默认上下文窗口，统一 128K（不同网关自行调整）。
+ * 新建模型的默认上下文窗口与输出预算（不同网关自行调整）。
  */
-const DEFAULT_CONTEXT_WINDOW = 128_000;
+const DEFAULT_CONTEXT_WINDOW = 1_000_000;
+const DEFAULT_MAX_OUTPUT_TOKENS = 32_768;
 
 /**
  * 已获取模型与已保存模型的合集，保持配置存在。
@@ -249,7 +250,7 @@ const rows = computed<ProviderModel[]>(() => {
       props.models.find((model) => model.id === id) ?? {
         id,
         contextWindow: DEFAULT_CONTEXT_WINDOW,
-        maxOutputTokens: 16_384
+        maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS
       }
   );
 });
@@ -385,7 +386,7 @@ const addManualModel = (): void => {
     id,
     role: 'chat',
     contextWindow: DEFAULT_CONTEXT_WINDOW,
-    maxOutputTokens: 16_384
+    maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS
   };
   emit('update:models', [...props.models, model]);
   if (!props.defaultModelId) emit('update:defaultModelId', id);
