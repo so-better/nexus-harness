@@ -1,0 +1,11 @@
+<svg width="460" height="500" viewBox="280 260 460 500" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Nexus">
+  <defs>
+    <linearGradient id="nexus-mark" x1="332" y1="312" x2="692" y2="712" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#C9DEFF"/>
+    </linearGradient>
+  </defs>
+  <path d="M332 712V312L692 712V312" stroke="url(#nexus-mark)" stroke-width="92" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="332" cy="312" r="20" fill="#A9CBFF"/>
+  <circle cx="692" cy="712" r="20" fill="#A9CBFF"/>
+</svg>
