@@ -171,6 +171,65 @@ body:has(.n-modal-mask) .nh-titlebar {
   overflow-y: auto;
 }
 
+/**
+ * 设置弹窗：主体仍可滚动（高度不超则不出现滚动条）；标签页与内部区域用 flex 撑满剩余高度，
+ * 由列表自身滚动，标签栏与列表头保持固定。
+ */
+.n-modal.n-card.nh-settings > .n-card-content {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.nh-settings .n-tabs {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.nh-settings .n-tab-pane {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+/**
+ * 扩展弹窗：与设置弹窗一致，标签栏固定、面板内部滚动。
+ */
+.n-modal.n-card.nh-extensions > .n-card-content {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.nh-extensions .n-tabs {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.nh-extensions .n-tab-pane {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.nh-settings .n-tab-pane > .nh-settings__hint {
+  flex: none;
+}
+
+/* 各 tab 的面板撑满剩余高度并自身滚动，标签栏固定、不会随内容滚走 */
+.nh-settings .n-tab-pane > :not(.nh-settings__hint) {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
 .n-popover:not(.n-tooltip, .n-popconfirm),
 .n-dropdown-menu {
   background: var(--nh-surface-popover);

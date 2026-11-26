@@ -184,14 +184,21 @@ const submit = (): void => {
 <style scoped lang="less">
 .nh-image-form {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 20px;
 }
 
 .nh-image-form__form {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 20px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .nh-image-form__header h3 {

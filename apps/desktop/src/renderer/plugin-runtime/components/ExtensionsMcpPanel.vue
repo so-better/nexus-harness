@@ -106,7 +106,7 @@
       </div>
     </section>
 
-    <section v-if="serverEntries.length" class="nh-mcp__card">
+    <section v-if="serverEntries.length" class="nh-mcp__card nh-mcp__server-card">
       <header class="nh-mcp__card-head">
         <span>{{ t('mcp.servers') }}</span>
         <span class="nh-mcp__count">{{ enabledCount }} / {{ serverEntries.length }}</span>
@@ -333,6 +333,8 @@ onMounted(async () => {
 <style scoped lang="less">
 .nh-mcp {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 14px;
 }
@@ -377,6 +379,14 @@ onMounted(async () => {
   background: var(--nh-color-bg-base);
 }
 
+/* server 卡片撑满剩余高度，列表自身滚动；JSON 编辑器卡片保持自身滚动 */
+.nh-mcp__server-card {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
 .nh-mcp__card-head {
   display: flex;
   align-items: center;
@@ -398,7 +408,10 @@ onMounted(async () => {
 
 .nh-mcp__server-list {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
+  overflow-y: auto;
 }
 
 .nh-mcp__server {

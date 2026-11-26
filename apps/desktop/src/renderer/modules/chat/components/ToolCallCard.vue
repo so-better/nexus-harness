@@ -126,11 +126,14 @@
               <NButton
                 v-for="item in transcriptRefs"
                 :key="item.ref"
-                text
-                size="tiny"
+                size="small"
+                secondary
                 class="nh-tool__sub-toggle"
                 @click="openTranscript(item.ref)"
               >
+                <template #icon>
+                  <AppIcon name="history" :size="14" />
+                </template>
                 {{
                   transcriptRefs.length > 1
                     ? `${t('tool.subagentTranscript')} #${item.index + 1}`
@@ -764,6 +767,16 @@ const statusTone = computed<'success' | 'error' | 'warning' | 'info'>(() => {
 
 .nh-tool__sub-toggle {
   align-self: flex-start;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.nh-tool__sub-toggle :deep(.n-button__content) {
+  gap: 6px;
+}
+
+.nh-tool__sub-toggle :deep(.n-button__icon) {
+  margin: 0;
 }
 
 .nh-tool__error {

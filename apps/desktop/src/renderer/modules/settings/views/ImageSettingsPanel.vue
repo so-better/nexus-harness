@@ -184,6 +184,8 @@ onMounted(load);
 <style scoped lang="less">
 .nh-image-settings {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 16px;
 }
@@ -211,8 +213,13 @@ onMounted(load);
 
 .nh-image-settings__list {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 8px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .nh-image-card {

@@ -228,6 +228,8 @@ const editProvider = (id: string): void => {
 <style scoped lang="less">
 .nh-provider-settings {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 20px;
 }
@@ -258,8 +260,11 @@ const editProvider = (id: string): void => {
 
 .nh-provider-settings__form {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 20px;
+  overflow-y: auto;
 }
 
 .nh-provider-settings__item {

@@ -110,10 +110,11 @@ watch(
 <style scoped lang="less">
 .nh-subagent-transcript {
   display: flex;
+  min-width: 0;
   max-height: 62vh;
   flex-direction: column;
   gap: 12px;
-  overflow-y: auto;
+  overflow: hidden auto;
 }
 
 .nh-subagent-transcript__approvals {

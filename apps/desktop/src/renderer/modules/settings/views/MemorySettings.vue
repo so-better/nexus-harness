@@ -239,6 +239,8 @@ onBeforeUnmount(() => {
 <style scoped lang="less">
 .nh-memory {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 14px;
 }
@@ -390,10 +392,13 @@ onBeforeUnmount(() => {
 
 .nh-memory__list {
   display: flex;
-  max-height: min(480px, 55vh);
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 8px;
-  overflow: auto;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .nh-memory__item {

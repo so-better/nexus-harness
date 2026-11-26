@@ -8,7 +8,7 @@
     :bordered="false"
     @update:show="emit('update:show', $event)"
   >
-    <NTabs default-value="plugins" type="line" animated>
+    <NTabs default-value="plugins" type="line">
       <NTabPane name="plugins" :tab="t('plugins.tab')">
         <div class="nh-extensions__header">
           <p>{{ t('plugins.hint') }}</p>

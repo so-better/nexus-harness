@@ -119,6 +119,8 @@ const initialOf = (name: string): string => name.trim().charAt(0).toUpperCase() 
 <style scoped lang="less">
 .nh-provider-list {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 12px;
 }
@@ -133,8 +135,13 @@ const initialOf = (name: string): string => name.trim().charAt(0).toUpperCase() 
 
 .nh-provider-list__items {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 8px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .nh-provider-item {
