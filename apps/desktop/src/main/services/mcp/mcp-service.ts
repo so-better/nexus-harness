@@ -14,7 +14,7 @@ import {
   type McpServerStatus
 } from '@shared/mcp';
 import type { AgentToolDefinition } from '@nexus/core';
-import { assertPublicUrl } from '@nexus/runtime-utils';
+import { assertPublicUrl, deepSortKeys } from '@nexus/runtime-utils';
 import { getAppDataPaths, getMcpWorkdirPath } from '../storage/paths';
 import { isUvCacheMiss, sanitizeMcpError } from './mcp-runtime';
 
@@ -694,7 +694,8 @@ export class McpService {
         description: tool.description ?? `MCP 工具 ${tool.name}`,
         permission: 'execute' as const,
         requiresApproval: true,
-        inputSchema: tool.inputSchema as Record<string, unknown>
+        // 规范化 key 顺序，避免服务器返回顺序抖动破坏 prompt 前缀缓存
+        inputSchema: deepSortKeys(tool.inputSchema) as Record<string, unknown>
       }));
       if (server.resources.length) {
         tools.push(

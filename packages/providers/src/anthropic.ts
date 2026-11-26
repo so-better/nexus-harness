@@ -22,6 +22,8 @@ export interface AnthropicConfig {
   reasoningPassback?: boolean | ((model: string) => boolean);
   /** 无签名时也回传 thinking block（best-effort，可按模型判断） */
   reasoningAllowUnsigned?: boolean | ((model: string) => boolean);
+  /** 提示缓存 TTL：默认 5 分钟；返回 '1h' 时延长稳定前缀缓存（按模型判断） */
+  cacheTtl?: '5m' | '1h' | ((model: string) => '5m' | '1h');
   fetchImpl?: typeof fetch;
 }
 
@@ -108,7 +110,10 @@ export const toAnthropicMessages = (
       continue;
     }
 
-    if (message.role === 'assistant' && (message.toolCalls?.length || (passReasoning && message.reasoning?.trim()))) {
+    if (
+      message.role === 'assistant' &&
+      (message.toolCalls?.length || (passReasoning && message.reasoning?.trim()))
+    ) {
       const content: AnthropicContentBlock[] = [];
       // Anthropic 带工具时要求回传 thinking block；无签名可能 400，只有开启容错才回传
       if (passReasoning) {
@@ -148,7 +153,10 @@ export const toAnthropicMessages = (
 /**
  * 在最后一条 user 消息的最后一个内容块打 cache_control，让多步工具循环复用会话前缀缓存。
  */
-const withMessageCacheBreakpoint = (messages: AnthropicMessage[]): AnthropicMessage[] => {
+const withMessageCacheBreakpoint = (
+  messages: AnthropicMessage[],
+  marker: { cache_control: { type: 'ephemeral'; ttl?: '1h' } }
+): AnthropicMessage[] => {
   let index = -1;
   for (let cursor = messages.length - 1; cursor >= 0; cursor -= 1) {
     if (messages[cursor]?.role === 'user') {
@@ -161,7 +169,6 @@ const withMessageCacheBreakpoint = (messages: AnthropicMessage[]): AnthropicMess
   const target = messages[index];
   if (!target) return messages;
 
-  const marker = { cache_control: { type: 'ephemeral' as const } };
   let content: AnthropicMessage['content'] | undefined;
   if (Array.isArray(target.content)) {
     if (target.content.length === 0) return messages;
@@ -234,11 +241,21 @@ export class AnthropicProvider implements ChatProvider {
 
     // 稳定前缀缓存：system、工具块与最后一条 user 消息加 ephemeral 断点；
     // 多步工具循环下，上一步的消息前缀可被下一步复用。
+    const cacheTtl =
+      typeof this.config.cacheTtl === 'function'
+        ? this.config.cacheTtl(request.model)
+        : (this.config.cacheTtl ?? '5m');
+    const cacheMarker = {
+      cache_control:
+        cacheTtl === '1h'
+          ? { type: 'ephemeral' as const, ttl: '1h' as const }
+          : { type: 'ephemeral' as const }
+    };
     const buildBody = (usePromptCache: boolean): string => {
       const tools = request.tools?.map((tool, index) => ({
         ...toAnthropicTool(tool),
         ...(usePromptCache && index === (request.tools?.length ?? 0) - 1
-          ? { cache_control: { type: 'ephemeral' } }
+          ? { cache_control: cacheMarker.cache_control }
           : {})
       }));
       return JSON.stringify({
@@ -248,12 +265,18 @@ export class AnthropicProvider implements ChatProvider {
         ...(converted.system
           ? {
               system: usePromptCache
-                ? [{ type: 'text', text: converted.system, cache_control: { type: 'ephemeral' } }]
+                ? [
+                    {
+                      type: 'text',
+                      text: converted.system,
+                      cache_control: cacheMarker.cache_control
+                    }
+                  ]
                 : converted.system
             }
           : {}),
         messages: usePromptCache
-          ? withMessageCacheBreakpoint(converted.messages)
+          ? withMessageCacheBreakpoint(converted.messages, cacheMarker)
           : converted.messages,
         ...(tools?.length ? { tools } : {}),
         ...(request.temperature === undefined ? {} : { temperature: request.temperature }),
@@ -273,7 +296,8 @@ export class AnthropicProvider implements ChatProvider {
       const status = response.status;
       const detail = (await response.text().catch(() => '')).slice(0, 2000);
       // 只在错误明确指向 prompt cache 时才去掉 cache_control 重试，避免对无关 4xx 重复请求
-      if (/cache[_ ]?control|prompt[ _]?cach/i.test(detail)) {
+      // 兼顾 1h 扩展缓存（错误常提及 extended-cache-ttl），不匹配无上下文的裸 ttl
+      if (/cache[_ ]?control|prompt[ _]?cach|extended[_ -]?cache/i.test(detail)) {
         response = await fetchImpl(endpointUrl, requestInit(buildBody(false)));
       } else {
         yield {

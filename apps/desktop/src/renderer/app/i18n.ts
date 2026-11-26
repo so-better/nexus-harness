@@ -561,6 +561,10 @@ const zhCN = {
   'settings.modelReasoningField': '思考内容字段',
   'settings.modelReasoningFieldInvalid': '字段名不合法，或用到了 role/content 等保留字段',
   'settings.modelReasoningUnsigned': '无签名也回传',
+  'settings.modelCacheTtl': '提示缓存 TTL',
+  'settings.modelCacheTtlDefault': '5 分钟（默认）',
+  'settings.modelCacheTtlExtended': '1 小时',
+  'settings.modelCacheTtlHint': '延长稳定前缀缓存，减少间隔较久的重写；写缓存成本更高，按需开启',
   'settings.modelExtraParams': '请求参数（JSON）',
   'settings.modelExtraParamsHint':
     '原样合并进请求体透传给模型，可写 thinking / reasoning_effort 等任意参数',
@@ -1249,6 +1253,11 @@ const enUS: Record<MessageKey, string> = {
   'settings.modelReasoningFieldInvalid':
     'Invalid field name, or a reserved field such as role/content was used',
   'settings.modelReasoningUnsigned': 'Pass back without signature',
+  'settings.modelCacheTtl': 'Prompt cache TTL',
+  'settings.modelCacheTtlDefault': '5 minutes (default)',
+  'settings.modelCacheTtlExtended': '1 hour',
+  'settings.modelCacheTtlHint':
+    'Extends the stable-prefix cache to reduce rewrites after gaps; cache writes cost more, enable as needed',
   'settings.modelExtraParams': 'Request params (JSON)',
   'settings.modelExtraParamsHint':
     'Merged into the request body and passed through; any params such as thinking / reasoning_effort are allowed.',

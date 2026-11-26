@@ -4,4 +4,5 @@
 
 export * from './path-policy';
 export * from './shell';
+export * from './json';
 export * from './url-safety';

@@ -84,7 +84,9 @@ export const providerModelSchema = z
     /** 思考内容在消息中使用的字段名，默认 reasoning_content；仅 OpenAI 兼容端点使用 */
     reasoningField: z.string().min(1).optional(),
     /** Anthropic：无签名时也回传 thinking block（best-effort，部分网关不返回签名） */
-    reasoningAllowUnsigned: z.boolean().optional()
+    reasoningAllowUnsigned: z.boolean().optional(),
+    /** Anthropic：提示缓存 TTL；不填为默认 5 分钟，'1h' 延长稳定前缀缓存 */
+    cacheTtl: z.enum(['5m', '1h']).optional()
   })
   .refine((value) => value.maxOutputTokens < value.contextWindow, {
     message: 'maxOutputTokens 必须小于 contextWindow',

@@ -897,9 +897,16 @@ export const createAgentProvider: ProviderFactory = (config) => {
     'reasoning_content';
   const reasoningAllowUnsigned = (modelId: string): boolean =>
     config.models.find((item) => item.id === modelId)?.reasoningAllowUnsigned === true;
+  const cacheTtl = (modelId: string): '5m' | '1h' =>
+    config.models.find((item) => item.id === modelId)?.cacheTtl ?? '5m';
 
   if (config.protocol === 'anthropic') {
-    return new AnthropicProvider({ ...shared, reasoningPassback, reasoningAllowUnsigned });
+    return new AnthropicProvider({
+      ...shared,
+      reasoningPassback,
+      reasoningAllowUnsigned,
+      cacheTtl
+    });
   }
   return new OpenAICompatibleProvider({ ...shared, reasoningPassback, reasoningField });
 };
@@ -2330,13 +2337,17 @@ ${assistant.slice(0, 3_000)}`;
         );
       }
 
-      const mcpTools = this.mcp && mode !== 'plan' ? await this.mcp.listTools(hooks.signal) : [];
-      const imageNames = imageConfigs.map(
-        (config) => `${config.name}（${config.model}，id: ${config.id}）`
-      );
+      // MCP 工具按名称排序，保证工具前缀顺序确定，避免服务器枚举顺序抖动破坏 prompt cache
+      const mcpTools =
+        this.mcp && mode !== 'plan'
+          ? [...(await this.mcp.listTools(hooks.signal))].sort((a, b) =>
+              a.name.localeCompare(b.name)
+            )
+          : [];
+      // 图像工具描述保持静态；可用模型名放到 <environment>，避免配置变化破坏工具前缀缓存
       const imageToolDefinition: AgentToolDefinition = {
         ...generateImageToolDefinition,
-        description: `${generateImageToolDefinition.description} 可用生图模型：${imageNames.join('、')}。有多个启用模型且用户未指定模型时，必须先调用 ask_user，把启用模型作为选项让用户选择；用户选择后再调用本工具，并在 model 参数中传入所选模型名称、模型 ID 或模型名。只有一个启用模型时可直接使用。`
+        description: `${generateImageToolDefinition.description} 有多个启用模型且用户未指定模型时，必须先调用 ask_user 让用户选择；用户选择后再调用本工具，并在 model 参数中传入所选模型的名称或 ID。只有一个启用模型时可直接使用。`
       };
       const allToolDefinitions = [
         ...(toolset?.definitions ?? fileToolDefinitions),
@@ -3141,6 +3152,9 @@ ${assistant.slice(0, 3_000)}`;
           roots: environmentRoots,
           providerName: providerConfig.name,
           model: modelConfig.id,
+          ...(imageConfigs.length
+            ? { imageModels: imageConfigs.map((config) => `${config.name}（${config.model}）`) }
+            : {}),
           ...(memoryContext?.text ? { memory: memoryContext.text } : {})
         })
       );

@@ -77,7 +77,8 @@ const normalizeModels = (provider: StoredProvider): ProviderModel[] =>
       ...(model.reasoningField ? { reasoningField: model.reasoningField } : {}),
       ...(model.reasoningAllowUnsigned === undefined
         ? {}
-        : { reasoningAllowUnsigned: model.reasoningAllowUnsigned })
+        : { reasoningAllowUnsigned: model.reasoningAllowUnsigned }),
+      ...(model.cacheTtl === undefined ? {} : { cacheTtl: model.cacheTtl })
     }));
 
 const toPublic = (provider: StoredProvider): ProviderPublic => {

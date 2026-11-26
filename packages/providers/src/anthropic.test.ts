@@ -348,6 +348,61 @@ describe('AnthropicProvider', () => {
     ).toBeUndefined();
   });
 
+  it('adds 1h ttl to cache breakpoints when configured', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchImpl = vi.fn(async (_url: unknown, init?: { body?: unknown }) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      const chunks = [
+        sse({ type: 'message_start', message: { usage: { input_tokens: 3 } } }),
+        sse({
+          type: 'message_delta',
+          delta: { stop_reason: 'end_turn' },
+          usage: { output_tokens: 1 }
+        }),
+        sse({ type: 'message_stop' })
+      ];
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const encoder = new TextEncoder();
+          for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+          controller.close();
+        }
+      });
+      return new Response(body, { status: 200 });
+    });
+
+    const provider = new AnthropicProvider({
+      baseUrl: 'https://example.com/v1',
+      apiKey: 'key',
+      cacheTtl: '1h',
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+    const events: ProviderStreamEvent[] = [];
+    for await (const event of provider.stream({
+      model: 'claude',
+      messages: [
+        { role: 'system', content: '规则' },
+        { role: 'user', content: 'hi' }
+      ],
+      tools: [{ name: 'a', description: 'A', inputSchema: { type: 'object' } }]
+    })) {
+      events.push(event);
+    }
+
+    expect(events.length).toBeGreaterThan(0);
+    expect((bodies[0]?.['system'] as Array<Record<string, unknown>>)[0]?.['cache_control']).toEqual(
+      {
+        type: 'ephemeral',
+        ttl: '1h'
+      }
+    );
+    expect((bodies[0]?.['tools'] as Array<Record<string, unknown>>)[0]?.['cache_control']).toEqual({
+      type: 'ephemeral',
+      ttl: '1h'
+    });
+    expect(JSON.stringify(bodies[0]?.['messages'])).toContain('"ttl":"1h"');
+  });
+
   it('does not retry 4xx errors unrelated to prompt cache', async () => {
     const fetchImpl = vi.fn(async () => new Response('invalid model name', { status: 400 }));
 

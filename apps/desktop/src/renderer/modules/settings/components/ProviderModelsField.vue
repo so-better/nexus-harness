@@ -140,6 +140,19 @@
               </label>
             </div>
 
+            <div v-if="protocol === 'anthropic'" class="nh-model-row__row">
+              <label class="nh-model-row__field">
+                <span>{{ t('settings.modelCacheTtl') }}</span>
+                <NSelect
+                  size="small"
+                  :value="model.cacheTtl ?? '5m'"
+                  :options="cacheTtlOptions"
+                  @update:value="(value: string) => updateModel(model.id, 'cacheTtl', value)"
+                />
+                <small class="nh-model-row__hint">{{ t('settings.modelCacheTtlHint') }}</small>
+              </label>
+            </div>
+
             <label class="nh-model-row__field nh-model-row__field--extra">
               <span class="nh-model-row__label-row">
                 <span>{{ t('settings.modelExtraParams') }}</span>
@@ -217,7 +230,16 @@
  */
 
 import { computed, reactive, ref, watch } from 'vue';
-import { NButton, NCheckbox, NFormItem, NInput, NInputNumber, NRadio, NSwitch } from 'naive-ui';
+import {
+  NButton,
+  NCheckbox,
+  NFormItem,
+  NInput,
+  NInputNumber,
+  NRadio,
+  NSelect,
+  NSwitch
+} from 'naive-ui';
 import type { ProviderModel } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import {
@@ -278,6 +300,15 @@ const budgetInvalid = (model: ProviderModel): boolean =>
  */
 const reasoningFieldInvalid = (model: ProviderModel): boolean =>
   props.protocol !== 'anthropic' && !isValidReasoningField(model.reasoningField);
+
+/**
+ * 提示缓存 TTL 选项：默认 5 分钟；1h 延长稳定前缀缓存，减少间隔较久的重算。
+ * 用 computed 以便语言切换时更新文案。
+ */
+const cacheTtlOptions = computed(() => [
+  { label: t('settings.modelCacheTtlDefault'), value: '5m' },
+  { label: t('settings.modelCacheTtlExtended'), value: '1h' }
+]);
 
 /**
  * 透传参数编辑框的当前文本：优先草稿，否则序列化已保存的参数。
@@ -366,6 +397,7 @@ const updateModel = (
     | 'reasoningPassback'
     | 'reasoningField'
     | 'reasoningAllowUnsigned'
+    | 'cacheTtl'
     | 'extraParams',
   value: number | boolean | string | Record<string, unknown> | undefined | null
 ): void => {
@@ -385,6 +417,10 @@ const updateModel = (
         const field = typeof value === 'string' ? value.trim() : '';
         if (field) next.reasoningField = field;
         else delete next.reasoningField;
+      } else if (key === 'cacheTtl') {
+        // 5m 为默认，不写入配置
+        if (value === '1h') next.cacheTtl = '1h';
+        else delete next.cacheTtl;
       } else if (value && typeof value === 'object') {
         next.extraParams = value as Record<string, unknown>;
       } else {

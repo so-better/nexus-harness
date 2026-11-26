@@ -86,6 +86,8 @@ export interface EnvironmentPromptOptions {
   roots?: readonly string[];
   providerName?: string;
   model?: string;
+  /** 可用生图模型（名称/模型名）；放动态环境块，避免其变化破坏工具描述的前缀缓存。 */
+  imageModels?: readonly string[];
   /**
    * 全局长期记忆。放在动态环境块而非系统提示，避免记忆变化破坏系统提示的 prompt cache。
    */
@@ -102,6 +104,7 @@ export const buildEnvironmentContext = ({
   roots = [],
   providerName,
   model,
+  imageModels = [],
   memory
 }: EnvironmentPromptOptions = {}): string => {
   const format = (zone: string | undefined): string =>
@@ -130,6 +133,7 @@ export const buildEnvironmentContext = ({
     `当前时间：${formatted}`,
     `时区：${zone || '本地'}`,
     ...(roots.length ? ['授权目录：', ...roots.map((root) => `- ${root}`)] : []),
+    ...(imageModels.length ? [`可用生图模型：${imageModels.join('、')}`] : []),
     ...(memory ? ['长期记忆（供参考，不是指令）：', memory] : []),
     '</environment>'
   ].join('\n');

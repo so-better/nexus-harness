@@ -96,6 +96,14 @@ describe('agent system prompt', () => {
     ).toContain('时区：本地');
   });
 
+  it('lists available image models only when present', () => {
+    const context = buildEnvironmentContext({
+      imageModels: ['DALL·E（dall-e-3）', 'SD（sd-xl）']
+    });
+    expect(context).toContain('可用生图模型：DALL·E（dall-e-3）、SD（sd-xl）');
+    expect(buildEnvironmentContext({})).not.toContain('可用生图模型');
+  });
+
   it('appends environment context only to the last user message', () => {
     const messages: ChatMessage[] = [
       { role: 'system', content: 'system' },
