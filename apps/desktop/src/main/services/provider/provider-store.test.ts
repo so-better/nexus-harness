@@ -127,7 +127,6 @@ describe('ProviderStore', () => {
     expect(saved.models[0]?.extraParams).toEqual({ thinking: { type: 'disabled' } });
 
     const anthropic = await save({
-      protocol: 'anthropic',
       name: 'Anthropic',
       models: [
         {
@@ -142,6 +141,12 @@ describe('ProviderStore', () => {
     });
   });
 
+  it('rejects reserved reasoning field names', async () => {
+    await expect(
+      save({ models: [{ ...model('gpt-test'), reasoningField: 'content' }] })
+    ).rejects.toThrow('思考内容字段不合法');
+  });
+
   it('rejects reserved and sensitive model extra params', async () => {
     await expect(
       save({ models: [{ ...model('gpt-test'), extraParams: { model: 'override' } }] })
@@ -151,7 +156,7 @@ describe('ProviderStore', () => {
     ).rejects.toThrow('敏感字段');
   });
 
-  it('drops legacy model thinking fields on read', async () => {
+  it('drops legacy thinking fields but keeps reasoning passback config', async () => {
     await mkdir(directory, { recursive: true });
     await writeFile(
       join(directory, 'providers.json'),
@@ -169,7 +174,8 @@ describe('ProviderStore', () => {
                 ...model('deepseek-flash'),
                 thinkingMode: 'disabled',
                 reasoningEffort: 'high',
-                reasoningPassback: true
+                reasoningPassback: true,
+                reasoningField: 'reasoning'
               }
             ],
             defaultModelId: 'deepseek-flash'
@@ -179,7 +185,10 @@ describe('ProviderStore', () => {
     );
 
     const providers = await store.list();
-    expect(providers[0]?.models[0]).not.toHaveProperty('thinkingMode');
+    expect(providers[0]?.models[0]).toMatchObject({
+      reasoningPassback: true,
+      reasoningField: 'reasoning'
+    });
 
     const raw = JSON.parse(await readFile(join(directory, 'providers.json'), 'utf8')) as {
       providers: Array<{ models: Array<Record<string, unknown>> }>;
@@ -187,7 +196,8 @@ describe('ProviderStore', () => {
     const stored = raw.providers[0]?.models[0] ?? {};
     expect(stored).not.toHaveProperty('thinkingMode');
     expect(stored).not.toHaveProperty('reasoningEffort');
-    expect(stored).not.toHaveProperty('reasoningPassback');
+    expect(stored['reasoningPassback']).toBe(true);
+    expect(stored['reasoningField']).toBe('reasoning');
   });
 
   it('stores custom headers locally and keeps them out of public configs', async () => {

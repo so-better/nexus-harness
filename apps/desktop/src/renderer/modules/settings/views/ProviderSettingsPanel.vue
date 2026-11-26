@@ -24,29 +24,27 @@
         <div class="nh-provider-settings__section">
           <h3 class="nh-provider-settings__section-title">{{ t('settings.connection') }}</h3>
           <div class="nh-provider-settings__panel">
-            <div class="nh-provider-settings__grid">
-              <NFormItem
-                class="nh-provider-settings__item"
-                :label="t('settings.protocol')"
-                path="protocol"
-              >
-                <NSelect
-                  :menu-props="selectMenuProps"
-                  :value="providerForm.protocol"
-                  :options="protocolOptions"
-                  :placeholder="t('settings.pleaseSelect')"
-                  @update:value="(value: ProviderProtocol) => (providerForm.protocol = value)"
-                />
-              </NFormItem>
-              <NFormItem class="nh-provider-settings__item" :label="t('settings.name')" path="name">
-                <NInput
-                  ref="nameInputRef"
-                  :value="providerForm.name"
-                  :placeholder="t('settings.pleaseInput')"
-                  @update:value="(value: string) => (providerForm.name = value)"
-                />
-              </NFormItem>
-            </div>
+            <NFormItem
+              class="nh-provider-settings__item"
+              :label="t('settings.protocol')"
+              path="protocol"
+            >
+              <NSelect
+                :menu-props="selectMenuProps"
+                :value="providerForm.protocol"
+                :options="protocolOptions"
+                :placeholder="t('settings.pleaseSelect')"
+                @update:value="(value: ProviderProtocol) => (providerForm.protocol = value)"
+              />
+            </NFormItem>
+            <NFormItem class="nh-provider-settings__item" :label="t('settings.name')" path="name">
+              <NInput
+                ref="nameInputRef"
+                :value="providerForm.name"
+                :placeholder="t('settings.pleaseInput')"
+                @update:value="(value: string) => (providerForm.name = value)"
+              />
+            </NFormItem>
 
             <NFormItem
               class="nh-provider-settings__item"
@@ -85,7 +83,7 @@
               :available-models="availableModels"
               :default-model-id="providerForm.defaultModelId"
               :testing="testing"
-              :base-url="providerForm.baseUrl"
+              :protocol="providerForm.protocol"
               @update:models="(value) => (providerForm.models = value)"
               @update:valid="(value: boolean) => (modelsExtraValid = value)"
               @update:default-model-id="(value) => (providerForm.defaultModelId = value)"

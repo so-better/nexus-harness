@@ -19,8 +19,10 @@ export interface OpenAICompatibleConfig {
   apiKey: string;
   headers?: Record<string, string>;
   capabilities?: Partial<ProviderCapabilities>;
-  /** 携带 tools 时是否回传 assistant 的 reasoning_content（DeepSeek 要求） */
-  reasoningPassback?: boolean;
+  /** 携带 tools 时是否回传 assistant 的历史思考内容 */
+  reasoningPassback?: boolean | ((model: string) => boolean);
+  /** 思考内容使用的消息字段名，默认 reasoning_content */
+  reasoningField?: string | ((model: string) => string);
   fetchImpl?: typeof fetch;
 }
 
@@ -43,7 +45,8 @@ const DEFAULT_CAPABILITIES: ProviderCapabilities = {
  */
 const toOpenAIMessage = (
   message: ChatMessage,
-  reasoningPassback: boolean
+  reasoningPassback: boolean,
+  reasoningField: string
 ): Record<string, unknown> => {
   let result: Record<string, unknown>;
   if (message.role === 'tool') {
@@ -80,8 +83,13 @@ const toOpenAIMessage = (
     result = { role: message.role, content: message.content };
   }
 
-  if (reasoningPassback && message.role === 'assistant' && message.reasoning?.trim()) {
-    result['reasoning_content'] = message.reasoning;
+  if (
+    reasoningPassback &&
+    reasoningField &&
+    message.role === 'assistant' &&
+    message.reasoning?.trim()
+  ) {
+    result[reasoningField] = message.reasoning;
   }
   return result;
 };
@@ -164,7 +172,14 @@ export class OpenAICompatibleProvider implements ChatProvider {
     const fetchImpl = this.config.fetchImpl ?? fetch;
     const url = `${this.config.baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
-    const reasoningPassback = this.config.reasoningPassback === true;
+    const reasoningPassback =
+      typeof this.config.reasoningPassback === 'function'
+        ? this.config.reasoningPassback(request.model)
+        : this.config.reasoningPassback === true;
+    const reasoningField =
+      (typeof this.config.reasoningField === 'function'
+        ? this.config.reasoningField(request.model)
+        : this.config.reasoningField) || 'reasoning_content';
     const reasoningPassbackIndices = reasoningPassback
       ? selectReasoningPassbackIndices(request.messages, Boolean(request.tools?.length))
       : new Set<number>();
@@ -179,7 +194,7 @@ export class OpenAICompatibleProvider implements ChatProvider {
       body: JSON.stringify({
         model: request.model,
         messages: request.messages.map((message, index) =>
-          toOpenAIMessage(message, reasoningPassbackIndices.has(index))
+          toOpenAIMessage(message, reasoningPassbackIndices.has(index), reasoningField)
         ),
         ...(request.tools?.length ? { tools: request.tools.map(toOpenAITool) } : {}),
         stream: true,

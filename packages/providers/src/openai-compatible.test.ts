@@ -247,6 +247,35 @@ describe('OpenAICompatibleProvider', () => {
     }
   });
 
+  it('uses a custom reasoning field name', async () => {
+    let sentBody: Record<string, unknown> | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      sentBody = JSON.parse(String(init?.body));
+      return new Response(streamBody([{ choices: [{ delta: { content: 'ok' } }] }]), {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      });
+    };
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: 'https://example.com/v1',
+      apiKey: 'secret',
+      reasoningPassback: true,
+      reasoningField: (model) => (model === 'model-a' ? 'reasoning' : 'reasoning_content'),
+      fetchImpl
+    });
+    for await (const _event of provider.stream({
+      model: 'model-a',
+      messages: [{ role: 'assistant', content: '', reasoning: '思考' }],
+      tools: [{ name: 'read_file', description: 'read', inputSchema: { type: 'object' } }]
+    })) {
+      // consume stream
+    }
+
+    const messages = sentBody?.['messages'] as Array<Record<string, unknown>>;
+    expect(messages[0]?.['reasoning']).toBe('思考');
+    expect(messages[0]).not.toHaveProperty('reasoning_content');
+  });
+
   it('does not send reasoning_content when the provider does not require it', async () => {
     let sentBody: Record<string, unknown> | undefined;
     const fetchImpl: typeof fetch = async (_input, init) => {

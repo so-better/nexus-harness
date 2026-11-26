@@ -19,8 +19,8 @@ export interface AnthropicConfig {
   apiKey: string;
   headers?: Record<string, string>;
   capabilities?: Partial<ProviderCapabilities>;
-  /** DeepSeek 等 Anthropic 兼容端点：带 tools 时回传历史 thinking 内容 */
-  reasoningPassback?: boolean;
+  /** Anthropic 兼容端点：带 tools 时回传历史 thinking 内容（可按模型判断） */
+  reasoningPassback?: boolean | ((model: string) => boolean);
   fetchImpl?: typeof fetch;
 }
 
@@ -44,6 +44,7 @@ interface AnthropicContentBlock {
   source?: { type: 'base64'; media_type: string; data: string };
   cache_control?: { type: 'ephemeral' };
   thinking?: string;
+  signature?: string;
 }
 
 interface AnthropicMessage {
@@ -107,9 +108,13 @@ export const toAnthropicMessages = (
 
     if (message.role === 'assistant' && (message.toolCalls?.length || (passReasoning && message.reasoning?.trim()))) {
       const content: AnthropicContentBlock[] = [];
-      // DeepSeek 等 Anthropic 兼容端点在工具调用时要求回传完整 thinking 内容
-      if (passReasoning && message.reasoning?.trim()) {
-        content.push({ type: 'thinking', thinking: message.reasoning });
+      // Anthropic 带工具时要求原样回传带签名的 thinking block；无签名的块会返回 400，故跳过
+      if (passReasoning) {
+        for (const block of message.reasoningBlocks ?? []) {
+          if (block.text.trim() && block.signature) {
+            content.push({ type: 'thinking', thinking: block.text, signature: block.signature });
+          }
+        }
       }
       if (message.content) content.push({ type: 'text', text: message.content });
       for (const call of message.toolCalls ?? []) {
@@ -196,10 +201,11 @@ export class AnthropicProvider implements ChatProvider {
 
   async *stream(request: ProviderRequest): AsyncIterable<ProviderStreamEvent> {
     const fetchImpl = this.config.fetchImpl ?? fetch;
-    const converted = toAnthropicMessages(
-      request.messages,
-      this.config.reasoningPassback === true
-    );
+    const reasoningPassback =
+      typeof this.config.reasoningPassback === 'function'
+        ? this.config.reasoningPassback(request.model)
+        : this.config.reasoningPassback === true;
+    const converted = toAnthropicMessages(request.messages, reasoningPassback);
     const endpointUrl = endpoint(this.config.baseUrl);
     const headers = {
       'Content-Type': 'application/json',
@@ -278,6 +284,8 @@ export class AnthropicProvider implements ChatProvider {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     const toolCalls = new Map<number, { id: string; name: string; argumentsText: string }>();
+    // 按 content block 下标累积思考文本与签名，便于按块回传（Anthropic 交错思考）
+    const thinkingBlocks = new Map<number, { text: string; signature: string }>();
     let buffer = '';
     let inputTokens = 0;
     let outputTokens = 0;
@@ -329,6 +337,12 @@ export class AnthropicProvider implements ChatProvider {
           };
           toolCalls.set(index, entry);
           events.push({ type: 'tool-call-start', id: entry.id, name: entry.name });
+        } else if (
+          block &&
+          typeof block === 'object' &&
+          (block as { type?: string }).type === 'thinking'
+        ) {
+          thinkingBlocks.set(index, { text: '', signature: '' });
         }
         return events;
       }
@@ -342,6 +356,7 @@ export class AnthropicProvider implements ChatProvider {
           text?: string;
           partial_json?: string;
           thinking?: string;
+          signature?: string;
         };
         if (typed.type === 'text_delta' && typed.text) {
           events.push({ type: 'text-delta', text: typed.text });
@@ -356,13 +371,31 @@ export class AnthropicProvider implements ChatProvider {
             });
           }
         } else if (typed.type === 'thinking_delta' && typed.thinking) {
+          const block = thinkingBlocks.get(index);
+          if (block) block.text += typed.thinking;
           events.push({ type: 'reasoning-delta', text: typed.thinking });
+        } else if (typed.type === 'signature_delta' && typed.signature) {
+          const block = thinkingBlocks.get(index);
+          if (block) block.signature += typed.signature;
         }
         return events;
       }
 
       if (type === 'content_block_stop') {
         const index = Number(data['index'] ?? 0);
+        const thinking = thinkingBlocks.get(index);
+        if (thinking) {
+          thinkingBlocks.delete(index);
+          if (thinking.text.trim()) {
+            events.push({
+              type: 'reasoning-block',
+              block: {
+                text: thinking.text,
+                ...(thinking.signature ? { signature: thinking.signature } : {})
+              }
+            });
+          }
+        }
         const entry = toolCalls.get(index);
         if (entry) {
           events.push({

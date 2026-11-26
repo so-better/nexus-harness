@@ -3,6 +3,7 @@
  */
 
 import { normalizeOllamaBaseUrl } from '@nexus/providers';
+import { isDeepSeekBaseUrl } from '@nexus/shared';
 
 const PROBE_TIMEOUT_MS = 15_000;
 
@@ -68,6 +69,11 @@ export const probeProvider = async (config: ProviderProbeConfig): Promise<Provid
   const modelsUrl = isAnthropic
     ? `${baseUrl.endsWith('/v1') ? baseUrl : `${baseUrl}/v1`}/models`
     : `${baseUrl}/models`;
+  // DeepSeek 的 Anthropic 端点不支持 /models，回退到同源的 OpenAI 兼容 /models
+  const fallbackModelsUrl =
+    isAnthropic && isDeepSeekBaseUrl(baseUrl)
+      ? `${baseUrl.replace(/\/anthropic(?:\/v1)?\/?$/i, '')}/models`
+      : undefined;
   const startedAt = Date.now();
   const authHeaders = isAnthropic
     ? {
@@ -77,17 +83,27 @@ export const probeProvider = async (config: ProviderProbeConfig): Promise<Provid
     : config.apiKey
       ? { Authorization: `Bearer ${config.apiKey}` }
       : {};
+  const fallbackHeaders =
+    config.apiKey === undefined || config.apiKey === ''
+      ? {}
+      : { Authorization: `Bearer ${config.apiKey}`, 'x-api-key': config.apiKey };
 
-  let response: Response;
-  try {
-    response = await fetch(modelsUrl, {
+  const requestModels = (url: string, headers: Record<string, string>): Promise<Response> =>
+    fetch(url, {
       method: 'GET',
       headers: {
-        ...authHeaders,
+        ...headers,
         ...config.headers
       },
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS)
     });
+
+  let response: Response;
+  try {
+    response = await requestModels(modelsUrl, authHeaders);
+    if (!response.ok && fallbackModelsUrl && (response.status === 404 || response.status === 405)) {
+      response = await requestModels(fallbackModelsUrl, fallbackHeaders);
+    }
   } catch (error) {
     const message =
       error instanceof Error && error.name === 'TimeoutError'

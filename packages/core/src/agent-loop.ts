@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   ChatMessage,
   ChatProvider,
+  ChatReasoningBlock,
   ProviderRequest,
   ProviderToolCall,
   ToolSchema
@@ -218,6 +219,7 @@ export class AgentLoop {
           role: 'assistant',
           content: result.text,
           ...(result.reasoning ? { reasoning: result.reasoning } : {}),
+          ...(result.reasoningBlocks.length ? { reasoningBlocks: result.reasoningBlocks } : {}),
           ...(result.toolCalls.length ? { toolCalls: result.toolCalls } : {})
         };
         this.messages.push(assistantMessage);
@@ -226,6 +228,7 @@ export class AgentLoop {
           role: 'assistant',
           content: result.text,
           ...(result.reasoning ? { reasoning: result.reasoning } : {}),
+          ...(result.reasoningBlocks.length ? { reasoningBlocks: result.reasoningBlocks } : {}),
           durationMs: stepDurationMs
         });
       }
@@ -395,6 +398,7 @@ export class AgentLoop {
   private async runStep(messageId: string): Promise<{
     text: string;
     reasoning: string;
+    reasoningBlocks: ChatReasoningBlock[];
     toolCalls: ProviderToolCall[];
     finishReason: string;
     reasoningLimit?: boolean;
@@ -411,6 +415,7 @@ export class AgentLoop {
 
     let text = '';
     let reasoning = '';
+    const reasoningBlocks: ChatReasoningBlock[] = [];
     let finishReason = 'stop';
     let reasoningLimit = false;
     let error: { code: string; message: string } | undefined;
@@ -472,6 +477,9 @@ export class AgentLoop {
               }
             }
             break;
+          case 'reasoning-block':
+            reasoningBlocks.push(event.block);
+            break;
           case 'tool-call-end':
             toolCalls.push(event.toolCall);
             break;
@@ -530,6 +538,7 @@ export class AgentLoop {
     return {
       text,
       reasoning,
+      reasoningBlocks,
       toolCalls,
       finishReason,
       ...(reasoningLimit ? { reasoningLimit: true } : {}),

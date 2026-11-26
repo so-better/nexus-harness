@@ -138,6 +138,36 @@ describe('AgentLoop', () => {
     expect(completed?.payload.content).toBe('你好');
   });
 
+  it('collects structured reasoning blocks into the completed message', async () => {
+    const { bus, events } = createCollector();
+    const provider: ChatProvider = {
+      capabilities: { streaming: true, toolCalling: false, vision: false, reasoning: true },
+      async *stream() {
+        yield { type: 'reasoning-delta', text: '思考' };
+        yield { type: 'reasoning-block', block: { text: '思考', signature: 'sig-1' } };
+        yield { type: 'text-delta', text: '答' };
+        yield { type: 'finish', reason: 'stop' };
+      }
+    };
+    const loop = new AgentLoop({
+      provider,
+      model: 'mock-model',
+      sessionId: 'session-1',
+      messages: [{ role: 'user', content: '问题' }],
+      eventBus: bus
+    });
+
+    const result = await loop.run();
+
+    const completed = events.find(
+      (event): event is NexusEvent<'message.completed'> => event.type === 'message.completed'
+    );
+    expect(completed?.payload.reasoningBlocks).toEqual([{ text: '思考', signature: 'sig-1' }]);
+    expect(result.messages.at(-1)?.reasoningBlocks).toEqual([
+      { text: '思考', signature: 'sig-1' }
+    ]);
+  });
+
   it('feeds tool failures back to the model', async () => {
     const { bus, events } = createCollector();
     const provider = new MockProvider([

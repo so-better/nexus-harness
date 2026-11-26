@@ -32,6 +32,35 @@ describe('probeProvider', () => {
     expect(result.latencyMs).toBeGreaterThanOrEqual(0);
   });
 
+  it('falls back to the OpenAI models endpoint for the DeepSeek Anthropic base URL', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push(url);
+        if (url.endsWith('/anthropic/v1/models')) return { ok: false, status: 404 };
+        return {
+          ok: true,
+          json: async () => ({
+            data: [{ id: 'deepseek-flash' }, { id: 'deepseek-v4-pro' }]
+          })
+        };
+      })
+    );
+
+    const result = await probeProvider({
+      protocol: 'anthropic',
+      baseUrl: 'https://api.deepseek.com/anthropic',
+      apiKey: 'secret'
+    });
+
+    expect(result.models).toEqual(['deepseek-flash', 'deepseek-v4-pro']);
+    expect(calls).toEqual([
+      'https://api.deepseek.com/anthropic/v1/models',
+      'https://api.deepseek.com/models'
+    ]);
+  });
+
   it('maps unauthorized responses', async () => {
     vi.stubGlobal(
       'fetch',

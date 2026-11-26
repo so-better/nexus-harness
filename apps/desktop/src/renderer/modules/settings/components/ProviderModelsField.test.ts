@@ -25,6 +25,7 @@ describe('ProviderModelsField', () => {
           availableModels: ['model-a'],
           defaultModelId: 'model-a',
           testing: false,
+          protocol: 'openai',
           'onUpdate:valid': (value: boolean) => {
             valid = value;
           }
@@ -61,6 +62,7 @@ describe('ProviderModelsField', () => {
           availableModels: ['model-a'],
           defaultModelId: 'model-a',
           testing: false,
+          protocol: 'openai',
           'onUpdate:models': (value: ProviderModel[]) => {
             updated = value;
           }
@@ -88,6 +90,45 @@ describe('ProviderModelsField', () => {
     document.body.innerHTML = '';
   });
 
+  it('configures reasoning passback and field name', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const models = ref<ProviderModel[]>([
+      { id: 'model-a', contextWindow: 128_000, maxOutputTokens: 4_096 }
+    ]);
+    const app = createApp({
+      render: () =>
+        h(ProviderModelsField, {
+          models: models.value,
+          availableModels: ['model-a'],
+          defaultModelId: 'model-a',
+          testing: false,
+          protocol: 'openai',
+          'onUpdate:models': (value: ProviderModel[]) => {
+            models.value = value;
+          }
+        })
+    });
+    app.mount(host);
+    await nextTick();
+
+    const field = host.querySelector<HTMLInputElement>('input[placeholder="reasoning_content"]');
+    if (!field) throw new Error('reasoning field input not found');
+    field.value = 'reasoning';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+    expect(models.value[0]?.reasoningField).toBe('reasoning');
+
+    const toggle = host.querySelector<HTMLElement>('[role="switch"]');
+    if (!toggle) throw new Error('reasoning passback switch not found');
+    toggle.click();
+    await nextTick();
+    expect(models.value[0]?.reasoningPassback).toBe(true);
+
+    app.unmount();
+    document.body.innerHTML = '';
+  });
+
   it('clears invalid JSON state when the model is removed', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -101,6 +142,7 @@ describe('ProviderModelsField', () => {
           availableModels: availableModels.value,
           defaultModelId: 'model-a',
           testing: false,
+          protocol: 'openai',
           'onUpdate:models': (value: typeof models.value) => {
             models.value = value;
           },
@@ -127,7 +169,7 @@ describe('ProviderModelsField', () => {
     document.body.innerHTML = '';
   });
 
-  it('defaults DeepSeek models to a 1M context window', async () => {
+  it('defaults new models to a 128K context window', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     let updated: ProviderModel[] | undefined;
@@ -135,10 +177,10 @@ describe('ProviderModelsField', () => {
       render: () =>
         h(ProviderModelsField, {
           models: [],
-          availableModels: ['deepseek-flash'],
+          availableModels: ['model-a'],
           defaultModelId: '',
           testing: false,
-          baseUrl: 'https://api.deepseek.com',
+          protocol: 'openai',
           'onUpdate:models': (value: ProviderModel[]) => {
             updated = value;
           }
@@ -153,8 +195,47 @@ describe('ProviderModelsField', () => {
     checkbox.click();
     await nextTick();
 
-    expect(updated?.[0]?.contextWindow).toBe(1_000_000);
+    expect(updated?.[0]?.contextWindow).toBe(128_000);
     app.unmount();
     document.body.innerHTML = '';
   });
+
+  it('rejects reserved reasoning field names', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const models = ref<ProviderModel[]>([
+      { id: 'model-a', contextWindow: 128_000, maxOutputTokens: 4_096 }
+    ]);
+    let valid = true;
+    const app = createApp({
+      render: () =>
+        h(ProviderModelsField, {
+          models: models.value,
+          availableModels: ['model-a'],
+          defaultModelId: 'model-a',
+          testing: false,
+          protocol: 'openai',
+          'onUpdate:models': (value: ProviderModel[]) => {
+            models.value = value;
+          },
+          'onUpdate:valid': (value: boolean) => {
+            valid = value;
+          }
+        })
+    });
+    app.mount(host);
+    await nextTick();
+
+    const field = host.querySelector<HTMLInputElement>('input[placeholder="reasoning_content"]');
+    if (!field) throw new Error('reasoning field input not found');
+    field.value = 'content';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+
+    expect(valid).toBe(false);
+    expect(host.textContent).toContain('字段名不合法');
+    app.unmount();
+    document.body.innerHTML = '';
+  });
+
 });

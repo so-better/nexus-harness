@@ -98,6 +98,10 @@ export const eventPayloadSchemas = {
     role: z.enum(['user', 'assistant']),
     content: z.string(),
     reasoning: z.string().optional(),
+    /** 结构化思考块（Anthropic 签名回传）；按块保留 text + signature */
+    reasoningBlocks: z
+      .array(z.object({ text: z.string(), signature: z.string().optional() }))
+      .optional(),
     /** 本条助手消息的生成耗时（毫秒）；用于消息尾部的耗时展示 */
     durationMs: z.number().nonnegative().optional(),
     error: z.boolean().optional(),

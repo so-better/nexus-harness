@@ -33,7 +33,6 @@ import {
 } from '@nexus/toolkit';
 import type { PptDeck } from '@nexus/toolkit';
 import { detectDangerousCommand, isSensitivePath } from '@nexus/runtime-utils';
-import { isDeepSeekBaseUrl } from '@nexus/shared';
 import { appendFileReferences, imageMimeForName } from '@shared/files';
 import {
   createExcelBuffer,
@@ -884,14 +883,20 @@ export const createAgentProvider: ProviderFactory = (config) => {
     ...(config.headers ? { headers: config.headers } : {})
   };
 
-  // 目前只有 DeepSeek 在携带 tools 时要求回传历史 reasoning_content
-  const reasoningPassback = isDeepSeekBaseUrl(config.baseUrl);
+  // 是否回传思考内容与字段名由模型级配置决定，默认关闭、字段默认 reasoning_content
+  const reasoningPassback = (modelId: string): boolean =>
+    config.models.find((item) => item.id === modelId)?.reasoningPassback === true;
+  const reasoningField = (modelId: string): string =>
+    config.models.find((item) => item.id === modelId)?.reasoningField?.trim() ||
+    'reasoning_content';
 
   if (config.protocol === 'anthropic') {
     return new AnthropicProvider({ ...shared, reasoningPassback });
   }
-  if (config.protocol === 'ollama') return new OllamaProvider({ ...shared, reasoningPassback });
-  return new OpenAICompatibleProvider({ ...shared, reasoningPassback });
+  if (config.protocol === 'ollama') {
+    return new OllamaProvider({ ...shared, reasoningPassback, reasoningField });
+  }
+  return new OpenAICompatibleProvider({ ...shared, reasoningPassback, reasoningField });
 };
 
 /**

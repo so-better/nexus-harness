@@ -150,7 +150,15 @@ export class SessionHistoryService {
           const assistant: ChatMessage = {
             role: 'assistant',
             content: payload.content,
-            ...(payload.reasoning?.trim() ? { reasoning: payload.reasoning } : {})
+            ...(payload.reasoning?.trim() ? { reasoning: payload.reasoning } : {}),
+            ...(payload.reasoningBlocks?.length
+              ? {
+                  reasoningBlocks: payload.reasoningBlocks.map((block) => ({
+                    text: block.text,
+                    ...(block.signature ? { signature: block.signature } : {})
+                  }))
+                }
+              : {})
           };
           messages.push(assistant);
           lastAssistant = assistant;

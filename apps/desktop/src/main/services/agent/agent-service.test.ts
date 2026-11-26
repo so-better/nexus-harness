@@ -32,7 +32,25 @@ describe('AgentService', () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it('passes assistant reasoning back for DeepSeek', async () => {
+  const createReasoningProvider = (model: {
+    id: string;
+    contextWindow: number;
+    maxOutputTokens: number;
+    reasoningPassback?: boolean;
+    reasoningField?: string;
+  }) =>
+    createAgentProvider({
+      id: 'custom',
+      protocol: 'openai' as const,
+      name: 'Custom',
+      baseUrl: 'https://example.com/v1',
+      apiKey: 'secret',
+      enabled: true,
+      models: [model],
+      defaultModelId: model.id
+    });
+
+  it('passes assistant reasoning back when the model enables it', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('data: [DONE]\n\n', {
         status: 200,
@@ -40,18 +58,14 @@ describe('AgentService', () => {
       })
     );
     try {
-      const provider = createAgentProvider({
-        id: 'deepseek',
-        protocol: 'openai',
-        name: 'DeepSeek',
-        baseUrl: 'https://api.deepseek.com',
-        apiKey: 'secret',
-        enabled: true,
-        models: [{ id: 'deepseek-flash', contextWindow: 1_000_000, maxOutputTokens: 32_768 }],
-        defaultModelId: 'deepseek-flash'
+      const provider = createReasoningProvider({
+        id: 'model-a',
+        contextWindow: 128_000,
+        maxOutputTokens: 8_192,
+        reasoningPassback: true
       });
       for await (const _event of provider.stream({
-        model: 'deepseek-flash',
+        model: 'model-a',
         messages: [{ role: 'assistant', content: '', reasoning: '先检查工具结果' }],
         tools: [{ name: 'read_file', description: 'read', inputSchema: { type: 'object' } }]
       })) {
@@ -67,7 +81,7 @@ describe('AgentService', () => {
     }
   });
 
-  it('does not pass assistant reasoning back for non-DeepSeek providers', async () => {
+  it('uses the configured reasoning field', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('data: [DONE]\n\n', {
         status: 200,
@@ -75,18 +89,46 @@ describe('AgentService', () => {
       })
     );
     try {
-      const provider = createAgentProvider({
-        id: 'ollama',
-        protocol: 'ollama',
-        name: 'Ollama',
-        baseUrl: 'http://localhost:11434',
-        apiKey: '',
-        enabled: true,
-        models: [{ id: 'llama', contextWindow: 8192, maxOutputTokens: 2048 }],
-        defaultModelId: 'llama'
+      const provider = createReasoningProvider({
+        id: 'model-a',
+        contextWindow: 128_000,
+        maxOutputTokens: 8_192,
+        reasoningPassback: true,
+        reasoningField: 'reasoning'
       });
       for await (const _event of provider.stream({
-        model: 'llama',
+        model: 'model-a',
+        messages: [{ role: 'assistant', content: '', reasoning: '先检查工具结果' }],
+        tools: [{ name: 'read_file', description: 'read', inputSchema: { type: 'object' } }]
+      })) {
+        // 消费流以触发请求
+      }
+      const init = fetchMock.mock.calls[0]?.[1];
+      const body = JSON.parse(String(init?.body)) as {
+        messages: Array<Record<string, unknown>>;
+      };
+      expect(body.messages[0]?.['reasoning']).toBe('先检查工具结果');
+      expect(body.messages[0]).not.toHaveProperty('reasoning_content');
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('does not pass assistant reasoning back by default', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('data: [DONE]\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' }
+      })
+    );
+    try {
+      const provider = createReasoningProvider({
+        id: 'model-a',
+        contextWindow: 128_000,
+        maxOutputTokens: 8_192
+      });
+      for await (const _event of provider.stream({
+        model: 'model-a',
         messages: [{ role: 'assistant', content: '', reasoning: '不应回传' }],
         tools: [{ name: 'read_file', description: 'read', inputSchema: { type: 'object' } }]
       })) {
@@ -125,8 +167,8 @@ describe('AgentService', () => {
     };
     const service = new AgentService({ createProvider: () => provider });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -191,8 +233,8 @@ describe('AgentService', () => {
     };
     const service = new AgentService({ createProvider: () => provider });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -320,8 +362,8 @@ describe('AgentService', () => {
     } as unknown as SkillService;
     const service = new AgentService({ createProvider: () => provider, skills });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -369,8 +411,8 @@ describe('AgentService', () => {
     });
     const service = new AgentService({ createProvider: () => provider, database: db });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -417,8 +459,8 @@ describe('AgentService', () => {
     memory.updateSettings({ autoCapture: true, retrieval: false });
     const service = new AgentService({ createProvider: () => provider, database: db });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -460,8 +502,8 @@ describe('AgentService', () => {
       memoryExtraction: true
     });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -502,8 +544,8 @@ describe('AgentService', () => {
         ])
     });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -562,8 +604,8 @@ describe('AgentService', () => {
     };
     const service = new AgentService({ createProvider: () => provider });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -640,8 +682,8 @@ describe('AgentService', () => {
     };
     const service = new AgentService({ createProvider: () => provider });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -680,8 +722,8 @@ describe('AgentService', () => {
     ]);
     const service = new AgentService({ createProvider: () => provider });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 5_120, maxOutputTokens: 1_024 }],
@@ -730,8 +772,8 @@ describe('AgentService', () => {
       artifactBaseDir: join(root, 'artifacts')
     });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 6_144, maxOutputTokens: 1_024 }],
@@ -787,8 +829,8 @@ describe('AgentService', () => {
     ]);
     const service = new AgentService({ createProvider: () => provider });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -847,8 +889,8 @@ describe('AgentService', () => {
     ]);
     const service = new AgentService({ createProvider: () => provider });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -917,8 +959,8 @@ describe('AgentService', () => {
     ]);
     const service = new AgentService({ createProvider: () => provider });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -981,8 +1023,8 @@ describe('AgentService', () => {
       artifactBaseDir: join(root, 'artifacts')
     });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -1053,8 +1095,8 @@ describe('AgentService', () => {
       artifactBaseDir: join(root, 'artifacts')
     });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -1135,8 +1177,8 @@ describe('AgentService', () => {
     };
     const service = new AgentService({ createProvider: () => provider });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -1179,8 +1221,8 @@ describe('AgentService', () => {
     const service = new AgentService({ createProvider });
 
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -1269,8 +1311,8 @@ describe('AgentService', () => {
     };
     const service = new AgentService({ createProvider: () => provider });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -1311,8 +1353,8 @@ describe('AgentService', () => {
     };
     const service = new AgentService({ createProvider: () => provider });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -1377,8 +1419,8 @@ describe('AgentService', () => {
       fileBaseDir
     });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -1461,8 +1503,8 @@ describe('AgentService', () => {
       })
     });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -1536,8 +1578,8 @@ describe('AgentService', () => {
       attachmentBaseDir: join(root, 'attachments')
     });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],
@@ -1600,8 +1642,8 @@ describe('AgentService', () => {
       attachmentBaseDir: join(root, 'history-attachments')
     });
     const providerConfig = {
-      id: 'provider-1',
       protocol: 'openai' as const,
+      id: 'provider-1',
       name: 'Mock Provider',
       baseUrl: 'https://example.com/v1',
       models: [{ id: 'mock-model', contextWindow: 128_000, maxOutputTokens: 4_096 }],

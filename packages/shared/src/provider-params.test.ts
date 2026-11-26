@@ -1,25 +1,8 @@
 /**
- * Provider 参数校验：DeepSeek 识别、保留字段与敏感字段过滤。
+ * Provider 参数校验：保留字段、敏感字段与思考字段名。
  */
 import { describe, expect, it } from 'vitest';
-import { isDeepSeekBaseUrl, sanitizeProviderParams } from './provider-params';
-
-describe('isDeepSeekBaseUrl', () => {
-  it('matches DeepSeek hosts', () => {
-    expect(isDeepSeekBaseUrl('https://api.deepseek.com')).toBe(true);
-    expect(isDeepSeekBaseUrl('https://api.deepseek.com/v1')).toBe(true);
-    expect(isDeepSeekBaseUrl('https://deepseek.com')).toBe(true);
-    // 缺省协议也能识别
-    expect(isDeepSeekBaseUrl('api.deepseek.com')).toBe(true);
-    expect(isDeepSeekBaseUrl('api.deepseek.com/v1')).toBe(true);
-  });
-
-  it('rejects other hosts and invalid URLs', () => {
-    expect(isDeepSeekBaseUrl('https://api.openai.com')).toBe(false);
-    expect(isDeepSeekBaseUrl('https://notdeepseek.com')).toBe(false);
-    expect(isDeepSeekBaseUrl('not a url')).toBe(false);
-  });
-});
+import { isValidReasoningField, sanitizeProviderParams } from './provider-params';
 
 describe('sanitizeProviderParams', () => {
   it('passes unknown params through and strips reserved and sensitive keys', () => {
@@ -37,5 +20,22 @@ describe('sanitizeProviderParams', () => {
   it('returns undefined when nothing remains', () => {
     expect(sanitizeProviderParams(undefined)).toBeUndefined();
     expect(sanitizeProviderParams({ model: 'x' })).toBeUndefined();
+  });
+});
+
+describe('isValidReasoningField', () => {
+  it('accepts empty and identifier names', () => {
+    expect(isValidReasoningField(undefined)).toBe(true);
+    expect(isValidReasoningField('')).toBe(true);
+    expect(isValidReasoningField('reasoning_content')).toBe(true);
+    expect(isValidReasoningField('reasoning')).toBe(true);
+  });
+
+  it('rejects reserved message fields and invalid identifiers', () => {
+    expect(isValidReasoningField('content')).toBe(false);
+    expect(isValidReasoningField('role')).toBe(false);
+    expect(isValidReasoningField('tool_calls')).toBe(false);
+    expect(isValidReasoningField('has space')).toBe(false);
+    expect(isValidReasoningField('1field')).toBe(false);
   });
 });

@@ -16,7 +16,8 @@ import type {
 import { DEFAULT_CONTEXT_WINDOW, DEFAULT_MAX_OUTPUT_TOKENS } from '@nexus/core';
 import {
   findReservedProviderParams,
-  findSensitiveProviderParams
+  findSensitiveProviderParams,
+  isValidReasoningField
 } from '@shared/provider-params';
 import { getAppDataPaths } from '../storage/paths';
 
@@ -78,7 +79,11 @@ const normalizeModels = (
       maxOutputTokens: model.maxOutputTokens,
       ...(model.extraParams ? { extraParams: publicExtraParams(model.extraParams) } : {}),
       ...(model.role ? { role: model.role } : {}),
-      ...(model.endpoint ? { endpoint: model.endpoint } : {})
+      ...(model.endpoint ? { endpoint: model.endpoint } : {}),
+      ...(model.reasoningPassback === undefined
+        ? {}
+        : { reasoningPassback: model.reasoningPassback }),
+      ...(model.reasoningField ? { reasoningField: model.reasoningField } : {})
     }));
     const defaultModelId = models.some((model) => model.id === provider.defaultModelId)
       ? (provider.defaultModelId as string)
@@ -150,7 +155,7 @@ function publicExtraParams(params: Record<string, unknown>): Record<string, unkn
 /**
  * 旧版模型级思考字段已废弃，读取时从配置中剔除，避免文件残留死配置。
  */
-const LEGACY_MODEL_FIELDS = ['thinkingMode', 'reasoningEffort', 'reasoningPassback'] as const;
+const LEGACY_MODEL_FIELDS = ['thinkingMode', 'reasoningEffort'] as const;
 
 const stripLegacyModelFields = (provider: StoredProvider): boolean => {
   let changed = false;
@@ -183,7 +188,6 @@ const migrateLegacyProviderParams = (provider: StoredProvider): boolean => {
 
 const toPublic = (provider: StoredProvider): ProviderPublic => {
   const normalized = normalizeModels(provider);
-  const protocol = provider.protocol ?? 'openai';
   const legacyExtra = provider.extraParams ? publicExtraParams(provider.extraParams) : undefined;
   const models = normalized.models.map((model) => ({
     ...model,
@@ -191,7 +195,7 @@ const toPublic = (provider: StoredProvider): ProviderPublic => {
   }));
   return {
     id: provider.id,
-    protocol,
+    protocol: provider.protocol ?? 'openai',
     name: provider.name,
     baseUrl: provider.baseUrl,
     apiKey: provider.apiKey ?? '',
@@ -297,6 +301,10 @@ export class ProviderStore {
 
     const headers = input.headers !== undefined ? input.headers : existing?.headers;
     for (const model of input.models) {
+      // Anthropic 不使用字段名（固定 thinking block），跳过校验
+      if (protocol !== 'anthropic' && !isValidReasoningField(model.reasoningField)) {
+        throw new Error(`思考内容字段不合法：${model.reasoningField}`);
+      }
       if (!model.extraParams) continue;
       // thinking / reasoning_effort 等思考参数直接写在 extraParams 中，由用户按模型自行配置
       const reserved = findReservedProviderParams(model.extraParams);

@@ -32,12 +32,13 @@ describe('AnthropicProvider', () => {
     });
   });
 
-  it('passes back assistant thinking blocks when reasoning passback is enabled', () => {
+  it('passes back signed assistant thinking blocks when reasoning passback is enabled', () => {
     const messages = [
       {
         role: 'assistant' as const,
         content: '',
         reasoning: '先检查工具结果',
+        reasoningBlocks: [{ text: '先检查工具结果', signature: 'sig-1' }],
         toolCalls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'a.txt' } }]
       },
       { role: 'tool' as const, toolCallId: 'call-1', content: 'ok' }
@@ -47,7 +48,7 @@ describe('AnthropicProvider', () => {
     expect(withPassback.messages[0]).toMatchObject({
       role: 'assistant',
       content: [
-        { type: 'thinking', thinking: '先检查工具结果' },
+        { type: 'thinking', thinking: '先检查工具结果', signature: 'sig-1' },
         { type: 'tool_use', id: 'call-1', name: 'read_file' }
       ]
     });
@@ -55,6 +56,23 @@ describe('AnthropicProvider', () => {
     // 未启用时不注入 thinking 块
     const withoutPassback = toAnthropicMessages(messages);
     expect(withoutPassback.messages[0]).toMatchObject({
+      role: 'assistant',
+      content: [{ type: 'tool_use', id: 'call-1', name: 'read_file' }]
+    });
+
+    // 无签名的块会被跳过（避免官方 Anthropic 400）
+    const unsigned = toAnthropicMessages(
+      [
+        {
+          role: 'assistant' as const,
+          content: '',
+          reasoning: '无签名思考',
+          toolCalls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'a.txt' } }]
+        }
+      ],
+      true
+    );
+    expect(unsigned.messages[0]).toMatchObject({
       role: 'assistant',
       content: [{ type: 'tool_use', id: 'call-1', name: 'read_file' }]
     });
@@ -97,6 +115,7 @@ describe('AnthropicProvider', () => {
           role: 'assistant',
           content: '',
           reasoning: '先读取文件',
+          reasoningBlocks: [{ text: '先读取文件', signature: 'sig-abc' }],
           toolCalls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'a.txt' } }]
         },
         { role: 'tool', toolCallId: 'call-1', content: '文件内容' }
@@ -110,7 +129,7 @@ describe('AnthropicProvider', () => {
     expect(messages[0]).toMatchObject({
       role: 'assistant',
       content: [
-        { type: 'thinking', thinking: '先读取文件' },
+        { type: 'thinking', thinking: '先读取文件', signature: 'sig-abc' },
         { type: 'tool_use', id: 'call-1', name: 'read_file' }
       ]
     });
@@ -398,6 +417,58 @@ describe('AnthropicProvider', () => {
         name: 'read_file',
         arguments: { __invalidArguments: '{bad' }
       }
+    });
+  });
+
+  it('emits thinking and signature deltas', async () => {
+    const fetchImpl = vi.fn(async () => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const encoder = new TextEncoder();
+          const chunks = [
+            sse({ type: 'message_start', message: { usage: { input_tokens: 1 } } }),
+            sse({
+              type: 'content_block_start',
+              index: 0,
+              content_block: { type: 'thinking' }
+            }),
+            sse({
+              type: 'content_block_delta',
+              index: 0,
+              delta: { type: 'thinking_delta', thinking: '思考中' }
+            }),
+            sse({
+              type: 'content_block_delta',
+              index: 0,
+              delta: { type: 'signature_delta', signature: 'sig-abc' }
+            }),
+            sse({ type: 'content_block_stop', index: 0 }),
+            sse({ type: 'message_stop' })
+          ];
+          for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+          controller.close();
+        }
+      });
+      return new Response(body, { status: 200 });
+    });
+
+    const provider = new AnthropicProvider({
+      baseUrl: 'https://api.anthropic.com',
+      apiKey: 'secret',
+      fetchImpl: fetchImpl as typeof fetch
+    });
+    const events: ProviderStreamEvent[] = [];
+    for await (const event of provider.stream({
+      model: 'claude-test',
+      messages: [{ role: 'user', content: 'hi' }]
+    })) {
+      events.push(event);
+    }
+
+    expect(events).toContainEqual({ type: 'reasoning-delta', text: '思考中' });
+    expect(events).toContainEqual({
+      type: 'reasoning-block',
+      block: { text: '思考中', signature: 'sig-abc' }
     });
   });
 

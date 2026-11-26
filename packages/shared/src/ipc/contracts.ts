@@ -79,7 +79,11 @@ export const providerModelSchema = z
     contextWindow: z.number().int().min(4_096).max(2_000_000),
     maxOutputTokens: z.number().int().min(256).max(131_072),
     /** 模型级额外请求参数，原样透传给模型 */
-    extraParams: z.record(z.string(), z.unknown()).optional()
+    extraParams: z.record(z.string(), z.unknown()).optional(),
+    /** 携带 tools 时是否回传 assistant 的历史思考内容 */
+    reasoningPassback: z.boolean().optional(),
+    /** 思考内容在消息中使用的字段名，默认 reasoning_content；仅 OpenAI 兼容端点使用 */
+    reasoningField: z.string().min(1).optional()
   })
   .refine((value) => value.maxOutputTokens < value.contextWindow, {
     message: 'maxOutputTokens 必须小于 contextWindow',

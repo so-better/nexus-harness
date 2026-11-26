@@ -19,6 +19,29 @@ const RESERVED_PARAMS = new Set([
 const SENSITIVE_KEY = /authorization|api[-_]?key|access[-_]?token|secret|password|passwd|cookie/i;
 
 /**
+ * 思考内容字段不能覆盖的消息结构保留字段。
+ */
+const RESERVED_MESSAGE_FIELDS = new Set([
+  'role',
+  'content',
+  'tool_calls',
+  'tool_call_id',
+  'name',
+  'function_call'
+]);
+
+const REASONING_FIELD_PATTERN = /^[A-Za-z_][A-Za-z0-9_-]*$/;
+
+/**
+ * 校验思考内容字段名：空表示使用默认；必须是合法标识符且不能覆盖消息保留字段。
+ */
+export const isValidReasoningField = (field: string | undefined): boolean => {
+  const trimmed = field?.trim() ?? '';
+  if (!trimmed) return true;
+  return REASONING_FIELD_PATTERN.test(trimmed) && !RESERVED_MESSAGE_FIELDS.has(trimmed);
+};
+
+/**
  * 返回被禁止的保留字段。
  */
 export const findReservedProviderParams = (params: Record<string, unknown>): string[] =>
@@ -32,10 +55,9 @@ export const findSensitiveProviderParams = (params: Record<string, unknown>): st
 
 /**
  * 判断 Base URL 是否指向 DeepSeek。
- * 仅用于新建模型时默认 1M 上下文窗口，不参与请求参数处理。
+ * 目前用于 provider-probe 在 DeepSeek Anthropic 端点下回退到 OpenAI /models。
  */
 export const isDeepSeekBaseUrl = (baseUrl: string): boolean => {
-  // 不依赖 URL 全局类型：缺省协议时补一个，再用正则提取 host 并去掉端口
   const trimmed = baseUrl.trim();
   const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
   const match = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]+)/i.exec(withScheme);

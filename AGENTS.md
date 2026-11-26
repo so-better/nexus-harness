@@ -472,7 +472,8 @@ interface ProviderCapabilities {
 | 事件 | 含义 |
 | --- | --- |
 | `text-delta` | 文本增量 |
-| `reasoning-delta` | 推理内容增量（若提供） |
+| `reasoning-delta` | 推理内容增量（若提供，用于展示） |
+| `reasoning-block` | 结构化思考块（text + 可选 `signature`，Anthropic 按块回传） |
 | `tool-call-start` | 工具调用开始 |
 | `tool-call-delta` | 工具参数增量 |
 | `tool-call-end` | 工具调用参数完整 |
@@ -506,7 +507,7 @@ interface ProviderCapabilities {
 - 错误统一映射为错误码，如 `PROVIDER_UNAUTHORIZED`、`PROVIDER_RATE_LIMITED`、`PROVIDER_TIMEOUT`。
 - Anthropic 在 system 与最后一个工具块打 `cache_control: ephemeral` 复用稳定前缀；仅在错误体明确提到 `cache_control` / `prompt cache` 时才去掉缓存重试，避免对无关 4xx 重复请求。
 - usage 记录 `cacheReadTokens` / `cacheWriteTokens`：Anthropic 从 `cache_read_input_tokens` / `cache_creation_input_tokens` 读取；OpenAI 兼容从 `prompt_tokens_details.cached_tokens`、DeepSeek 从 `prompt_cache_hit_tokens` 读取缓存读（缺失视为 0）。
-- OpenAI 兼容协议未携带 tools 时不回传 `reasoning_content`，避免历史 reasoning 无限累积；携带 tools 时必须全量回传历史 reasoning（DeepSeek 等要求，漏传返回 400），预算估算同步全部计入。
+- OpenAI 兼容协议未携带 tools 时不回传 `reasoning_content`，避免历史 reasoning 无限累积；携带 tools 时必须全量回传历史 reasoning（DeepSeek 等要求，漏传返回 400），预算估算同步全部计入。Anthropic 协议在带 tools 时要求回传带 `signature` 的 thinking block（交错思考时按块回传，无签名的块跳过）。
 - 模型额外请求参数 JSON 原样透传给模型；辅助调用（会话标题、上下文摘要、记忆抽取）同样透传，宿主不解析或改写 `thinking` / `reasoning_effort` 等具体字段。
 
 #### 模型角色与图像模型
@@ -528,7 +529,7 @@ interface ProviderCapabilities {
 
 系统提示由宿主统一组装：身份与安全约束、工具使用规则、工作区规则与当前任务；提供商适配层只做格式转换，不允许各提供商各自实现一套。
 
-模型配置由结构化字段（`contextWindow`、`maxOutputTokens`、可选 `role` / `endpoint`）与一个额外请求参数 JSON 组成。`contextWindow` 用于上下文预算与压缩；`maxOutputTokens` 作为 `max_tokens` 下发并用于输出预算。额外参数 JSON **原样并入请求体**透传给模型，宿主不解析或改写 `thinking` / `reasoning_effort` 等具体字段。目前只有 DeepSeek（`isDeepSeekBaseUrl`）在携带 tools 时要求回传历史思考内容，宿主按 Base URL 自动处理，不提供逐模型开关：OpenAI 兼容端点回传 assistant 的 `reasoning_content` 字段，Anthropic 兼容端点（`/anthropic`）回传 `thinking` content block。同一判断也用于新建模型时默认 `contextWindow = 1M`。透传参数不得覆盖 `model`、`messages`、`stream`、`tools`、`max_tokens` 等协议保留字段，也不得写入密钥。
+模型配置由结构化字段（`contextWindow`、`maxOutputTokens`、`reasoningPassback`、`reasoningField`、可选 `role` / `endpoint`）与一个额外请求参数 JSON 组成。`contextWindow` 用于上下文预算与压缩；`maxOutputTokens` 作为 `max_tokens` 下发并用于输出预算；`reasoningPassback` 是模型级开关，控制携带 tools 时是否回传历史思考内容（默认关闭）；`reasoningField` 指定 OpenAI 兼容端点回传时的消息字段名（默认 `reasoning_content`），Anthropic 兼容端点固定使用 `thinking` content block，并原样回传带 `signature` 的 thinking block（签名来自流式 `signature_delta`，随 `message.completed` 持久化并在会话历史中恢复）。额外参数 JSON **原样并入请求体**透传给模型，宿主不解析或改写 `thinking` / `reasoning_effort` 等具体字段。新建模型默认 `contextWindow = 128K`，不区分厂商，由用户按实际网关调整。透传参数不得覆盖 `model`、`messages`、`stream`、`tools`、`max_tokens` 等协议保留字段，也不得写入密钥。
 
 系统提示保持稳定的静态前缀；平台、时间、全局记忆等动态上下文追加到最后一条用户消息（`<environment>` 块），避免破坏 prompt cache。用户自定义提示词可追加，但与默认系统提示冲突时以默认提示为准；场景模式提示词按需追加。
 
@@ -1213,7 +1214,7 @@ export function activate(ctx) {
 
 - 设置分三个层级，优先级为 **Session > Workspace > App**；读取时逐层合并，写入时记录 scope。
 - 设置分类：通用、记忆、模型与提供商、终端、外观、缓存、权限与审批、快捷键、高级；终端设置包含 shell、字号、滚回、选中即复制与 WebGL；字体使用默认等宽字体，默认字号 12px，自动检测的 shell 路径需回显。
-- 模型与提供商：对话 Provider 保持 Base URL、API Key、模型名、自定义 headers，以及每个模型的窗口/输出上限字段和一个额外请求参数 JSON（JSON 原样透传）；图像模型在独立入口配置完整请求 URL、模型、Key、headers、请求体模板与结果路径；媒体搜索在通用设置中配置 Pexels API Key；联网搜索配置 AnySearch API Key（可选，匿名访问也可用，但有更严格的限速与每日额度）。当前不做本地 token 单价配置，费用仅记录 Provider 返回的 cost。
+- 模型与提供商：对话 Provider 保持协议（OpenAI / Anthropic / Ollama）、Base URL、API Key、模型名、自定义 headers，以及每个模型的窗口/输出上限字段、回传思考开关/字段名和一个额外请求参数 JSON（JSON 原样透传）；图像模型在独立入口配置完整请求 URL、模型、Key、headers、请求体模板与结果路径；媒体搜索在通用设置中配置 Pexels API Key；联网搜索配置 AnySearch API Key（可选，匿名访问也可用，但有更严格的限速与每日额度）。当前不做本地 token 单价配置，费用仅记录 Provider 返回的 cost。
 - 支持连接测试与模型列表刷新；API Key 随本地 Provider 配置保存；不写死默认模型。
 - 图像模型可选；未配置时不注册 `generate_image`，设置页提供引导。
 - 权限与审批：默认审批策略、命令白名单、敏感路径策略、工作区信任管理。
@@ -1941,7 +1942,7 @@ CHANGELOG.md         # 版本变更记录
 - [ ] 已评估 token 成本：没有注入无关全文或重复提示，工具输出、历史与文件内容可按需读取或压缩。
 - [ ] 新功能提供低 token 路径，并对同类任务的输入 token 做了前后对比或回归验证。
 - [ ] 设置项经 zod 校验，API Key 随本地 Provider 配置保存。
-- [ ] 模型配置由窗口、输出上限字段与一个额外参数 JSON 组成；额外参数原样透传；DeepSeek 自动回传 reasoning；含自定义 headers 与连接测试；费用只记录 Provider 返回的 cost。
+- [ ] 模型配置由窗口、输出上限字段、回传思考开关/字段名与一个额外参数 JSON 组成；额外参数原样透传；含自定义 headers 与连接测试；费用只记录 Provider 返回的 cost。
 - [ ] 上下文压缩保留不可压缩内容，写入 `context.compacted`，失败可降级为硬截断。
 - [ ] 系统提示包含反幻觉、工具诚实、运行元信息、链接真实性与文件生成自检约束。
 - [ ] 路径访问基于 Workspace root + Session RootGrant，未授权路径必须走授权流程。
@@ -2011,7 +2012,7 @@ CHANGELOG.md         # 版本变更记录
 | `run.interrupted` | `reason` | 应用中断或崩溃后恢复 |
 | `message.reasoning.delta` | `messageId`、`text` | 推理内容增量，仅用于展示与导出 |
 | `message.delta` | `messageId`、`text` | 流式文本增量 |
-| `message.completed` | `messageId`、`role`、`content`、`reasoning?`、`durationMs?`、`error?`、`images?`、`references?`、`attachments?` | 消息完成 |
+| `message.completed` | `messageId`、`role`、`content`、`reasoning?`、`reasoningBlocks?`、`durationMs?`、`error?`、`images?`、`references?`、`attachments?` | 消息完成 |
 | `message.edited` | `messageId`、`content`、`references?`、`attachments?` | 用户编辑消息 |
 | `message.regenerated` | `messageId`、`sourceMessageId` | 重新生成回复 |
 | `message.superseded` | `messageId`、`reason` | 旧回复被编辑或重生成替代 |

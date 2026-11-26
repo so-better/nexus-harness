@@ -136,7 +136,11 @@ export const useProviderSettings = (
         maxOutputTokens: model.maxOutputTokens,
         ...(model.role ? { role: model.role } : {}),
         ...(model.endpoint ? { endpoint: model.endpoint } : {}),
-        ...(model.extraParams ? { extraParams: model.extraParams } : {})
+        ...(model.extraParams ? { extraParams: model.extraParams } : {}),
+        ...(model.reasoningPassback === undefined
+          ? {}
+          : { reasoningPassback: model.reasoningPassback }),
+        ...(model.reasoningField ? { reasoningField: model.reasoningField } : {})
       }));
       const defaultModelId = models.some((model) => model.id === providerForm.value.defaultModelId)
         ? providerForm.value.defaultModelId

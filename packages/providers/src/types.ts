@@ -21,10 +21,20 @@ export interface ChatImage {
   data: string;
 }
 
+/**
+ * 结构化思考块；Anthropic 交错思考时一轮可能有多个块，每块带独立签名。
+ */
+export interface ChatReasoningBlock {
+  text: string;
+  signature?: string;
+}
+
 export interface ChatMessage {
   role: ChatRole;
   content: string;
   reasoning?: string;
+  /** 结构化思考块（Anthropic 签名回传用）；reasoning 为纯文本展示/透传 */
+  reasoningBlocks?: ChatReasoningBlock[];
   images?: ChatImage[];
   toolCalls?: ProviderToolCall[];
   toolCallId?: string;
@@ -62,6 +72,7 @@ export interface ProviderRequest {
 export type ProviderStreamEvent =
   | { type: 'text-delta'; text: string }
   | { type: 'reasoning-delta'; text: string }
+  | { type: 'reasoning-block'; block: ChatReasoningBlock }
   | { type: 'tool-call-start'; id: string; name: string }
   | { type: 'tool-call-delta'; id: string; argumentsDelta: string }
   | { type: 'tool-call-end'; toolCall: ProviderToolCall }

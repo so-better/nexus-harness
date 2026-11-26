@@ -551,6 +551,11 @@ const zhCN = {
   'settings.modelContext': '上下文',
   'settings.modelOutput': '输出预算（含思考）',
   'settings.modelTokensUnit': 'tokens',
+  'settings.modelReasoningPassback': '回传思考内容',
+  'settings.modelReasoningField': '思考内容字段',
+  'settings.modelReasoningFieldInvalid': '字段名不合法，或用到了 role/content 等保留字段',
+  'settings.modelReasoningAnthropicHint':
+    'Anthropic 固定用 thinking block（需模型开启 thinking），仅回传带签名的块',
   'settings.modelExtraParams': '请求参数（JSON）',
   'settings.modelExtraParamsHint':
     '原样合并进请求体透传给模型，可写 thinking / reasoning_effort 等任意参数',
@@ -1218,6 +1223,12 @@ const enUS: Record<MessageKey, string> = {
   'settings.modelContext': 'Context',
   'settings.modelOutput': 'Output budget (incl. thinking)',
   'settings.modelTokensUnit': 'tokens',
+  'settings.modelReasoningPassback': 'Pass back reasoning',
+  'settings.modelReasoningField': 'Reasoning field',
+  'settings.modelReasoningFieldInvalid':
+    'Invalid field name, or a reserved field such as role/content was used',
+  'settings.modelReasoningAnthropicHint':
+    'Anthropic uses a thinking block (requires thinking enabled); only signed blocks are passed back',
   'settings.modelExtraParams': 'Request params (JSON)',
   'settings.modelExtraParamsHint':
     'Merged into the request body and passed through; any params such as thinking / reasoning_effort are allowed.',

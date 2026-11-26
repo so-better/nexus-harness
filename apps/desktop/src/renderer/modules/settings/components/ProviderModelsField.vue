@@ -100,6 +100,37 @@
               </small>
             </div>
 
+            <div class="nh-model-row__row nh-model-row__row--reasoning">
+              <label class="nh-model-row__field">
+                <span>{{ t('settings.modelReasoningPassback') }}</span>
+                <span class="nh-model-row__switch">
+                  <NSwitch
+                    size="small"
+                    :value="model.reasoningPassback === true"
+                    @update:value="
+                      (value: boolean) => updateModel(model.id, 'reasoningPassback', value)
+                    "
+                  />
+                </span>
+              </label>
+              <label v-if="protocol !== 'anthropic'" class="nh-model-row__field">
+                <span>{{ t('settings.modelReasoningField') }}</span>
+                <NInput
+                  size="small"
+                  :value="model.reasoningField ?? ''"
+                  placeholder="reasoning_content"
+                  v-bind="reasoningFieldInvalid(model) ? { status: 'error' } : {}"
+                  @update:value="(value: string) => updateModel(model.id, 'reasoningField', value)"
+                />
+                <small v-if="reasoningFieldInvalid(model)" class="nh-model-row__error">
+                  {{ t('settings.modelReasoningFieldInvalid') }}
+                </small>
+              </label>
+              <small v-else class="nh-model-row__hint">
+                {{ t('settings.modelReasoningAnthropicHint') }}
+              </small>
+            </div>
+
             <label class="nh-model-row__field nh-model-row__field--extra">
               <span class="nh-model-row__label-row">
                 <span>{{ t('settings.modelExtraParams') }}</span>
@@ -177,13 +208,13 @@
  */
 
 import { computed, reactive, ref, watch } from 'vue';
-import { NButton, NCheckbox, NFormItem, NInput, NInputNumber, NRadio } from 'naive-ui';
+import { NButton, NCheckbox, NFormItem, NInput, NInputNumber, NRadio, NSwitch } from 'naive-ui';
 import type { ProviderModel } from '@shared/ipc/contracts';
 import { t } from '@/app/i18n';
 import {
   findReservedProviderParams,
   findSensitiveProviderParams,
-  isDeepSeekBaseUrl
+  isValidReasoningField
 } from '@shared/provider-params';
 import { parseExtraParams } from '../validation/extra-params';
 import AppIcon from '@/components/AppIcon.vue';
@@ -193,8 +224,7 @@ const props = defineProps<{
   availableModels: string[];
   defaultModelId: string;
   testing: boolean;
-  /** Provider Base URL；DeepSeek 新建模型时默认使用 1M 上下文窗口。 */
-  baseUrl?: string;
+  protocol: 'openai' | 'anthropic' | 'ollama';
 }>();
 
 const emit = defineEmits<{
@@ -205,11 +235,9 @@ const emit = defineEmits<{
 }>();
 
 /**
- * 新建模型的默认上下文窗口：DeepSeek 为 1M，其余保持 128K。
+ * 新建模型的默认上下文窗口，统一 128K（不同网关自行调整）。
  */
-const defaultContextWindow = computed(() =>
-  isDeepSeekBaseUrl(props.baseUrl ?? '') ? 1_000_000 : 128_000
-);
+const DEFAULT_CONTEXT_WINDOW = 128_000;
 
 /**
  * 已获取模型与已保存模型的合集，保持配置存在。
@@ -220,7 +248,7 @@ const rows = computed<ProviderModel[]>(() => {
     (id) =>
       props.models.find((model) => model.id === id) ?? {
         id,
-        contextWindow: defaultContextWindow.value,
+        contextWindow: DEFAULT_CONTEXT_WINDOW,
         maxOutputTokens: 16_384
       }
   );
@@ -234,6 +262,12 @@ const extraErrors = reactive<Record<string, string>>({});
  */
 const budgetInvalid = (model: ProviderModel): boolean =>
   model.maxOutputTokens >= model.contextWindow;
+
+/**
+ * 思考内容字段名非法（如覆盖 role/content 等）。
+ */
+const reasoningFieldInvalid = (model: ProviderModel): boolean =>
+  props.protocol !== 'anthropic' && !isValidReasoningField(model.reasoningField);
 
 const extraText = (model: ProviderModel): string =>
   extraDrafts[model.id] ?? JSON.stringify(model.extraParams ?? {}, null, 2);
@@ -270,7 +304,9 @@ const showManual = ref(false);
 watch(
   () =>
     Object.keys(extraErrors).length === 0 &&
-    !props.models.some((model) => model.maxOutputTokens >= model.contextWindow),
+    !props.models.some(
+      (model) => model.maxOutputTokens >= model.contextWindow || reasoningFieldInvalid(model)
+    ),
   (valid) => emit('update:valid', valid),
   { immediate: true }
 );
@@ -305,8 +341,8 @@ const someSelected = computed(() => selectedCount.value > 0 && !allSelected.valu
  */
 const updateModel = (
   id: string,
-  key: 'contextWindow' | 'maxOutputTokens' | 'extraParams',
-  value: number | Record<string, unknown> | undefined | null
+  key: 'contextWindow' | 'maxOutputTokens' | 'reasoningPassback' | 'reasoningField' | 'extraParams',
+  value: number | boolean | string | Record<string, unknown> | undefined | null
 ): void => {
   if (value === null) return;
   emit(
@@ -316,6 +352,12 @@ const updateModel = (
       const next: ProviderModel = { ...model };
       if (key === 'contextWindow' || key === 'maxOutputTokens') {
         if (typeof value === 'number') next[key] = value;
+      } else if (key === 'reasoningPassback') {
+        if (typeof value === 'boolean') next.reasoningPassback = value;
+      } else if (key === 'reasoningField') {
+        const field = typeof value === 'string' ? value.trim() : '';
+        if (field) next.reasoningField = field;
+        else delete next.reasoningField;
       } else if (value && typeof value === 'object') {
         next.extraParams = value as Record<string, unknown>;
       } else {
@@ -342,7 +384,7 @@ const addManualModel = (): void => {
   const model: ProviderModel = {
     id,
     role: 'chat',
-    contextWindow: defaultContextWindow.value,
+    contextWindow: DEFAULT_CONTEXT_WINDOW,
     maxOutputTokens: 16_384
   };
   emit('update:models', [...props.models, model]);
@@ -543,7 +585,8 @@ const toggleAll = (checked: boolean): void => {
   gap: 12px 28px;
 }
 
-.nh-model-row__row--budget {
+.nh-model-row__row--budget,
+.nh-model-row__row--reasoning {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
@@ -559,6 +602,12 @@ const toggleAll = (checked: boolean): void => {
 .nh-model-row__field > span {
   min-width: 0;
   line-height: 1.4;
+}
+
+.nh-model-row__switch {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
 }
 
 .nh-model-row__field--extra {
@@ -606,7 +655,8 @@ const toggleAll = (checked: boolean): void => {
 }
 
 @media (width <= 640px) {
-  .nh-model-row__row--budget {
+  .nh-model-row__row--budget,
+  .nh-model-row__row--reasoning {
     grid-template-columns: 1fr;
   }
 }
