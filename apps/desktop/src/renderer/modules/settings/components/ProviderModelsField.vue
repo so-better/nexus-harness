@@ -238,7 +238,7 @@ const emit = defineEmits<{
  * 新建模型的默认上下文窗口与输出预算（不同网关自行调整）。
  */
 const DEFAULT_CONTEXT_WINDOW = 1_000_000;
-const DEFAULT_MAX_OUTPUT_TOKENS = 32_768;
+const DEFAULT_MAX_OUTPUT_TOKENS = 65_536;
 
 /**
  * 已获取模型与已保存模型的合集，保持配置存在。

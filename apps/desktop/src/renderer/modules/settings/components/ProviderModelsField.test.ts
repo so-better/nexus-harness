@@ -169,7 +169,7 @@ describe('ProviderModelsField', () => {
     document.body.innerHTML = '';
   });
 
-  it('defaults new models to a 1M context window and 32K output', async () => {
+  it('defaults new models to a 1M context window and 64K output', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     let updated: ProviderModel[] | undefined;
@@ -196,7 +196,7 @@ describe('ProviderModelsField', () => {
     await nextTick();
 
     expect(updated?.[0]?.contextWindow).toBe(1_000_000);
-    expect(updated?.[0]?.maxOutputTokens).toBe(32_768);
+    expect(updated?.[0]?.maxOutputTokens).toBe(65_536);
     app.unmount();
     document.body.innerHTML = '';
   });
