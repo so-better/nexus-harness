@@ -14,3 +14,7 @@ coverage/
 # Built-in plugin distributables are part of the app resources.
 !apps/desktop/resources/plugins/**/dist/
 !apps/desktop/resources/plugins/**/dist/**
+
+# 发布产物归档需要入库（覆盖上面对 "release/" 的忽略）
+!guide/release/
+!guide/release/**

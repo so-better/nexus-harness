@@ -2078,6 +2078,7 @@ CHANGELOG.md         # 版本变更记录
 | `CODE_OF_CONDUCT.md` | 社区行为准则 |
 | `SECURITY.md` | 漏洞报告方式与安全策略 |
 | `CHANGELOG.md` | 版本变更记录 |
+| `RELEASE.md` | 打包发布流程：版本号、CHANGELOG、mac/Windows 打包与产物归档 |
 | `docs/decisions/` | 架构与产品决策记录（ADR），含模板与索引 |
 | `docs/` 其他 | 详细设计、协议说明与评测报告 |
 
