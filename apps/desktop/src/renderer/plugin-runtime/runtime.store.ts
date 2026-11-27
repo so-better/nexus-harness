@@ -231,6 +231,8 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
   const quickPickProviders = ref(new Map<string, Map<string, PluginQuickPickProvider>>());
   const views = ref(new Map<string, PluginView>());
   const openedView = ref<PluginView | null>(null);
+  /** 主区（右侧整页）插件视图：由导航栏选择触发，与弹窗式 openedView 区分 */
+  const mainView = ref<PluginView | null>(null);
   /** 插件侧栏导航入口：来自启用且具备 ui.panel 的插件的 navigation 贡献 */
   const navigationEntries = computed(() =>
     plugins.value
@@ -459,6 +461,9 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
               views.value.delete(key);
               if (openedView.value?.pluginId === plugin.id && openedView.value.id === id) {
                 openedView.value = null;
+              }
+              if (mainView.value?.pluginId === plugin.id && mainView.value.id === id) {
+                mainView.value = null;
               }
               bump();
             };
@@ -717,6 +722,7 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     commands.value = new Map();
     views.value.clear();
     openedView.value = null;
+    mainView.value = null;
     slotRegistry.clear();
     skinMounts.value = new Map();
     startupMounts.value = new Map();
@@ -1107,6 +1113,7 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     commands,
     views,
     openedView,
+    mainView,
     navigationEntries,
     collectQuickPicks,
     openView: async (pluginId: string, viewId: string) => {
@@ -1120,6 +1127,18 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
     },
     closeView: () => {
       openedView.value = null;
+    },
+    openMainView: async (pluginId: string, viewId: string) => {
+      let view = views.value.get(`${pluginId}:${viewId}`);
+      if (!view) {
+        await activateForView(viewId);
+        view = views.value.get(`${pluginId}:${viewId}`);
+      }
+      if (!view) throw new Error(`未声明的视图：${viewId}`);
+      mainView.value = view;
+    },
+    closeMainView: () => {
+      mainView.value = null;
     },
     version,
     loading,

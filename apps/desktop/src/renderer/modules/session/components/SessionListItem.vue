@@ -28,8 +28,6 @@
     </div>
 
     <div v-if="!renaming" class="nh-session-item__actions" @click.stop>
-      <PluginSlot location="session.item.actions"
-        :context="{ location: 'session.item.actions', sessionId: session.id }" />
       <NPopconfirm v-model:show="deleteConfirmVisible" trigger="manual" placement="right"
         @positive-click="emit('remove')">
         <template #trigger>
@@ -70,7 +68,6 @@ import type { SessionSummary } from '@shared/ipc/contracts';
 import { locale, t } from '@/app/i18n';
 import { sessionStatusLabel, sessionStatusTone } from '@/app/session-status';
 import AppIcon from '@/components/AppIcon.vue';
-import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
 
 const props = defineProps<{
   session: SessionSummary;
@@ -364,7 +361,7 @@ const relativeTime = computed(() => {
   color: var(--nh-color-text-secondary);
 }
 
-/* 三个点加粗放大，便于识别为可点击的操作入口 */
+// 三个点加粗放大，便于识别为可点击的操作入口
 .nh-session-item__action :deep(.nh-icon) {
   stroke-width: 3;
 }

@@ -20,11 +20,29 @@ export interface NavItem {
 /** 导航图标默认渲染尺寸 */
 const NAV_ICON_SIZE = 20;
 
+/** 默认（内置）区块 id：会话 */
+export const SESSIONS_NAV_ID = 'sessions';
+
 /** 导航菜单清单；数组顺序即展示顺序，首项作为默认区块 */
 export const NAV_ITEMS: NavItem[] = [
   {
-    id: 'sessions',
+    id: SESSIONS_NAV_ID,
     labelKey: 'nav.sessions',
     icon: () => h(AppIcon, { name: 'message', size: NAV_ICON_SIZE })
   }
 ];
+
+/**
+ * 导航栏渲染项：内置项与插件项合并后的统一形态。
+ */
+export interface RailNavItem {
+  /** 唯一标识；内置为 NAV_ITEMS.id，插件为 plugin:<pluginId>:<navId> */
+  key: string;
+  /** 已解析的展示文案（内置走 i18n，插件用 manifest title） */
+  label: string;
+  /** 图标组件 */
+  icon: Component;
+  /** 插件导航项所属插件与视图；内置项为空 */
+  pluginId?: string;
+  viewId?: string;
+}

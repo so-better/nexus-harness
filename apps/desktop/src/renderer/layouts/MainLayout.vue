@@ -6,64 +6,70 @@
   >
     <PluginSkinLayer />
     <AppTitleBar :title="activeNavLabel" :platform="platform" />
-    <div class="nh-layout__body">
+    <div class="nh-layout__body" :class="{ 'nh-layout__body--plugin': isPluginSection }">
       <NavRail
         :collapsed="railCollapsed"
-        :active-id="activeSection"
-        @select="activeSection = $event"
+        :items="railNavItems"
+        :active-key="activeSection"
+        @select="selectSection"
         @toggle="railCollapsed = !railCollapsed"
       />
-      <SessionSidebar
-        ref="sidebarRef"
-        :sessions="sessions.sessions"
-        :active-id="sessions.activeId"
-        :loading="sessions.loading"
-        @create="createSession"
-        @select="selectSession"
-        @remove="removeSession"
-        @rename="renameSession"
-        @clear-all="clearAllSessions"
-        @open-message="openSearchMessage"
-        @toggle-pin="sessions.togglePinned"
-      />
+      <template v-if="!isPluginSection">
+        <SessionSidebar
+          ref="sidebarRef"
+          :sessions="sessions.sessions"
+          :active-id="sessions.activeId"
+          :loading="sessions.loading"
+          @create="createSession"
+          @select="selectSession"
+          @remove="removeSession"
+          @rename="renameSession"
+          @clear-all="clearAllSessions"
+          @open-message="openSearchMessage"
+          @toggle-pin="sessions.togglePinned"
+        />
 
-      <ChatView
-        :session="sessions.activeSession"
-        :projection="projection"
-        :running="activeRunning"
-        :roots="roots"
-        :providers="providers"
-        :models="models"
-        :mode="activeMode"
-        :provider-id="providerId"
-        :model-id="modelId"
-        :disabled-reason="disabledReason"
-        :focus-message-id="focusMessage?.id"
-        :focus-token="focusMessage?.token"
-        :focus-session-id="focusMessage?.sessionId"
-        :exporting="exporting"
-        :workspace-auth="workspaceAuthRequest"
-        :ensure-session="ensureSession"
-        @choose-root="chooseRoot"
-        @remove-root="removeRoot"
-        @request-root="authorizeRootAndRetry"
-        @allow-workspace="allowWorkspace"
-        @reject-workspace="rejectWorkspace"
-        @update-provider="updateProvider"
-        @update-model="updateModel"
-        @update-mode="changeMode"
-        @open-settings="settingsOpen = true"
-        @send="send"
-        @stop="stop"
-        @approve="(id) => chat.decideApproval(id, true)"
-        @reject="(id) => chat.decideApproval(id, false)"
-        @answer-user="answerUser"
-        @edit-message="editMessage"
-        @regenerate-message="regenerateMessage"
-        @export="(format) => exportActiveSession(format)"
-        @update-approval-policy="changeApprovalPolicy"
-      />
-      <TerminalPanel :session-id="activeId ?? undefined" :shortcut-enabled="!settingsOpen" />
+        <ChatView
+          :session="sessions.activeSession"
+          :projection="projection"
+          :running="activeRunning"
+          :roots="roots"
+          :providers="providers"
+          :models="models"
+          :mode="activeMode"
+          :provider-id="providerId"
+          :model-id="modelId"
+          :disabled-reason="disabledReason"
+          :focus-message-id="focusMessage?.id"
+          :focus-token="focusMessage?.token"
+          :focus-session-id="focusMessage?.sessionId"
+          :exporting="exporting"
+          :workspace-auth="workspaceAuthRequest"
+          :ensure-session="ensureSession"
+          @choose-root="chooseRoot"
+          @remove-root="removeRoot"
+          @request-root="authorizeRootAndRetry"
+          @allow-workspace="allowWorkspace"
+          @reject-workspace="rejectWorkspace"
+          @update-provider="updateProvider"
+          @update-model="updateModel"
+          @update-mode="changeMode"
+          @open-settings="settingsOpen = true"
+          @send="send"
+          @stop="stop"
+          @approve="(id) => chat.decideApproval(id, true)"
+          @reject="(id) => chat.decideApproval(id, false)"
+          @answer-user="answerUser"
+          @edit-message="editMessage"
+          @regenerate-message="regenerateMessage"
+          @export="(format) => exportActiveSession(format)"
+          @update-approval-policy="changeApprovalPolicy"
+        />
+        <TerminalPanel :session-id="activeId ?? undefined" :shortcut-enabled="!settingsOpen" />
+      </template>
+      <div v-else class="nh-layout__plugin">
+        <PluginViewHost :view="pluginRuntime.mainView" />
+      </div>
     </div>
 
     <AppStatusbar
@@ -134,12 +140,13 @@ import ChangelogModal from '@/components/ChangelogModal.vue';
 import CommandPalette from '@/components/CommandPalette.vue';
 import PluginSkinLayer from '@/plugin-runtime/components/PluginSkinLayer.vue';
 import PluginViewModal from '@/plugin-runtime/components/PluginViewModal.vue';
+import PluginViewHost from '@/plugin-runtime/components/PluginViewHost.vue';
 import { setAppMessageApi } from '@/app/app-message';
 import { usePluginRuntimeStore } from '@/plugin-runtime/runtime.store';
 import AppStatusbar from './AppStatusbar.vue';
 import AppTitleBar from './AppTitleBar.vue';
 import NavRail from './NavRail.vue';
-import { NAV_ITEMS } from './nav-items';
+import { useRailNav } from './use-rail-nav';
 import { useAppMeta } from './use-app-meta';
 import { useSessionStatusSync } from './use-session-status';
 import { useAppCommands } from './use-app-commands';
@@ -170,12 +177,14 @@ const railCollapsed = ref(false);
 // 收起时仅显示图标的窄栏，展开时容纳图标 + 名称
 const railWidth = computed(() => (railCollapsed.value ? '80px' : '176px'));
 
-// 当前导航区块，默认取菜单首项；标题栏副标题随之显示菜单名称
-const activeSection = ref(NAV_ITEMS[0]?.id ?? '');
-const activeNavLabel = computed(() => {
-  const item = NAV_ITEMS.find((entry) => entry.id === activeSection.value);
-  return t(item?.labelKey ?? 'nav.sessions');
-});
+// 导航栏项（内置 + 插件）与当前区块；标题栏副标题随之显示菜单名称
+const {
+  items: railNavItems,
+  activeKey: activeSection,
+  activeLabel: activeNavLabel,
+  isPluginSection,
+  select: selectSection
+} = useRailNav();
 
 watch(
   () => Boolean(pluginRuntime.activeSkinMount),
@@ -446,6 +455,20 @@ onBeforeUnmount(() => {
 
 @media (width <= 1024px) {
   .nh-layout__body {
-    grid-template-columns: var(--nh-rail-w, 176px) var(--nh-sidebar-w-narrow, 232px) minmax(0, 1fr) auto;
+    grid-template-columns:
+      var(--nh-rail-w, 176px) var(--nh-sidebar-w-narrow, 232px) minmax(0, 1fr)
+      auto;
   }
-}</style>
+}
+
+// 插件区块：隐藏会话侧栏与对话区，主区整页渲染插件视图
+.nh-layout__body--plugin {
+  grid-template-columns: var(--nh-rail-w, 176px) minmax(0, 1fr);
+}
+
+.nh-layout__plugin {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+</style>

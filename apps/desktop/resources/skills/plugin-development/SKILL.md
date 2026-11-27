@@ -16,7 +16,7 @@ metadata:
       usage,
       用户插件
     ]
-  version: 1.3.34
+  version: 1.3.37
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -155,7 +155,7 @@ ctx.pluginId
 ctx.commands.register(id, handler): Disposable
 ctx.commands.registerProvider(id, provider): Disposable // 命令面板打开时收集动态条目
 ctx.views.register(id, mount): Disposable
-ctx.views.open(id): Promise<void>
+ctx.views.open(id): Promise<void> // 打开为弹窗
 ctx.slots.register(id, mount): Disposable
 ctx.skins.register(id, mount): Disposable
 ctx.startup.register(id, mount): Disposable
@@ -217,7 +217,17 @@ export function activate(ctx) {
 ## 贡献点
 
 - `views` / `messageSlots` / `statusBar` / `commands` / `settings` / `skins` / `startup` 见 manifest。
-- `navigation`：`[{ id, title, viewId }]`，在侧栏显示入口并打开已声明的 `view`（需 `ui.panel`）。
+- `views`：`[{ id, title }]`。**默认以弹窗打开**（`ctx.views.open(id)` → 宿主大尺寸弹窗），宿主不自动列出。
+- `navigation`：`[{ id, title, viewId, icon? }]`，在**左侧导航栏**显示入口；点击后在**主区（右侧整页）**展示对应 `view`（需 `ui.panel`，且 `viewId` 必须已在本插件 `views` 中声明）。
+
+**视图呈现方式由「入口」决定，与视图本身无关：**
+
+| 入口 | 呈现 |
+| --- | --- |
+| `ctx.views.open(id)` | 弹窗 |
+| 点击 `navigation` 声明的导航项（宿主内部打开） | 主区整页 |
+
+同一视图既被 `navigation` 指向、又被 `ctx.views.open` 调用时：点导航项是整页，`ctx.views.open` 仍是弹窗。插件目前没有「直接在主区打开」的 API，主区整页只能经 `navigation` 声明并由用户点选触发。
 
 ## 常用插槽
 
@@ -232,7 +242,7 @@ export function activate(ctx) {
 | `message.user.footer` / `.actions`                        | 用户消息      |
 | `toolcall.body` / `toolcall.footer`                       | 工具调用卡片  |
 | `terminal.toolbar`                                        | 终端工具条    |
-| `filecard.actions` / `filecard.footer`                    | 文件卡片      |
+| `filecard.footer`                                         | 文件卡片尾部  |
 
 插槽挂载在 Shadow DOM 中，插件只负责容器内部内容，不得改变宿主布局、遮挡宿主操作或劫持点击。
 
@@ -258,7 +268,7 @@ interface MainPluginContext {
 
 - `ctx.commands.registerProvider` 注册的快速选择项仅在插件**已激活**时出现在命令面板；需要配置相应的 `activationEvents`（如 `onSlot`/`onCommand`/`onEvent`）。
 
-- 声明 `views` 贡献点并申请 `ui.panel`；`ctx.views.register` 挂载视图，`ctx.views.open(id)` 打开宿主大尺寸视图弹窗。视图的入口和展示位置由插件自行设计，宿主不自动列出。
+- 声明 `views` 贡献点并申请 `ui.panel`；`ctx.views.register` 挂载视图，`ctx.views.open(id)` 打开**弹窗**；若同时声明 `navigation` 指向该视图，其入口显示在**左侧导航栏**、点击后在**主区（右侧整页）**展示（呈现方式见「贡献点」表）。视图内容由插件自行设计，宿主不自动列出。
 - 需要分析数据时申请 `usage:read`，调用 `ctx.usage.getStats({ sessionId?, from?, to?, bucket? })`；返回总量（含 `cacheReadTokens` / `cacheWriteTokens` 提示缓存读写的可选字段，`inputTokens` 已含缓存读，缓存命中率可用 `cacheReadTokens / inputTokens` 估算）、时间序列、会话、模型和 Provider 分布，不需要读取数据库。按 `sessionId` 查询时额外返回可选 `context`（`contextWindow`、`maxOutputTokens`、`contextTokens`，取最近一次主对话调用的输入 token 近似当前上下文占用，并可带 `breakdown`：`systemTokens` / `toolsTokens` / `historyTokens` 三个估算占比，展示时按真实「已用」归一），用于展示上下文窗口占用与构成；模型未解析时该字段缺省。
 - 视图与命令可按需激活；视图打开失败应给出可诊断错误，不要静默失败。
 

@@ -912,8 +912,8 @@ metadata:
 
 | 贡献点 | 用途 |
 | --- | --- |
-| `views` | 插件自定义视图，通过 `ctx.views.open` 打开，宿主不自动列出 |
-| `navigation` | 插件侧栏导航入口，指向已声明的 `view`（需 `ui.panel`） |
+| `views` | 插件自定义视图；`ctx.views.open` 打开为弹窗，或经 `navigation` 在主区整页展示；宿主不自动列出 |
+| `navigation` | 插件导航入口：显示在左侧导航栏，点击后在主区（右侧整页）展示对应 `view`（需 `ui.panel`） |
 | `messageSlots` | 会话流、输入区、工具调用与审批等插槽 |
 | `statusBar` | 状态栏条目（可带图标） |
 | `commands` | 命令面板与快捷键绑定 |
@@ -924,6 +924,8 @@ metadata:
 | `tools` | 向 Agent 注册工具：不开放，外部工具统一通过 MCP 接入 |
 | `themes` | 不开放；使用 skins 与语义 token |
 
+`navigation` / `views` 的主区整页视图开合属**宿主 UI 状态**（非会话范围），经 `ui.panel` 权限网关，不产生会话领域事件，也不新增插槽；插件视图内容通过 `ctx.views.register` 挂载，宿主不感知其内部。
+
 标准插槽：
 
 | 区域 | 插槽 | 用途 |
@@ -933,12 +935,11 @@ metadata:
 | 输入区 | `composer.toolbar` / `composer.above` / `composer.footer` | 工具条、输入框上方提示、下方用量 |
 | 空状态 | `empty-state` | 首次进入或无会话 |
 | 会话 | `session.header.actions` | 会话头操作 |
-| 会话 | `session.item.actions` | 会话列表项操作 |
 | 消息 | `message.assistant.header` / `.footer` / `.actions` | AI 消息头、尾部、操作 |
 | 消息 | `message.user.footer` / `.actions` | 用户消息尾、操作 |
 | 工具 | `toolcall.body` / `toolcall.footer` | 工具调用内容与尾部 |
 | 工作区 | `terminal.toolbar` | 终端工具条 |
-| 文件 | `filecard.actions` / `filecard.footer` | 输出文件卡片 |
+| 文件 | `filecard.footer` | 输出文件卡片尾部 |
 
 插件只能渲染在宿主给定的容器内，不得改变布局或遮挡宿主操作。
 

@@ -14,7 +14,6 @@ export const PLUGIN_SLOT_LOCATIONS = [
   'composer.footer',
   'empty-state',
   'session.header.actions',
-  'session.item.actions',
   'message.assistant.header',
   'message.assistant.footer',
   'message.assistant.actions',
@@ -23,7 +22,6 @@ export const PLUGIN_SLOT_LOCATIONS = [
   'toolcall.body',
   'toolcall.footer',
   'terminal.toolbar',
-  'filecard.actions',
   'filecard.footer'
 ] as const;
 

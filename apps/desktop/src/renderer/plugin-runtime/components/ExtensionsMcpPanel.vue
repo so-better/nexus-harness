@@ -379,7 +379,7 @@ onMounted(async () => {
   background: var(--nh-color-bg-base);
 }
 
-/* server 卡片撑满剩余高度，列表自身滚动；JSON 编辑器卡片保持自身滚动 */
+// server 卡片撑满剩余高度，列表自身滚动；JSON 编辑器卡片保持自身滚动
 .nh-mcp__server-card {
   display: flex;
   min-height: 0;

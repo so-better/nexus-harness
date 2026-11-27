@@ -104,22 +104,22 @@
 
     <div class="nh-rail__list">
       <NButton
-        v-for="item in NAV_ITEMS"
-        :key="item.id"
+        v-for="item in items"
+        :key="item.key"
         class="nh-rail__item"
-        :class="{ 'is-active': item.id === activeId }"
+        :class="{ 'is-active': item.key === activeKey }"
         quaternary
         block
-        :aria-current="item.id === activeId ? 'page' : undefined"
-        :title="t(item.labelKey)"
-        :aria-label="t(item.labelKey)"
-        @click="emit('select', item.id)"
+        :aria-current="item.key === activeKey ? 'page' : undefined"
+        :title="item.label"
+        :aria-label="item.label"
+        @click="emit('select', item.key)"
       >
         <span class="nh-rail__row">
           <span class="nh-rail__icon">
             <component :is="item.icon" />
           </span>
-          <span class="nh-rail__label">{{ t(item.labelKey) }}</span>
+          <span class="nh-rail__label">{{ item.label }}</span>
         </span>
       </NButton>
     </div>
@@ -151,10 +151,10 @@ import { useId } from 'vue';
 import { NButton } from 'naive-ui';
 import { t } from '@/app/i18n';
 import AppIcon from '@/components/AppIcon.vue';
-import { NAV_ITEMS } from './nav-items';
+import type { RailNavItem } from './nav-items';
 
-defineProps<{ collapsed: boolean; activeId: string }>();
-const emit = defineEmits<{ select: [id: string]; toggle: [] }>();
+defineProps<{ collapsed: boolean; items: RailNavItem[]; activeKey: string }>();
+const emit = defineEmits<{ select: [key: string]; toggle: [] }>();
 
 // 结合 useId 生成唯一 id，避免内联 SVG 的渐变/滤镜 id 在多次渲染时冲突
 const uid = useId();
@@ -288,7 +288,7 @@ const brandId = (part: string): string => `nh-brand-${part}-${uid}`;
 
 .nh-rail__footer {
   display: flex;
-  height: var(--nh-panel-footer-h, 48px);
+  height: 44px;
   flex: none;
   align-items: center;
   justify-content: center;
@@ -296,7 +296,7 @@ const brandId = (part: string): string => `nh-brand-${part}-${uid}`;
   border-top: 1px solid var(--nh-border-subtle);
 }
 
-/* 激活项：浅色强调底 + 强调色前景（覆盖 Naive 按钮底色，故用 !important） */
+// 激活项：浅色强调底 + 强调色前景（覆盖 Naive 按钮底色，故用 !important）
 .nh-rail__item.is-active {
   background-color: color-mix(in srgb, var(--nh-color-accent) 12%, transparent) !important;
   color: var(--nh-color-accent) !important;

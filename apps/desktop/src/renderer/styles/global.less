@@ -24,10 +24,9 @@
   --nh-space-md: 16px;
   --nh-space-lg: 24px;
 
-  /** 布局固定尺寸：会话侧栏宽度与面板底部栏高度，供布局与终端面板共用 */
+  /** 布局固定尺寸：会话侧栏宽度，供布局与终端面板共用 */
   --nh-sidebar-w: 248px;
   --nh-sidebar-w-narrow: 232px;
-  --nh-panel-footer-h: 48px;
   --nh-surface-base: var(--nh-color-bg-base);
   --nh-surface-elevated: var(--nh-color-bg-elevated);
   --nh-surface-hover: var(--nh-color-bg-hover);
@@ -238,7 +237,7 @@ body:has(.n-modal-mask) .nh-titlebar {
   flex: none;
 }
 
-/* 各 tab 的面板撑满剩余高度并自身滚动，标签栏固定、不会随内容滚走 */
+// 各 tab 的面板撑满剩余高度并自身滚动，标签栏固定、不会随内容滚走
 .nh-settings .n-tab-pane > :not(.nh-settings__hint) {
   min-height: 0;
   flex: 1 1 auto;

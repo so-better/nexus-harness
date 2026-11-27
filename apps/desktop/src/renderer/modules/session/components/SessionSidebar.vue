@@ -49,25 +49,12 @@
       </NButton>
     </header>
 
-    <div class="nh-sidebar__plugin-header">
+    <div v-if="!searchMode" class="nh-sidebar__plugin-header">
       <PluginSlot
         location="sidebar.header"
         :context="{ location: 'sidebar.header', sessionId: activeId }"
       />
     </div>
-
-    <nav v-if="navEntries.length && !searchMode" class="nh-sidebar__plugin-nav" aria-label="插件">
-      <button
-        v-for="entry in navEntries"
-        :key="`${entry.pluginId}:${entry.id}`"
-        type="button"
-        class="nh-sidebar__plugin-nav-item"
-        @click="openNav(entry.pluginId, entry.viewId)"
-      >
-        <AppIcon :name="navIcon(entry.icon)" :size="14" />
-        <span>{{ entry.title }}</span>
-      </button>
-    </nav>
 
     <div class="nh-sidebar__scroll">
       <div v-if="searchMode" class="nh-sidebar__body">
@@ -155,15 +142,14 @@
  */
 
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
-import { NButton, NEmpty, NInput, NPopconfirm, NSpin, useMessage, type InputInst } from 'naive-ui';
+import { NButton, NEmpty, NInput, NPopconfirm, NSpin, type InputInst } from 'naive-ui';
 import type { SessionSearchResult, SessionSummary } from '@shared/ipc/contracts';
 import { locale, t } from '@/app/i18n';
-import AppIcon, { APP_ICON_NAMES, type AppIconName } from '@/components/AppIcon.vue';
+import AppIcon from '@/components/AppIcon.vue';
 import { searchSessions } from '../api/session.api';
 import SessionListItem from './SessionListItem.vue';
 import SessionSearchResultItem from './SessionSearchResultItem.vue';
 import PluginSlot from '@/plugin-runtime/components/PluginSlot.vue';
-import { usePluginRuntimeStore } from '@/plugin-runtime/runtime.store';
 
 interface SessionGroup {
   key: 'pinned' | 'today' | 'yesterday' | 'earlier';
@@ -186,25 +172,6 @@ const emit = defineEmits<{
   'open-message': [sessionId: string, messageId: string];
   'toggle-pin': [id: string];
 }>();
-
-const pluginRuntime = usePluginRuntimeStore();
-const message = useMessage();
-const navEntries = computed(() => pluginRuntime.navigationEntries);
-
-/**
- * 校验导航图标名，未知时回退到通用图标。
- */
-const navIcon = (icon: string | undefined): AppIconName =>
-  icon && (APP_ICON_NAMES as readonly string[]).includes(icon) ? (icon as AppIconName) : 'spark';
-
-/**
- * 打开插件侧栏导航指向的视图；失败时给出可见提示。
- */
-const openNav = (pluginId: string, viewId: string): void => {
-  pluginRuntime.openView(pluginId, viewId).catch((error: unknown) => {
-    message.error(error instanceof Error ? error.message : t('commands.failed'));
-  });
-};
 
 const searchMode = ref(false);
 const query = ref('');
@@ -414,7 +381,7 @@ const groups = computed<SessionGroup[]>(() => {
   box-shadow: inset 0 -1px 0 var(--nh-border-subtle);
 }
 
-/* 主操作（新建会话 / 搜索输入框）占满剩余宽度，右侧图标按钮固定宽度 */
+// 主操作（新建会话 / 搜索输入框）占满剩余宽度，右侧图标按钮固定宽度
 .nh-sidebar__header-main {
   min-width: 0;
   flex: 1 1 auto;
@@ -433,37 +400,6 @@ const groups = computed<SessionGroup[]>(() => {
   gap: 6px;
   overflow-y: auto;
   overscroll-behavior: contain;
-}
-
-.nh-sidebar__plugin-nav {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  gap: 2px;
-  padding: 4px 8px;
-}
-
-.nh-sidebar__plugin-nav-item {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--nh-color-text-secondary);
-  cursor: pointer;
-  font-size: 13px;
-  text-align: left;
-  transition:
-    background var(--nh-duration-fast) var(--nh-ease-standard),
-    color var(--nh-duration-fast) var(--nh-ease-standard);
-}
-
-.nh-sidebar__plugin-nav-item:hover {
-  background: var(--nh-color-bg-hover);
-  color: var(--nh-color-text-primary);
 }
 
 .nh-sidebar__scroll {
@@ -526,12 +462,11 @@ const groups = computed<SessionGroup[]>(() => {
 
 .nh-sidebar__footer {
   display: flex;
-  height: var(--nh-panel-footer-h, 48px);
   flex: none;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 16px;
+  padding: 10px 16px;
   border-top: 1px solid var(--nh-border-subtle);
   color: var(--nh-color-text-secondary);
   font-size: 12px;

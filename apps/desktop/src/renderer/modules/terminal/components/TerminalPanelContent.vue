@@ -436,7 +436,7 @@ const stopResize = (): void => {
 }
 
 @media (width <= 880px) {
-  /* 窄窗口下改为浮层，避免终端停靠把对话区压到不可用 */
+  // 窄窗口下改为浮层，避免终端停靠把对话区压到不可用
   .nh-terminal-panel {
     position: absolute;
     z-index: var(--nh-z-overlay);

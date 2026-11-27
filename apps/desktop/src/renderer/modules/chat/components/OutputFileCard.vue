@@ -10,15 +10,6 @@
           >{{ formatFileBytes(file.bytes) }} · {{ file.mime }}</span
         >
       </span>
-      <PluginSlot
-        location="filecard.actions"
-        :context="{
-          location: 'filecard.actions',
-          sessionId: file.sessionId,
-          runId: file.runId,
-          fileId: file.id
-        }"
-      />
       <span class="nh-output-file__actions">
         <NButton v-if="canPreview" quaternary size="small" @click="previewOpen = true">
           <template #icon>
