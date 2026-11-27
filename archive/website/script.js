@@ -22,11 +22,11 @@
     toggle.addEventListener('click', function () {
       var next = current() === 'dark' ? 'light' : 'dark';
       applyTheme(next);
-      try { localStorage.setItem(KEY, next); } catch (e) {}
+      try { localStorage.setItem(KEY, next); } catch { /* 忽略：存储不可用 */ }
     });
   }
   var stored = null;
-  try { stored = localStorage.getItem(KEY); } catch (e) {}
+  try { stored = localStorage.getItem(KEY); } catch { /* 忽略：存储不可用 */ }
   if (!stored && mq.addEventListener) {
     mq.addEventListener('change', function (event) { applyTheme(event.matches ? 'light' : 'dark'); });
   }
