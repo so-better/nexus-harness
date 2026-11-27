@@ -1,8 +1,18 @@
 <template>
-  <div class="nh-layout" :class="{ 'nh-layout--skin': Boolean(pluginRuntime.activeSkinMount) }">
+  <div
+    class="nh-layout"
+    :class="{ 'nh-layout--skin': Boolean(pluginRuntime.activeSkinMount) }"
+    :style="{ '--nh-rail-w': railWidth }"
+  >
     <PluginSkinLayer />
-    <AppTitleBar :title="sessions.activeSession?.title" :platform="platform" />
+    <AppTitleBar :title="activeNavLabel" :platform="platform" />
     <div class="nh-layout__body">
+      <NavRail
+        :collapsed="railCollapsed"
+        :active-id="activeSection"
+        @select="activeSection = $event"
+        @toggle="railCollapsed = !railCollapsed"
+      />
       <SessionSidebar
         ref="sidebarRef"
         :sessions="sessions.sessions"
@@ -128,6 +138,8 @@ import { setAppMessageApi } from '@/app/app-message';
 import { usePluginRuntimeStore } from '@/plugin-runtime/runtime.store';
 import AppStatusbar from './AppStatusbar.vue';
 import AppTitleBar from './AppTitleBar.vue';
+import NavRail from './NavRail.vue';
+import { NAV_ITEMS } from './nav-items';
 import { useAppMeta } from './use-app-meta';
 import { useSessionStatusSync } from './use-session-status';
 import { useAppCommands } from './use-app-commands';
@@ -153,6 +165,17 @@ const { sessions: sessionList, activeId } = storeToRefs(sessions);
 const { providers, providerId, modelId, models, roots, runningBySession } = storeToRefs(chat);
 
 const { version, platform, settingsOpen, themeSource, load: loadAppMeta, setTheme } = useAppMeta();
+
+const railCollapsed = ref(false);
+// 收起时仅显示图标的窄栏，展开时容纳图标 + 名称
+const railWidth = computed(() => (railCollapsed.value ? '80px' : '176px'));
+
+// 当前导航区块，默认取菜单首项；标题栏副标题随之显示菜单名称
+const activeSection = ref(NAV_ITEMS[0]?.id ?? '');
+const activeNavLabel = computed(() => {
+  const item = NAV_ITEMS.find((entry) => entry.id === activeSection.value);
+  return t(item?.labelKey ?? 'nav.sessions');
+});
 
 watch(
   () => Boolean(pluginRuntime.activeSkinMount),
@@ -404,18 +427,25 @@ onBeforeUnmount(() => {
   overflow: hidden;
   grid-template-rows: 44px minmax(0, 1fr) 44px;
   background: var(--nh-color-bg-base);
+  transition: --nh-rail-w var(--nh-duration-base) var(--nh-ease-standard);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nh-layout {
+    transition: none;
+  }
 }
 
 .nh-layout__body {
   display: grid;
   min-height: 0;
   overflow: hidden;
-  grid-template-columns: 288px minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: var(--nh-rail-w, 176px) var(--nh-sidebar-w, 248px) minmax(0, 1fr) auto;
 }
 
 @media (width <= 1024px) {
   .nh-layout__body {
-    grid-template-columns: 268px minmax(0, 1fr) auto;
+    grid-template-columns: var(--nh-rail-w, 176px) var(--nh-sidebar-w-narrow, 232px) minmax(0, 1fr) auto;
   }
-}
-</style>
+}</style>

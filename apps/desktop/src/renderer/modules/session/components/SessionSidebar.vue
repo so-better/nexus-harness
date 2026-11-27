@@ -1,29 +1,52 @@
 <template>
   <aside class="nh-sidebar">
     <header class="nh-sidebar__header">
-      <div class="nh-sidebar__brand">
-        <span class="nh-sidebar__mark">N</span>
-        <span class="nh-sidebar__name">{{ t('app.brand') }}</span>
-      </div>
-      <div class="nh-sidebar__header-actions">
+      <div class="nh-sidebar__header-main">
         <NButton
+          v-if="!searchMode"
+          type="primary"
+          secondary
           size="small"
-          quaternary
-          :title="searchMode ? t('search.close') : t('search.open')"
-          :aria-label="searchMode ? t('search.close') : t('search.open')"
-          @click="toggleSearch"
+          block
+          @click="emit('create')"
         >
-          <template #icon>
-            <AppIcon :name="searchMode ? 'close' : 'search'" />
-          </template>
-        </NButton>
-        <NButton v-if="!searchMode" type="primary" quaternary size="small" @click="emit('create')">
           <template #icon>
             <AppIcon name="plus" />
           </template>
           {{ t('app.newSession') }}
         </NButton>
+        <NInput
+          v-else
+          ref="searchInput"
+          v-model:value="query"
+          size="small"
+          clearable
+          :placeholder="t('search.placeholder')"
+          :aria-label="t('search.placeholder')"
+          aria-controls="session-search-results"
+          :aria-activedescendant="
+            activeHitIndex >= 0 ? `session-search-hit-${activeHitIndex}` : undefined
+          "
+          @keydown="handleSearchKeydown"
+          @compositionstart="searchComposing = true"
+          @compositionend="searchComposing = false"
+        >
+          <template #prefix>
+            <AppIcon name="search" :size="14" />
+          </template>
+        </NInput>
       </div>
+      <NButton
+        secondary
+        size="small"
+        :title="searchMode ? t('search.close') : t('search.open')"
+        :aria-label="searchMode ? t('search.close') : t('search.open')"
+        @click="toggleSearch"
+      >
+        <template #icon>
+          <AppIcon :name="searchMode ? 'close' : 'search'" />
+        </template>
+      </NButton>
     </header>
 
     <div class="nh-sidebar__plugin-header">
@@ -45,28 +68,6 @@
         <span>{{ entry.title }}</span>
       </button>
     </nav>
-
-    <div v-if="searchMode" class="nh-sidebar__search">
-      <NInput
-        ref="searchInput"
-        v-model:value="query"
-        size="small"
-        clearable
-        :placeholder="t('search.placeholder')"
-        :aria-label="t('search.placeholder')"
-        aria-controls="session-search-results"
-        :aria-activedescendant="
-          activeHitIndex >= 0 ? `session-search-hit-${activeHitIndex}` : undefined
-        "
-        @keydown="handleSearchKeydown"
-        @compositionstart="searchComposing = true"
-        @compositionend="searchComposing = false"
-      >
-        <template #prefix>
-          <AppIcon name="search" :size="14" />
-        </template>
-      </NInput>
-    </div>
 
     <div class="nh-sidebar__scroll">
       <div v-if="searchMode" class="nh-sidebar__body">
@@ -408,17 +409,19 @@ const groups = computed<SessionGroup[]>(() => {
   height: 56px;
   flex: none;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   padding: 0 16px;
   box-shadow: inset 0 -1px 0 var(--nh-border-subtle);
 }
 
-.nh-sidebar__header-actions {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: 4px;
+/* 主操作（新建会话 / 搜索输入框）占满剩余宽度，右侧图标按钮固定宽度 */
+.nh-sidebar__header-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.nh-sidebar__header-main :deep(.n-input) {
+  width: 100%;
 }
 
 .nh-sidebar__plugin-header,
@@ -461,35 +464,6 @@ const groups = computed<SessionGroup[]>(() => {
 .nh-sidebar__plugin-nav-item:hover {
   background: var(--nh-color-bg-hover);
   color: var(--nh-color-text-primary);
-}
-
-.nh-sidebar__brand {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-}
-
-.nh-sidebar__mark {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border-radius: 8px;
-  background: var(--nh-color-accent);
-  color: var(--nh-color-bg-base);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.nh-sidebar__name {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.nh-sidebar__search {
-  flex: none;
-  padding: 10px 12px 2px;
 }
 
 .nh-sidebar__scroll {
@@ -537,21 +511,11 @@ const groups = computed<SessionGroup[]>(() => {
 }
 
 .nh-sidebar__group-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   margin: 0;
   padding: 2px 12px;
   color: var(--nh-color-text-disabled);
   font-size: 12px;
   font-weight: 500;
-}
-
-.nh-sidebar__group-title::after {
-  height: 1px;
-  flex: 1;
-  background: var(--nh-border-subtle);
-  content: '';
 }
 
 .nh-sidebar__state {
@@ -562,11 +526,12 @@ const groups = computed<SessionGroup[]>(() => {
 
 .nh-sidebar__footer {
   display: flex;
+  height: var(--nh-panel-footer-h, 48px);
   flex: none;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 0 16px;
   border-top: 1px solid var(--nh-border-subtle);
   color: var(--nh-color-text-secondary);
   font-size: 12px;

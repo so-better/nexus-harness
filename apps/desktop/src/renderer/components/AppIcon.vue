@@ -46,6 +46,16 @@
     <path v-else-if="name === 'monitor'" d="M4 5h16v11H4zM9 20h6M12 16v4" />
     <path v-else-if="name === 'chevron-left'" d="m15 6-6 6 6 6" />
     <path v-else-if="name === 'chevron-right'" d="m9 6 6 6-6 6" />
+    <g v-else-if="name === 'panel-collapse'">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9 4v16" />
+      <path d="m16 9-3 3 3 3" />
+    </g>
+    <g v-else-if="name === 'panel-expand'">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9 4v16" />
+      <path d="m13 9 3 3-3 3" />
+    </g>
     <path
       v-else-if="name === 'database'"
       d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3ZM4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"
@@ -161,7 +171,9 @@ export const APP_ICON_NAMES = [
   'restore',
   'loader',
   'brain',
-  'lightbulb'
+  'lightbulb',
+  'panel-collapse',
+  'panel-expand'
 ] as const;
 export type AppIconName = (typeof APP_ICON_NAMES)[number];
 </script>

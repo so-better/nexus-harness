@@ -4,6 +4,15 @@
 
 @import url('./media-loading.less');
 
+/**
+ * 左侧导航栏宽度变量：注册为 <length> 才能对收起/展开做宽度过渡动画。
+ */
+@property --nh-rail-w {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 176px;
+}
+
 :root {
   color-scheme: light;
 
@@ -14,6 +23,11 @@
   --nh-space-sm: 8px;
   --nh-space-md: 16px;
   --nh-space-lg: 24px;
+
+  /** 布局固定尺寸：会话侧栏宽度与面板底部栏高度，供布局与终端面板共用 */
+  --nh-sidebar-w: 248px;
+  --nh-sidebar-w-narrow: 232px;
+  --nh-panel-footer-h: 48px;
   --nh-surface-base: var(--nh-color-bg-base);
   --nh-surface-elevated: var(--nh-color-bg-elevated);
   --nh-surface-hover: var(--nh-color-bg-hover);

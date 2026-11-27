@@ -32,7 +32,7 @@ export const createMainWindow = (): BrowserWindow => {
     ...(process.platform === 'darwin'
       ? {
           titleBarStyle: 'hiddenInset' as const,
-          trafficLightPosition: { x: 14, y: 16 }
+          trafficLightPosition: { x: 14, y: 14 }
         }
       : { frame: false }),
     show: false,

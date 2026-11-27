@@ -427,7 +427,7 @@ const stopResize = (): void => {
   display: flex;
   flex: none;
   min-width: 280px;
-  max-width: max(280px, calc(100vw - 288px - 480px));
+  max-width: max(280px, calc(100vw - var(--nh-sidebar-w, 248px) - 480px));
   height: 100%;
   flex-direction: column;
   border-left: 1px solid var(--terminal-border);
@@ -443,7 +443,7 @@ const stopResize = (): void => {
     top: 0;
     right: 0;
     bottom: 0;
-    max-width: min(520px, calc(100vw - 268px));
+    max-width: min(520px, calc(100vw - var(--nh-sidebar-w-narrow, 232px)));
     box-shadow: var(--nh-shadow-float);
   }
 }
