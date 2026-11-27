@@ -26,6 +26,8 @@ export interface SlotContext {
   /** 本条助手消息正文的字符数（Unicode 码点）；流式期间不提供 */
   contentChars?: number | undefined;
   model?: string | undefined;
+  /** 本条助手消息使用的提供商 id（与 model 一起，取自 usage.recorded） */
+  provider?: string | undefined;
 }
 
 export type SlotMount = (element: HTMLElement, context: SlotContext) => Unsubscribe;

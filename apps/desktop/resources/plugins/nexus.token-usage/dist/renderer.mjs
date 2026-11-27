@@ -170,8 +170,13 @@ const mountUsage = (element, context, session, ctx) => {
   // 耗时/字数默认关闭，由插件设置 showDuration / showChars 控制
   const showDuration = ctx.settings?.showDuration === true;
   const showChars = ctx.settings?.showChars === true;
-  // 消息尾部：token 始终显示；耗时与字数按设置追加；会话头仍只显示 token
+  // 消息尾部：提供商 / 模型 + token 始终显示；耗时与字数按设置追加；会话头仍只显示 token
+  const modelLabel =
+    !session && (context.provider || context.model)
+      ? [context.provider, context.model].filter(Boolean).join(' / ')
+      : '';
   const inlineValue = [
+    modelLabel,
     context.usage ? tokenValue : '',
     showDuration && typeof context.durationMs === 'number'
       ? formatDuration(context.durationMs)

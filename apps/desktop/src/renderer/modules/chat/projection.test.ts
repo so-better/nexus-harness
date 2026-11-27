@@ -44,6 +44,107 @@ describe('projectEvents', () => {
     });
   });
 
+  it('records the model from usage.recorded on the assistant message', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: { messageId: 'assistant-1', role: 'assistant', content: '你好' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'usage.recorded',
+        payload: {
+          messageId: 'assistant-1',
+          provider: 'demo',
+          model: 'demo-model',
+          inputTokens: 10,
+          outputTokens: 5
+        }
+      })
+    ]);
+
+    expect(projection.messages[0]?.model).toBe('demo-model');
+    expect(projection.messages[0]?.provider).toBe('demo');
+  });
+
+  it('backfills model/provider when usage arrives before the message completes', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'usage.recorded',
+        payload: {
+          messageId: 'assistant-1',
+          provider: 'demo',
+          model: 'demo-model',
+          inputTokens: 10,
+          outputTokens: 5
+        }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'message.completed',
+        payload: { messageId: 'assistant-1', role: 'assistant', content: '你好' }
+      })
+    ]);
+
+    expect(projection.messages[0]).toMatchObject({
+      id: 'assistant-1',
+      model: 'demo-model',
+      provider: 'demo',
+      usage: { inputTokens: 10, outputTokens: 5 }
+    });
+  });
+
+  it('keeps the latest model when a message has multiple usage records', () => {
+    const projection = projectEvents([
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 1,
+        type: 'message.completed',
+        payload: { messageId: 'assistant-1', role: 'assistant', content: '你好' }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 2,
+        type: 'usage.recorded',
+        payload: {
+          messageId: 'assistant-1',
+          provider: 'demo',
+          model: 'model-a',
+          inputTokens: 10,
+          outputTokens: 5
+        }
+      }),
+      event({
+        sessionId: 'session-1',
+        runId: 'run-1',
+        seq: 3,
+        type: 'usage.recorded',
+        payload: {
+          messageId: 'assistant-1',
+          provider: 'demo',
+          model: 'model-b',
+          inputTokens: 3,
+          outputTokens: 2
+        }
+      })
+    ]);
+
+    expect(projection.messages[0]?.model).toBe('model-b');
+    expect(projection.messages[0]?.usage).toMatchObject({ inputTokens: 13, outputTokens: 7 });
+  });
+
   it('marks interrupted streaming content as interrupted', () => {
     const projection = projectEvents([
       event({

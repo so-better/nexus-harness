@@ -272,6 +272,10 @@ export const projectEvents = (
   let errorCode: string | undefined;
   let pendingFailure: { event: NexusEvent; error: { code: string; message: string } } | undefined;
   const pendingUsage = new Map<string, ChatUsage>();
+  /** 消息完成前到达的 usage.recorded 模型名，待消息出现时回填 */
+  const pendingModel = new Map<string, string>();
+  /** 消息完成前到达的 usage.recorded 提供商名，待消息出现时回填 */
+  const pendingProvider = new Map<string, string>();
   let compactionNoticeShown = false;
 
   // 子代理事件按 parentToolCallId 分组，主会话跳过；之后各自递归投影为嵌套时间线
@@ -285,17 +289,32 @@ export const projectEvents = (
     }
   }
 
-  const attachUsage = (messageId: string): void => {
-    const usage = pendingUsage.get(messageId);
-    if (!usage) return;
+  /**
+   * 消息出现/增量到达时，回填其 pending 的 usage 与 model/provider。
+   * 同一消息若有多段 usage，模型取最近一次（覆盖），展示足够。
+   */
+  const attachUsageMeta = (messageId: string): void => {
     const message = messages.find((item) => item.id === messageId);
     if (!message) return;
-    const existing = message.usage ?? emptyUsage();
-    existing.inputTokens += usage.inputTokens;
-    existing.outputTokens += usage.outputTokens;
-    existing.cost += usage.cost;
-    message.usage = existing;
-    pendingUsage.delete(messageId);
+    const usage = pendingUsage.get(messageId);
+    if (usage) {
+      const existing = message.usage ?? emptyUsage();
+      existing.inputTokens += usage.inputTokens;
+      existing.outputTokens += usage.outputTokens;
+      existing.cost += usage.cost;
+      message.usage = existing;
+      pendingUsage.delete(messageId);
+    }
+    const model = pendingModel.get(messageId);
+    if (model) {
+      message.model = model;
+      pendingModel.delete(messageId);
+    }
+    const provider = pendingProvider.get(messageId);
+    if (provider) {
+      message.provider = provider;
+      pendingProvider.delete(messageId);
+    }
   };
 
   for (const event of events) {
@@ -328,7 +347,7 @@ export const projectEvents = (
       message.reasoning = (message.reasoning ?? '') + payload.text;
       appendText(message, 'reasoning', payload.text);
       message.streaming = true;
-      attachUsage(payload.messageId);
+      attachUsageMeta(payload.messageId);
       if (event.runId) message.runId = event.runId;
       lastAssistant = message;
       continue;
@@ -353,7 +372,7 @@ export const projectEvents = (
       message.content += payload.text;
       appendText(message, 'content', payload.text);
       if (event.runId) message.runId = event.runId;
-      attachUsage(payload.messageId);
+      attachUsageMeta(payload.messageId);
       message.streaming = true;
       lastAssistant = message;
       continue;
@@ -391,7 +410,7 @@ export const projectEvents = (
         if (payload.content) reconcile('content', payload.content);
         if (payload.error) pendingFailure = undefined;
         if (event.runId) existing.runId = event.runId;
-        attachUsage(payload.messageId);
+        attachUsageMeta(payload.messageId);
         if (payload.references?.length) existing.references = payload.references;
         if (payload.attachments?.length) existing.attachments = payload.attachments;
         lastAssistant = payload.role === 'assistant' ? existing : undefined;
@@ -435,7 +454,7 @@ export const projectEvents = (
         };
         if (payload.error) pendingFailure = undefined;
         messages.push(message);
-        attachUsage(payload.messageId);
+        attachUsageMeta(payload.messageId);
         lastAssistant = payload.role === 'assistant' ? message : undefined;
       }
       continue;
@@ -663,12 +682,16 @@ export const projectEvents = (
           messageUsage.outputTokens += payload.outputTokens;
           messageUsage.cost += payload.cost ?? 0;
           target.usage = messageUsage;
+          target.model = payload.model;
+          target.provider = payload.provider;
         } else {
           const queued = pendingUsage.get(payload.messageId) ?? emptyUsage();
           queued.inputTokens += payload.inputTokens;
           queued.outputTokens += payload.outputTokens;
           queued.cost += payload.cost ?? 0;
           pendingUsage.set(payload.messageId, queued);
+          pendingModel.set(payload.messageId, payload.model);
+          pendingProvider.set(payload.messageId, payload.provider);
         }
       } else {
         const target = [...messages]
@@ -683,6 +706,8 @@ export const projectEvents = (
           messageUsage.outputTokens += payload.outputTokens;
           messageUsage.cost += payload.cost ?? 0;
           target.usage = messageUsage;
+          target.model = payload.model;
+          target.provider = payload.provider;
         }
       }
       continue;

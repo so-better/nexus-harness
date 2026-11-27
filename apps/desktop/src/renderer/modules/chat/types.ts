@@ -108,6 +108,10 @@ export interface ChatMessageView {
   durationMs?: number;
   /** 本条助手消息正文的字符数（Unicode 码点；复合 emoji 可能计多个） */
   contentChars?: number;
+  /** 本条助手消息实际使用的模型 id（取自 usage.recorded） */
+  model?: string;
+  /** 本条助手消息实际使用的提供商 id（取自 usage.recorded） */
+  provider?: string;
   /** 是否为错误气泡（合成助手消息），用于抑制尾部统计 */
   error?: boolean;
   files?: OutputFile[];

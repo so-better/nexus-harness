@@ -1,15 +1,5 @@
 <template>
-  <PluginSlot
-    location="message.assistant.header"
-    :context="{
-      location: 'message.assistant.header',
-      sessionId,
-      messageId: message.id,
-      runId: message.runId,
-      role: 'assistant',
-      usage: message.usage
-    }"
-  />
+  <PluginSlot location="message.assistant.header" :context="headerContext" />
 
   <div class="nh-message__flow">
     <!-- 新消息走有序时间线；无 timeline 的历史消息走下方兜底渲染 -->
@@ -272,6 +262,20 @@ const emit = defineEmits<{
 }>();
 
 /**
+ * 消息头部插槽上下文：与尾部一致，附带 usage 与模型信息。
+ */
+const headerContext = computed<SlotContext>(() => ({
+  location: 'message.assistant.header',
+  sessionId: props.sessionId,
+  messageId: props.message.id,
+  runId: props.message.runId,
+  role: 'assistant',
+  usage: props.message.usage,
+  ...(props.message.model ? { model: props.message.model } : {}),
+  ...(props.message.provider ? { provider: props.message.provider } : {})
+}));
+
+/**
  * 消息尾部插槽上下文：错误气泡与子代理不展示耗时/字数，避免噪声。
  */
 const footerContext = computed<SlotContext>(() => ({
@@ -281,6 +285,8 @@ const footerContext = computed<SlotContext>(() => ({
   runId: props.message.runId,
   role: 'assistant',
   usage: props.message.usage,
+  ...(props.message.model ? { model: props.message.model } : {}),
+  ...(props.message.provider ? { provider: props.message.provider } : {}),
   // 流式期间不注入耗时/字数：这些值尚未定稿且每帧变化，会令插槽频繁重挂载
   ...(props.hideStats || props.message.error || props.message.streaming
     ? {}

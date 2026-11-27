@@ -1012,6 +1012,8 @@ interface SlotContext {
   /** 本条助手消息正文的字符数（Unicode 码点）；流式期间不提供 */
   contentChars?: number;
   model?: string;
+  /** 本条助手消息使用的提供商 id */
+  provider?: string;
 }
 ```
 
