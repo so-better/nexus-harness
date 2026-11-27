@@ -40,6 +40,7 @@ const deniedPlugin: PluginPublic = {
     "export function activate(ctx) { ctx.commands.register('usage.denied', () => ctx.usage.getStats()); }\n"
   )}`,
   hasMain: false,
+  shadowDom: true,
   mainLoaded: false
 };
 
@@ -65,6 +66,7 @@ const plugin: PluginPublic = {
     "export function activate(ctx) { ctx.skins.register('paper', () => () => {}); ctx.startup.register('intro', (_el, _ctx, finish) => { finish(); return () => {}; }); ctx.views.register('usage.dashboard', () => () => {}); ctx.commands.register('usage.check', () => ctx.usage.getStats({ bucket: 'day' })); }\n"
   )}`,
   hasMain: false,
+  shadowDom: true,
   mainLoaded: false
 };
 

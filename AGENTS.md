@@ -853,6 +853,7 @@ metadata:
 - 启动时扫描该目录、校验 manifest 并注册；目录增删改时重新扫描并热重载。
 - 插件 id 使用反向域名，版本遵循 semver。
 - 插件不需要声明对宿主的依赖；入口直接导出 `activate(ctx)`，运行时由宿主注入能力。运行时依赖必须随插件打包，不得依赖内部包、Electron 或 Node 原生模块。
+- 可选复用宿主共享模块：宿主通过导入映射暴露 `nexus/vue`、`nexus/theme`（仅调色板，不含 Naive 覆盖）与 `nexus/naive-ui`、`nexus/echarts`（后两者为**懒加载**，不进启动 chunk）。shim 由 `pnpm gen:shims` 生成，升级 `vue`/`naive-ui` 或改动 theme-palette 导出后需重跑。仅这几个前缀允许，其它 `@nexus/*` / 内部包仍禁止。共享模块是 opt-in，不引用则零影响。
 
 #### 4.5.2 目录与加载
 
@@ -906,6 +907,7 @@ metadata:
 - `engines.nexus` 声明兼容的宿主版本范围；宿主加载插件时校验，不兼容的插件禁用并显示错误，且不能通过启用开关恢复；修复 manifest 或升级宿主后重新扫描。
 - `activationEvents` 必须按需激活，禁止无条件在启动时加载所有插件。
 - `network.hosts` 声明受控网络白名单（精确主机或 `*.example.com`）；仅声明 `network` 权限后生效，未列入的域名被拒绝。
+- `shadowDom`（默认 `true`）：视图/插槽默认挂载在 Shadow DOM 内做 CSS 隔离；置 `false` 时挂到普通 DOM，可用共享 UI 库（如 `nexus/naive-ui`）的全局样式与浮层，代价是失去 CSS 隔离（扩展页应提示该信任差异）。
 - 权限必须最小化；未声明的能力调用会被宿主拒绝并记录日志。
 
 #### 4.5.4 贡献点
@@ -1092,6 +1094,8 @@ export function activate(ctx) {
 
 - 类型：从 `packages/shared/src/plugin-api.d.ts` 复制 `PluginContext` 等声明获得类型提示，无需安装额外包。
 - 开发：参考 `apps/desktop/resources/plugins/` 下任一内置插件，在 `<userData>/plugins/<id>` 新建 manifest 与入口，自行构建到 `dist/`。
+- 开发方式（二选一）：**源码直编**——简单插件直接在 `<userData>/plugins/<id>` 维护入口源码，不要把构建工程 / `node_modules` / `package.json` 放进该目录；**工程化**——复杂或多依赖插件在**本地独立项目**（不在 `<userData>/plugins` 内）用打包器构建出自包含产物后，再把产物导入到 `<userData>/plugins/<id>`。宿主不参与构建、不解析 `node_modules`。
+- 自带 UI 库：宿主不提供 UI 框架。渲染进程入口须为**自包含 ESM**（自行 bundle `vue`/`naive-ui` 等依赖，宿主不解析插件 `node_modules`）；视图/插槽挂载到宿主给的隔离容器（Shadow DOM）并返回清理函数；样式只注入隔离容器内（禁止注入全局 CSS），主题只读 `--nh-*` 语义 token；不得引用 `electron`/`node:*`/`@nexus/*` 等宿主内部包。详见 `plugin-development` Skill。
 - 安装：扩展页提供“导入插件文件夹”，选择包含 `plugin.json` 的目录，校验 manifest 与入口后复制到 `<userData>/plugins/<id>`；也可手动放置目录。不需要 `npm install`，也不需要用户执行构建命令。
 - 宿主启动或目录变化时自动发现；导入后默认禁用，在扩展页确认权限并启用后激活。
 - 调试：渲染进程插件使用 DevTools；主进程日志写入 `<userData>/logs`；目录变更触发热重载。

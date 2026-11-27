@@ -112,6 +112,8 @@ export interface PluginView {
   title: string;
   mount: (element: HTMLElement, ctx: PluginContext) => () => void;
   context: PluginContext;
+  /** 是否挂载在 Shadow DOM（默认 true；false 时挂普通 DOM，便于使用 UI 库全局样式） */
+  shadow?: boolean;
 }
 
 export interface PluginQuickPickItem {
@@ -454,7 +456,8 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
               id,
               title: contribution.title,
               mount,
-              context: ctx
+              context: ctx,
+              shadow: plugin.shadowDom !== false
             });
             bump();
             const dispose = (): void => {
@@ -480,7 +483,8 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
               pluginId: plugin.id,
               id,
               location: contribution.location as PluginSlotLocation,
-              mount
+              mount,
+              shadow: plugin.shadowDom !== false
             });
             bump();
             currentDisposable.disposables.push(dispose);

@@ -16,7 +16,7 @@ metadata:
       usage,
       用户插件
     ]
-  version: 1.3.37
+  version: 1.3.43
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -77,6 +77,17 @@ metadata:
 - 入口路径必须位于插件目录内。
 - 渲染入口通过 `nexus-plugin://` 加载；主进程入口使用 CommonJS。
 - 导入或创建后插件默认未启用；用户确认权限后启用。
+
+## 开发方式（源码直编 / 工程化）
+
+按插件复杂度二选一；关键红线：**`<userData>/plugins` 目录里不要放构建工程**。
+
+- **源码直编（简单插件，默认）**：直接在 `<userData>/plugins/<id>/` 维护入口源码——`plugin.json.renderer` 指向的文件（`dist/renderer.mjs` / `main.cjs`）就是运行入口，直接手写 ESM / CommonJS 即可。**不要**在该目录放 `package.json` / 构建配置 / `node_modules` / 源码工程；宿主不构建、不解析 `node_modules`。目录变更会触发热重载，改完即生效。
+- **工程化（复杂 / 多依赖插件）**：在**本地独立项目**里用打包器构建——**不要**在 `<userData>/plugins` 内建工程。构建完成后，把**产物**（`plugin.json` + `dist/*`，必要时 `assets/*`）**导入/拷贝到 `<userData>/plugins/<id>/`**，由宿主加载；宿主不参与构建。
+  - 打包要求：`renderer` 入口须为**自包含 ESM**（依赖内联），或按需引用宿主共享模块 `nexus/vue`、`nexus/naive-ui`、`nexus/theme`、`nexus/echarts`（见「渲染进程 UI 与依赖」）。
+  - 不要把 `node_modules`、`src/`、构建配置带进插件目录。
+
+一句话：**在插件目录里就源码直编；要工程化就在别处建独立项目，只把构建产物放进插件目录。**
 
 ## Manifest 最小示例
 
@@ -175,6 +186,32 @@ ctx.composer.insert(text) // 追加到当前输入框末尾
 ```
 
 使用 `ctx.settings` 读取 manifest 声明的设置；使用 `ctx.storage` 持久化插件数据，不能写入插件目录作为数据存储。
+
+## 渲染进程 UI 与依赖（UI 库）
+
+宿主**不注入** UI 框架，但**可选复用宿主共享模块**：`nexus/vue`、`nexus/theme`（仅调色板 `getPalette` 等，供统一配色；**不含** `getNaiveOverrides`，其值含 `var()` 会崩）、`nexus/naive-ui`（顶层 await 懒加载，**不进启动 chunk**）、`nexus/echarts`（`loadEcharts()` 懒加载）。仅这几个前缀允许，其它 `@nexus/*` / 内部包仍禁止；不引用则零影响。
+
+```ts
+// 直接用宿主共享模块（推荐）
+import { createApp, h, ref } from 'nexus/vue';
+import { NButton, NCard } from 'nexus/naive-ui';
+
+export function activate(ctx: PluginContext) {
+  return ctx.views.register('demo.view', (el: HTMLElement) => {
+    const app = createApp({ render: () => h(NCard, () => h(NButton, { type: 'primary' }, () => 'Hello')) });
+    app.mount(el);
+    return () => app.unmount(); // 必须返回清理函数
+  });
+}
+```
+
+- **要用带全局样式的 UI 库 → `"shadowDom": false`**：naive-ui 等把样式注入 `document.head`、浮层 teleport 到 `body`，而**全局样式不会穿透 Shadow DOM**；因此用组件库时必须在 `plugin.json` 声明 `"shadowDom": false`（挂普通 DOM）。代价：失去 CSS 隔离（插件与宿主 CSS 会互相影响），扩展页会提示该信任差异。
+- **也可以自带**：不引用 `nexus/*` 时，自行用打包器把 `vue`/`naive-ui` 内联进自包含 ESM 入口（Vite `formats:['es']`，`external` 留空）。宿主不解析插件 `node_modules`。
+- **样式**：`shadowDom:false` 下是普通 DOM，样式仍建议只放在插件容器内或用命名空间类名，避免污染宿主；主题只读 `--nh-*` 语义 token，深浅色用自带的 `NConfigProvider` + `darkTheme`。
+- **禁止引用**：`electron`、`node:*`、`@nexus/*`、`apps/desktop` 等内部包（`nexus/vue`、`nexus/naive-ui` 是唯一例外）。网络/存储/密钥走 `ctx.net.fetch` / `ctx.storage` / `ctx.secrets`。
+- **类型提示**：拷 `packages/shared/src/plugin-api.d.ts` 与 `apps/desktop/src/renderer/nexus-shared.d.ts`（后者提供 `nexus/vue`、`nexus/naive-ui` 的模块声明；需自备 vue/naive-ui 类型依赖）。
+- **体积取舍**：轻量 UI 建议纯 DOM（参考内置 `nexus.token-usage` 的会话头/消息尾 chip）；重 UI 再用共享库。
+- **共享模块 shim 由脚本生成**：`pnpm gen:shims`（`apps/desktop/scripts/gen-nexus-shims.mjs`）按当前 `vue` / `naive-ui` 导出与 `theme-palette` 重新生成 `src/renderer/public/nexus-*.mjs`；**升级 `vue`/`naive-ui` 或改动 `theme-palette` 导出后必须重跑**，否则 shim 过期。
 
 ## 启动动画
 

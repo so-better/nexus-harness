@@ -37,6 +37,8 @@ export interface SlotContribution {
   id: string;
   location: SlotLocation;
   mount: SlotMount;
+  /** 是否挂载在 Shadow DOM（默认 true；false 时挂普通 DOM，便于使用 UI 库全局样式） */
+  shadow?: boolean;
 }
 
 /**

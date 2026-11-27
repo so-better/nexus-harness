@@ -102,6 +102,7 @@ describe('skin tools', () => {
       source: 'user' as const,
       activationEvents: [],
       hasMain: false,
+      shadowDom: true,
       mainLoaded: false,
       contributes: {
         views: [],

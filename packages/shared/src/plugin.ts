@@ -102,6 +102,8 @@ export const pluginManifestSchema = z.object({
   engines: z.object({ nexus: z.string().min(1) }),
   main: z.string().min(1).optional(),
   renderer: z.string().min(1).optional(),
+  /** 视图/插槽默认挂载在 Shadow DOM 内做 CSS 隔离；置 false 时挂到普通 DOM（可用 UI 库的全局样式，但失去隔离） */
+  shadowDom: z.boolean().default(true),
   activationEvents: z.array(z.string().min(1)).default([]),
   permissions: z.array(z.union([pluginPermissionSchema, eventPermission])).default([]),
   /** 受控网络：允许访问的域名白名单（精确或 *.example.com） */
@@ -142,6 +144,7 @@ export const pluginPublicSchema = z.object({
   activationEvents: z.array(z.string()),
   contributes: pluginManifestSchema.shape.contributes,
   network: pluginManifestSchema.shape.network,
+  shadowDom: z.boolean(),
   rendererUrl: z.string().optional(),
   hasMain: z.boolean(),
   mainLoaded: z.boolean()

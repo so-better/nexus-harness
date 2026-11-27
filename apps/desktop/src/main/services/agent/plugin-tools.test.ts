@@ -35,6 +35,7 @@ const plugin: PluginPublic = {
   permissions: [],
   activationEvents: [],
   hasMain: false,
+  shadowDom: true,
   mainLoaded: false
 };
 

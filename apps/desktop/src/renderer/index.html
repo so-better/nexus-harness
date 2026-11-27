@@ -9,6 +9,16 @@
       content="default-src 'self'; worker-src 'self' blob:; script-src 'self' 'unsafe-inline' nexus-plugin:; style-src 'self' 'unsafe-inline' nexus-plugin:; img-src 'self' data: blob: https: nexus-plugin:; media-src 'self' data: blob: https:; connect-src 'self' nexus-plugin: ws://localhost:* http://localhost:*; frame-src 'self' data:; font-src 'self' data: nexus-plugin:"
     />
     <title>Nexus</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "nexus/vue": "./nexus-vue.mjs",
+          "nexus/naive-ui": "./nexus-naive-ui.mjs",
+          "nexus/theme": "./nexus-theme.mjs",
+          "nexus/echarts": "./nexus-echarts.mjs"
+        }
+      }
+    </script>
     <script>
       (() => {
         const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';

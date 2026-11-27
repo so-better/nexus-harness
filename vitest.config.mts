@@ -12,11 +12,18 @@ export default defineConfig({
       '@nexus/providers': resolve(process.cwd(), 'packages/providers/src/index.ts'),
       '@nexus/tools': resolve(process.cwd(), 'packages/tools/src/index.ts'),
       '@shared': resolve(process.cwd(), 'packages/shared/src'),
-      '@': resolve(process.cwd(), 'apps/desktop/src/renderer')
+      '@': resolve(process.cwd(), 'apps/desktop/src/renderer'),
+      // 供插件模块测试：把共享模块裸标识符映射到宿主实现
+      'nexus/vue': 'vue',
+      'nexus/theme': resolve(process.cwd(), 'apps/desktop/src/renderer/app/theme-palette.ts')
     }
   },
   test: {
     environment: 'node',
-    include: ['packages/**/src/**/*.test.ts', 'apps/**/src/**/*.test.ts']
+    include: [
+      'packages/**/src/**/*.test.ts',
+      'apps/**/src/**/*.test.ts',
+      'apps/**/scripts/**/*.test.mjs'
+    ]
   }
 });

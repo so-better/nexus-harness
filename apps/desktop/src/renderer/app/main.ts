@@ -7,6 +7,7 @@ import { createApp } from 'vue';
 import App from './NexusApp.vue';
 import { initTheme } from './theme';
 import { installLinkNavigation } from './link-navigation';
+import './plugin-shared';
 import '../styles/global.less';
 
 installLinkNavigation();

@@ -9,6 +9,15 @@
         <NTag v-if="plugin.hasMain" size="small" type="warning" :bordered="false">
           {{ t('plugins.mainCode') }}
         </NTag>
+        <NTag
+          v-if="plugin.shadowDom === false"
+          size="small"
+          type="warning"
+          :bordered="false"
+          :title="t('plugins.noShadowHint')"
+        >
+          {{ t('plugins.noShadow') }}
+        </NTag>
         <ExtensionSourceTag
           :source="plugin.source"
           :label="plugin.source === 'builtin' ? t('plugins.builtin') : t('plugins.user')"

@@ -28,6 +28,7 @@ const navPlugin: PluginPublic = {
     "export function activate(ctx) { ctx.views.register('demo.view', () => () => {}); }\n"
   )}`,
   hasMain: false,
+  shadowDom: true,
   mainLoaded: false
 };
 

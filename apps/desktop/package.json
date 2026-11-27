@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "electron-vite build",
+    "gen:shims": "node scripts/gen-nexus-shims.mjs",
     "preview": "electron-vite preview",
     "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",

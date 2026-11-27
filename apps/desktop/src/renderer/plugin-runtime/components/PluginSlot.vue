@@ -34,6 +34,19 @@ const render = (): void => {
   for (const contribution of slotRegistry.list(props.location)) {
     const host = document.createElement('div');
     host.className = 'nh-plugin-slot__item';
+    root.value.appendChild(host);
+    const context = { ...props.context, location: props.location };
+    // shadow:false 的插件直接挂普通 DOM，让其 UI 库的全局样式与浮层生效
+    if (contribution.shadow === false) {
+      try {
+        const cleanup = contribution.mount(host, context);
+        if (typeof cleanup === 'function') cleanups.push(cleanup);
+      } catch (reason) {
+        host.remove();
+        runtime.reportPluginFailure(contribution.pluginId, reason);
+      }
+      continue;
+    }
     const shadow = host.attachShadow({ mode: 'open' });
     const style = document.createElement('style');
     style.textContent =
@@ -41,12 +54,8 @@ const render = (): void => {
     shadow.appendChild(style);
     const container = document.createElement('div');
     shadow.appendChild(container);
-    root.value.appendChild(host);
     try {
-      const cleanup = contribution.mount(container, {
-        ...props.context,
-        location: props.location
-      });
+      const cleanup = contribution.mount(container, context);
       if (typeof cleanup === 'function') cleanups.push(cleanup);
     } catch (reason) {
       host.remove();

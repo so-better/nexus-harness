@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "pnpm --filter @nexus/desktop dev",
     "build": "pnpm --filter @nexus/desktop build",
+    "gen:shims": "pnpm --filter @nexus/desktop gen:shims",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "lint:style": "stylelint \"apps/**/*.{vue,less,css}\" \"packages/**/*.{less,css}\"",

@@ -190,6 +190,7 @@ export class PluginHost {
             name: entry.name,
             version: '0.0.0',
             engines: { nexus: '*' },
+            shadowDom: true,
             activationEvents: [],
             permissions: [],
             contributes: {
@@ -237,6 +238,7 @@ export class PluginHost {
       permissions: record.manifest.permissions,
       activationEvents: record.manifest.activationEvents,
       contributes: record.manifest.contributes,
+      shadowDom: record.manifest.shadowDom,
       ...(record.manifest.network ? { network: record.manifest.network } : {}),
       ...(record.enabled && record.manifest.renderer
         ? { rendererUrl: `nexus-plugin://${record.manifest.id}/${record.manifest.renderer}` }

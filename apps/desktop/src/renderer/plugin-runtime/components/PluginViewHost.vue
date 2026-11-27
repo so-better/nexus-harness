@@ -25,6 +25,17 @@ const mount = (): void => {
   clear();
   if (!root.value || !props.view) return;
   const host = document.createElement('div');
+  // shadow:false 的插件直接挂普通 DOM，让其 UI 库的全局样式与浮层生效
+  if (props.view.shadow === false) {
+    root.value.appendChild(host);
+    try {
+      cleanup = props.view.mount(host, props.view.context);
+    } catch (reason) {
+      host.remove();
+      runtime.reportPluginFailure(props.view.pluginId, reason);
+    }
+    return;
+  }
   const shadow = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style');
   style.textContent =
