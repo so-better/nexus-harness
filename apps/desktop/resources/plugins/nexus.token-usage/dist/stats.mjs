@@ -53,7 +53,6 @@ export const mountStatsPage = (element, ctx) => {
       const mode = useThemeMode();
       const preset = ref('month');
       const sessionId = ref(null);
-      const metric = ref('tokens');
       const customRange = ref([Date.now() - 6 * DAY_MS, Date.now()]);
       const sessions = ref([]);
       const stats = ref(null);
@@ -179,6 +178,7 @@ export const mountStatsPage = (element, ctx) => {
           {
             label: text.total,
             value: t.totalTokens,
+            suffix: text.unitTokens,
             tone: p.accent,
             spark: seriesValues(sv, 'totalTokens'),
             delta: deltaInfo(t.totalTokens, prev?.totalTokens, false, p)
@@ -186,27 +186,35 @@ export const mountStatsPage = (element, ctx) => {
           {
             label: text.input,
             value: t.inputTokens,
+            suffix: text.unitTokens,
             tone: p.accent,
             spark: seriesValues(sv, 'inputTokens')
           },
           {
             label: text.output,
             value: t.outputTokens,
+            suffix: text.unitTokens,
             tone: p.idle,
             spark: seriesValues(sv, 'outputTokens')
           },
           {
             label: text.calls,
             value: t.calls,
+            suffix: text.unitCalls,
             spark: seriesValues(sv, 'calls'),
             delta: deltaInfo(t.calls, prev?.calls, false, p)
           },
-          { label: text.avgPerCall, value: Math.round(average(t.totalTokens, t.calls)) }
+          {
+            label: text.avgPerCall,
+            value: Math.round(average(t.totalTokens, t.calls)),
+            suffix: text.unitTokens
+          }
         ];
         if (bucket.value === 'day' && sv.length) {
           cards.push({
             label: text.avgPerDay,
             value: Math.round(t.totalTokens / sv.length),
+            suffix: text.unitTokens,
             caption: `${sv.length} ${text.activeDays}`
           });
         }
@@ -228,19 +236,22 @@ export const mountStatsPage = (element, ctx) => {
           heroBand({
             eyebrow: text.usage,
             value: t.totalTokens,
+            unit: text.unitTokens,
             sub: `${scopeLabel.value} · ${rangeLabel.value}`,
             delta: deltaInfo(t.totalTokens, prev?.totalTokens, false, p),
             stats: [
               {
                 value: String(t.calls),
+                unit: text.unitCalls,
                 label: text.calls,
                 delta: deltaInfo(t.calls, prev?.calls, false, p)
               },
               {
                 value: String(Math.round(average(t.totalTokens, t.calls))),
+                unit: text.unitTokens,
                 label: text.avgPerCall
               },
-              { value: formatCompact(peak), label: text.peak }
+              { value: formatCompact(peak), unit: text.unitTokens, label: text.peak }
             ]
           }),
           h(
@@ -254,7 +265,7 @@ export const mountStatsPage = (element, ctx) => {
           ...(sessionId.value && s.context ? [contextCard(s.context, text)] : []),
           h(NCard, { size: 'small', title: text.usage }, () =>
             h(Chart, {
-              option: trendOption(sv, p, text, metric.value),
+              option: trendOption(sv, p, text),
               height: '320px',
               theme: mode.value,
               label: text.usage
@@ -297,6 +308,7 @@ export const mountStatsPage = (element, ctx) => {
                   rankList(s.sessions.slice(0, 10), {
                     total: t.totalTokens,
                     tone: p.accent,
+                    unit: text.unitTokens,
                     labelKey: 'title',
                     onSelect: (row) => (sessionId.value = row.sessionId)
                   })
@@ -350,21 +362,6 @@ export const mountStatsPage = (element, ctx) => {
                     placeholder: text.pickSession,
                     'onUpdate:value': (v) => (sessionId.value = v)
                   })
-                ]),
-                h('div', { class: 'nu-field' }, [
-                  h('span', { class: 'nu-toolbar__label' }, text.metric),
-                  h(
-                    NRadioGroup,
-                    {
-                      value: metric.value,
-                      size: 'small',
-                      'onUpdate:value': (v) => (metric.value = v)
-                    },
-                    () => [
-                      h(NRadioButton, { value: 'tokens' }, () => text.tokens),
-                      h(NRadioButton, { value: 'calls' }, () => text.calls)
-                    ]
-                  )
                 ]),
                 loading.value ? h(NSpin, { size: 'small' }) : null
               ])

@@ -31,7 +31,6 @@ export const mountDashboard = (element, ctx) => {
       const activeId = activeSessionIdRef;
       const scope = ref(activeId.value ? 'session' : 'all');
       const days = ref(30);
-      const metric = ref('tokens');
       const stats = ref(null);
       const prevTotals = ref(null);
       const loading = ref(false);
@@ -87,6 +86,7 @@ export const mountDashboard = (element, ctx) => {
           {
             label: text.total,
             value: t.totalTokens,
+            suffix: text.unitTokens,
             tone: p.accent,
             spark: seriesValues(sv, 'totalTokens'),
             delta: deltaInfo(t.totalTokens, prev?.totalTokens, false, p)
@@ -94,22 +94,29 @@ export const mountDashboard = (element, ctx) => {
           {
             label: text.input,
             value: t.inputTokens,
+            suffix: text.unitTokens,
             tone: p.accent,
             spark: seriesValues(sv, 'inputTokens')
           },
           {
             label: text.output,
             value: t.outputTokens,
+            suffix: text.unitTokens,
             tone: p.idle,
             spark: seriesValues(sv, 'outputTokens')
           },
           {
             label: text.calls,
             value: t.calls,
+            suffix: text.unitCalls,
             spark: seriesValues(sv, 'calls'),
             delta: deltaInfo(t.calls, prev?.calls, false, p)
           },
-          { label: text.avgPerCall, value: Math.round(average(t.totalTokens, t.calls)) }
+          {
+            label: text.avgPerCall,
+            value: Math.round(average(t.totalTokens, t.calls)),
+            suffix: text.unitTokens
+          }
         ];
         const read = t.cacheReadTokens ?? 0;
         const write = t.cacheWriteTokens ?? 0;
@@ -138,16 +145,19 @@ export const mountDashboard = (element, ctx) => {
           heroBand({
             eyebrow: text.usage,
             value: t.totalTokens,
+            unit: text.unitTokens,
             sub: `${scopeLabel.value} · ${rangeLabel.value}`,
             delta: deltaInfo(t.totalTokens, prev?.totalTokens, false, p),
             stats: [
               {
                 value: String(t.calls),
+                unit: text.unitCalls,
                 label: text.calls,
                 delta: deltaInfo(t.calls, prev?.calls, false, p)
               },
               {
                 value: String(Math.round(average(t.totalTokens, t.calls))),
+                unit: text.unitTokens,
                 label: text.avgPerCall
               }
             ]
@@ -168,7 +178,7 @@ export const mountDashboard = (element, ctx) => {
               h(NGridItem, {}, () =>
                 h(NCard, { size: 'small', title: text.usage }, () =>
                   h(Chart, {
-                    option: trendOption(s.series ?? [], p, text, metric.value),
+                    option: trendOption(s.series ?? [], p, text),
                     height: '260px',
                     theme: mode.value,
                     label: text.usage
@@ -196,6 +206,7 @@ export const mountDashboard = (element, ctx) => {
               rankList(s.sessions.slice(0, 8), {
                 total: t.totalTokens,
                 tone: p.accent,
+                unit: text.unitTokens,
                 labelKey: 'title'
               })
             )
@@ -232,21 +243,6 @@ export const mountDashboard = (element, ctx) => {
                     h(NRadioButton, { value: 7 }, () => text.last7),
                     h(NRadioButton, { value: 30 }, () => text.last30),
                     h(NRadioButton, { value: 0 }, () => text.allTime)
-                  ]
-                )
-              ]),
-              h('div', { class: 'nu-field' }, [
-                h('span', { class: 'nu-toolbar__label' }, text.metric),
-                h(
-                  NRadioGroup,
-                  {
-                    value: metric.value,
-                    size: 'small',
-                    'onUpdate:value': (v) => (metric.value = v)
-                  },
-                  () => [
-                    h(NRadioButton, { value: 'tokens' }, () => text.tokens),
-                    h(NRadioButton, { value: 'calls' }, () => text.calls)
                   ]
                 )
               ]),

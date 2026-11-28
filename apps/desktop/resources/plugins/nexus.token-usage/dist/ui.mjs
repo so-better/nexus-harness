@@ -107,6 +107,9 @@ export const ensureBaseStyles = () => {
     .nu-spark { display: block; width: 84px; height: 28px; flex: 0 0 auto; }
     .nu-spark--empty { background: linear-gradient(90deg, transparent, var(--nh-border-subtle), transparent); opacity: .4; border-radius: 4px; }
     .nu-delta { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .nu-unit { margin-left: 3px; color: var(--nh-color-text-secondary); font-size: 12px; font-weight: 500; letter-spacing: .01em; white-space: nowrap; }
+    .nu-hero__unit { font-size: 14px; }
+    .nu-rank__value .nu-unit, .nu-cache__v .nu-unit { font-size: 11px; }
 
     .nu-ctx__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
     .nu-ctx__big { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }

@@ -105,7 +105,6 @@ export const Chart = defineComponent({
   }
 });
 
-const baseGrid = { left: 8, right: 12, top: 36, bottom: 4, containLabel: true };
 const axisLabel = (p) => ({ color: p.textSecondary, fontSize: 11 });
 const splitLine = (p) => ({ lineStyle: { color: p.border, type: 'dashed' } });
 const tooltip = (p) => ({
@@ -131,69 +130,78 @@ const stackedArea = (name, data, color) => ({
 });
 
 /**
- * 时间序列趋势图。
- * metric='tokens' 展示输入构成堆叠面积（未缓存输入 / 缓存读 / 输出）；
- * metric='calls' 展示每次调用数量的柱状。
+ * 时间序列趋势图：左轴 token 构成堆叠面积（未缓存输入 / 缓存读 / 输出），
+ * 右轴调用次数折线，两者同一张图同时展示，避免在指标间来回切换。
  */
-export const trendOption = (series, p, text, metric = 'tokens') => {
+export const trendOption = (series, p, text) => {
   const points = series ?? [];
   const span = points.length > 1 ? points[points.length - 1].start - points[0].start : 0;
   const withHour = span > 0 && span < 2 * DAY_MS;
-  const base = {
-    backgroundColor: 'transparent',
-    grid: baseGrid,
-    tooltip: tooltip(p),
-    xAxis: {
-      type: 'category',
-      boundaryGap: metric === 'calls',
-      data: points.map((point) => formatTime(point.start, withHour)),
-      axisLabel: axisLabel(p),
-      axisLine: { lineStyle: { color: p.border } },
-      axisTick: { show: false }
-    },
-    yAxis: {
-      type: 'value',
-      name: metric === 'calls' ? text.calls : text.total,
-      nameTextStyle: axisLabel(p),
-      nameGap: 12,
-      axisLabel: { ...axisLabel(p), formatter: (value) => formatCompact(value) },
-      splitLine: splitLine(p)
-    }
-  };
-  if (metric === 'calls') {
-    return {
-      ...base,
-      series: [
-        {
-          name: text.calls,
-          type: 'bar',
-          barMaxWidth: 22,
-          itemStyle: { color: p.accent, borderRadius: [4, 4, 0, 0] },
-          data: points.map((point) => point.calls)
-        }
-      ]
-    };
-  }
   const fresh = points.map((point) =>
     Math.max(0, (point.inputTokens ?? 0) - (point.cacheReadTokens ?? 0))
   );
   const cacheRead = points.map((point) => point.cacheReadTokens ?? 0);
   const output = points.map((point) => point.outputTokens ?? 0);
   const hasCache = cacheRead.some((value) => value > 0);
+  const tokenFormatter = (value) => `${formatNumber(value)} ${text.unitTokens}`;
+  const tokenSeries = [
+    ...(hasCache ? [stackedArea(text.cacheRead, cacheRead, p.success)] : []),
+    stackedArea(text.freshInput, fresh, p.accent),
+    stackedArea(text.output, output, p.idle)
+  ].map((item) => ({ ...item, yAxisIndex: 0, valueFormatter: tokenFormatter }));
   return {
-    ...base,
+    backgroundColor: 'transparent',
+    grid: { left: 8, right: 8, top: 44, bottom: 4, containLabel: true },
+    tooltip: tooltip(p),
     legend: {
       top: 0,
-      right: 0,
+      left: 'center',
       textStyle: axisLabel(p),
       icon: 'roundRect',
       itemWidth: 10,
       itemHeight: 10
     },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: points.map((point) => formatTime(point.start, withHour)),
+      axisLabel: axisLabel(p),
+      axisLine: { lineStyle: { color: p.border } },
+      axisTick: { show: false }
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: text.unitTokens,
+        nameTextStyle: axisLabel(p),
+        nameGap: 12,
+        axisLabel: { ...axisLabel(p), formatter: (value) => formatCompact(value) },
+        splitLine: splitLine(p)
+      },
+      {
+        type: 'value',
+        name: text.unitCalls,
+        nameTextStyle: axisLabel(p),
+        nameGap: 12,
+        position: 'right',
+        minInterval: 1,
+        axisLabel: { ...axisLabel(p), formatter: (value) => formatCompact(value) },
+        splitLine: { show: false }
+      }
+    ],
     series: [
-      ...(hasCache ? [stackedArea(text.cacheRead, cacheRead, p.success)] : []),
-      stackedArea(text.freshInput, fresh, p.accent),
-      stackedArea(text.output, output, p.idle)
+      ...tokenSeries,
+      {
+        name: text.calls,
+        type: 'line',
+        yAxisIndex: 1,
+        smooth: true,
+        showSymbol: false,
+        lineStyle: { width: 2, color: p.warning, type: 'dashed' },
+        itemStyle: { color: p.warning },
+        valueFormatter: (value) => `${formatNumber(value)} ${text.unitCalls}`,
+        data: points.map((point) => point.calls ?? 0)
+      }
     ]
   };
 };
@@ -211,10 +219,13 @@ export const barOption = (rows, p, text, limit = 8) => {
       backgroundColor: p.bgPopover,
       borderColor: p.border,
       textStyle: { color: p.textPrimary, fontSize: 12 },
-      formatter: (items) => `${items[0].name}\n${formatNumber(items[0].value)} tokens`
+      formatter: (items) => `${items[0].name}\n${formatNumber(items[0].value)} ${text.unitTokens}`
     },
     xAxis: {
       type: 'value',
+      name: text.unitTokens,
+      nameTextStyle: axisLabel(p),
+      nameGap: 12,
       axisLabel: { ...axisLabel(p), formatter: (value) => formatCompact(value) },
       splitLine: splitLine(p)
     },
@@ -257,7 +268,8 @@ export const donutOption = (rows, p, text, limit = 6) => {
       backgroundColor: p.bgPopover,
       borderColor: p.border,
       textStyle: { color: p.textPrimary, fontSize: 12 },
-      formatter: (info) => `${info.name}\n${formatNumber(info.value)} (${info.percent}%)`
+      formatter: (info) =>
+        `${info.name}\n${formatNumber(info.value)} ${text.unitTokens} (${info.percent}%)`
     },
     series: [
       {

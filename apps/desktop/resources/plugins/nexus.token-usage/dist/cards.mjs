@@ -159,13 +159,16 @@ export const statCard = (label, value, options = {}) => {
   ]);
 };
 
-/** 顶部英雄区：大号总量 + 环比，右侧附若干次级指标 */
-export const heroBand = ({ eyebrow, value, sub, delta, stats = [] }) =>
+/** 顶部英雄区：大号总量（带单位）+ 环比，右侧附若干次级指标 */
+export const heroBand = ({ eyebrow, value, sub, unit, delta, stats = [] }) =>
   h('div', { class: 'nu-hero' }, [
     h('div', { class: 'nu-hero__copy' }, [
       h('span', { class: 'nu-hero__eyebrow' }, eyebrow),
       h('div', { class: 'nu-hero__main' }, [
-        h('strong', { class: 'nu-hero__value' }, formatNumber(value)),
+        h('strong', { class: 'nu-hero__value' }, [
+          formatNumber(value),
+          unit ? h('span', { class: 'nu-unit nu-hero__unit' }, unit) : null
+        ]),
         deltaBadge(delta)
       ]),
       h('span', { class: 'nu-hero__sub' }, sub)
@@ -176,7 +179,10 @@ export const heroBand = ({ eyebrow, value, sub, delta, stats = [] }) =>
           { class: 'nu-hero__side' },
           stats.map((stat) =>
             h('div', { class: 'nu-hero__stat' }, [
-              h('strong', {}, stat.value),
+              h('strong', {}, [
+                stat.value,
+                stat.unit ? h('span', { class: 'nu-unit' }, stat.unit) : null
+              ]),
               h('span', {}, stat.label),
               deltaBadge(stat.delta)
             ])
@@ -185,12 +191,15 @@ export const heroBand = ({ eyebrow, value, sub, delta, stats = [] }) =>
       : null
   ]);
 
-/** 缓存行：色点 + 名称 + 数值 + 占输入比例 */
-const cacheRow = (label, value, tone, input) =>
+/** 缓存行：色点 + 名称 + 数值（带单位） + 占输入比例 */
+const cacheRow = (label, value, tone, input, unit) =>
   h('div', { class: 'nu-cache__row' }, [
     h('span', { class: 'nu-cache__dot', style: `background:${tone}` }),
     h('span', { class: 'nu-cache__k' }, label),
-    h('span', { class: 'nu-cache__v' }, formatNumber(value)),
+    h('span', { class: 'nu-cache__v' }, [
+      formatNumber(value),
+      unit ? h('span', { class: 'nu-unit' }, unit) : null
+    ]),
     h('span', { class: 'nu-cache__pct' }, input > 0 ? `${Math.round((value / input) * 100)}%` : '')
   ]);
 
@@ -209,9 +218,9 @@ export const cacheCard = (totals, text) => {
         h('span', { class: 'nu-cache__ringlabel' }, text.cacheHit)
       ]),
       h('div', { class: 'nu-cache__rows' }, [
-        cacheRow(text.cacheRead, read, p.success, input),
-        cacheRow(text.cacheWrite, write, p.warning, input),
-        cacheRow(text.freshInput, fresh, p.idle, input)
+        cacheRow(text.cacheRead, read, p.success, input, text.unitTokens),
+        cacheRow(text.cacheWrite, write, p.warning, input, text.unitTokens),
+        cacheRow(text.freshInput, fresh, p.idle, input, text.unitTokens)
       ]),
       h('p', { class: 'nu-cache__note' }, text.cacheNote)
     ])
@@ -223,7 +232,7 @@ export const cacheCard = (totals, text) => {
  * onSelect 存在时整行可点击（键盘 Enter / Space 亦可触发）。
  */
 export const rankList = (rows, options = {}) => {
-  const { total, tone, valueKey = 'totalTokens', labelKey = 'label', onSelect } = options;
+  const { total, tone, valueKey = 'totalTokens', labelKey = 'label', unit, onSelect } = options;
   if (!rows || !rows.length) return h('div', { class: 'nu-rank nu-rank--empty' }, '—');
   const p = palette();
   const color = tone || p.accent;
@@ -259,7 +268,10 @@ export const rankList = (rows, options = {}) => {
                 { class: 'nu-rank__label', title: row[labelKey] },
                 row[labelKey] ?? row.key ?? '—'
               ),
-              h('span', { class: 'nu-rank__value' }, formatNumber(row[valueKey]))
+              h('span', { class: 'nu-rank__value' }, [
+                formatNumber(row[valueKey]),
+                unit ? h('span', { class: 'nu-unit' }, unit) : null
+              ])
             ]),
             h('span', { class: 'nu-rank__bar' }, [
               h('span', {
@@ -314,7 +326,11 @@ export const contextCard = (context, text) => {
         String(percent),
         h('span', { class: 'nu-stat__suffix' }, '%')
       ]),
-      h('div', { class: 'nu-ctx__meta' }, `${formatNumber(used)} / ${formatNumber(windowSize)}`)
+      h(
+        'div',
+        { class: 'nu-ctx__meta' },
+        `${formatNumber(used)} / ${formatNumber(windowSize)} ${text.unitTokens}`
+      )
     ]),
     h(NProgress, {
       type: 'line',
@@ -328,7 +344,10 @@ export const contextCard = (context, text) => {
     h(
       NGrid,
       { cols: 4, 'x-gap': 12, 'y-gap': 12, responsive: 'screen', itemResponsive: true },
-      () => rows.map(([label, value]) => h(NGridItem, {}, () => statCard(label, value)))
+      () =>
+        rows.map(([label, value]) =>
+          h(NGridItem, {}, () => statCard(label, value, { suffix: text.unitTokens }))
+        )
     )
   ];
   if (breakdown.length) {
@@ -336,7 +355,10 @@ export const contextCard = (context, text) => {
       h(
         NGrid,
         { cols: 3, 'x-gap': 12, 'y-gap': 12, responsive: 'screen', itemResponsive: true },
-        () => breakdown.map(([label, value]) => h(NGridItem, {}, () => statCard(label, value)))
+        () =>
+          breakdown.map(([label, value]) =>
+            h(NGridItem, {}, () => statCard(label, value, { suffix: text.unitTokens }))
+          )
       )
     );
   }
