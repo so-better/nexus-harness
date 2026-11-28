@@ -176,12 +176,12 @@ export const mountDashboard = (element, ctx) => {
             { cols: 2, 'x-gap': 12, 'y-gap': 12, responsive: 'screen', itemResponsive: true },
             () => [
               h(NGridItem, {}, () =>
-                h(NCard, { size: 'small', title: text.usage }, () =>
+                h(NCard, { size: 'small', title: text.trend }, () =>
                   h(Chart, {
                     option: trendOption(s.series ?? [], p, text),
                     height: '260px',
                     theme: mode.value,
-                    label: text.usage
+                    label: text.trend
                   })
                 )
               ),

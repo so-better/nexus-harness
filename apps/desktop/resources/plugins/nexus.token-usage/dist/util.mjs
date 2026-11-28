@@ -147,6 +147,7 @@ export const labels = () =>
   isEnglish()
     ? {
         usage: 'Usage',
+        trend: 'Trend',
         session: 'Session',
         all: 'All sessions',
         last7: '7 days',
@@ -202,6 +203,7 @@ export const labels = () =>
       }
     : {
         usage: '用量',
+        trend: '趋势',
         session: '当前会话',
         all: '全部会话',
         last7: '7 天',

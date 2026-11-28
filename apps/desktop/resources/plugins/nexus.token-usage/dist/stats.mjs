@@ -263,12 +263,12 @@ export const mountStatsPage = (element, ctx) => {
               )
           ),
           ...(sessionId.value && s.context ? [contextCard(s.context, text)] : []),
-          h(NCard, { size: 'small', title: text.usage }, () =>
+          h(NCard, { size: 'small', title: text.trend }, () =>
             h(Chart, {
               option: trendOption(sv, p, text),
               height: '320px',
               theme: mode.value,
-              label: text.usage
+              label: text.trend
             })
           ),
           h(

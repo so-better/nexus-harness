@@ -73,9 +73,9 @@ export const ensureBaseStyles = () => {
   const style = document.createElement('style');
   style.id = 'nexus-token-usage-base';
   style.textContent = `
-    .nu-page { box-sizing: border-box; max-width: 1200px; margin: 0 auto; padding: 28px 32px 56px; display: flex; flex-direction: column; gap: 24px; }
+    .nu-page { box-sizing: border-box; max-width: 1200px; margin: 0 auto; padding: 28px 32px 56px; display: flex; flex-direction: column; gap: 28px; }
     .nu-dashboard { display: flex; flex-direction: column; gap: 22px; min-width: 760px; }
-    .nu-stack { display: flex; flex-direction: column; gap: 20px; }
+    .nu-stack { display: flex; flex-direction: column; gap: 24px; }
     .nu-toolbar { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; }
     .nu-toolbar__label { color: var(--nh-color-text-secondary); font-size: 12px; }
     .nu-field { display: flex; align-items: center; gap: 8px; }
@@ -126,7 +126,7 @@ export const ensureBaseStyles = () => {
     .nu-cache__pct { color: var(--nh-color-text-secondary); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
     .nu-cache__note { flex-basis: 100%; margin: 0; color: var(--nh-color-text-secondary); font-size: 12px; }
 
-    .nu-rank { display: flex; flex-direction: column; gap: 4px; }
+    .nu-rank { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 32px; }
     .nu-rank--empty { color: var(--nh-color-text-disabled); font-size: 12px; }
     .nu-rank__row { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border-radius: 10px; }
     .nu-rank__row--clickable { cursor: pointer; }
@@ -141,6 +141,7 @@ export const ensureBaseStyles = () => {
     .nu-rank__fill { display: block; height: 100%; border-radius: 3px; transition: width var(--nh-duration-base) var(--nh-ease-standard); }
     .nu-rank__share { width: 44px; text-align: right; color: var(--nh-color-text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
 
+    @media (max-width: 880px) { .nu-rank { grid-template-columns: 1fr; } }
     @media (prefers-reduced-motion: reduce) { .nu-page *, .nu-dashboard * { transition: none !important; } }
   `;
   document.head.appendChild(style);

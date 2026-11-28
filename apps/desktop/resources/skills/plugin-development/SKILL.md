@@ -16,7 +16,7 @@ metadata:
       usage,
       用户插件
     ]
-  version: 1.3.45
+  version: 1.3.46
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
