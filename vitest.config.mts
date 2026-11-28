@@ -15,6 +15,8 @@ export default defineConfig({
       '@': resolve(process.cwd(), 'apps/desktop/src/renderer'),
       // 供插件模块测试：把共享模块裸标识符映射到宿主实现
       'nexus/vue': 'vue',
+      'nexus/naive-ui': 'naive-ui',
+      'nexus/echarts': resolve(process.cwd(), 'apps/desktop/scripts/plugins/echarts-test-shim.mjs'),
       'nexus/theme': resolve(process.cwd(), 'apps/desktop/src/renderer/app/theme-palette.ts')
     }
   },
