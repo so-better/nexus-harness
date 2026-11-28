@@ -247,6 +247,7 @@ export const usePluginRuntimeStore = defineStore('plugin-runtime', () => {
             id: nav.id,
             title: nav.title,
             ...(nav.icon ? { icon: nav.icon } : {}),
+            ...(nav.iconAsset ? { iconAsset: nav.iconAsset } : {}),
             viewId: nav.viewId
           }))
       )

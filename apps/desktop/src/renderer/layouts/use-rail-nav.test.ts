@@ -57,8 +57,25 @@ vi.mock('@/plugin-runtime/api/plugin.api', () => ({
 }));
 
 import { usePluginRuntimeStore } from '@/plugin-runtime/runtime.store';
+import { listPlugins } from '@/plugin-runtime/api/plugin.api';
 import { useRailNav } from './use-rail-nav';
 import { SESSIONS_NAV_ID } from './nav-items';
+
+const assetPlugin: PluginPublic = {
+  ...navPlugin,
+  id: 'nexus.test-asset',
+  contributes: {
+    ...navPlugin.contributes,
+    navigation: [
+      {
+        id: 'demo',
+        title: '演示视图',
+        viewId: 'demo.view',
+        iconAsset: 'assets/icon.svg'
+      }
+    ]
+  }
+};
 
 describe('useRailNav', () => {
   beforeEach(() => {
@@ -74,6 +91,25 @@ describe('useRailNav', () => {
       'plugin:nexus.test-nav:demo'
     ]);
     expect(items.value[1]).toMatchObject({ pluginId: 'nexus.test-nav', viewId: 'demo.view' });
+  });
+
+  it('iconAsset 优先：以插件资源 URL 做 mask 单色渲染', async () => {
+    vi.mocked(listPlugins).mockResolvedValueOnce([assetPlugin]);
+    const store = usePluginRuntimeStore();
+    await store.init();
+    const { items } = useRailNav();
+    const item = items.value.at(1);
+    if (!item) throw new Error('缺少插件导航项');
+    const render = item.icon as unknown as () => {
+      type: unknown;
+      props: { style: Record<string, string> };
+    };
+    const vnode = render();
+    expect(vnode.type).toBe('span');
+    expect(vnode.props.style.maskImage).toContain(
+      'nexus-plugin://nexus.test-asset/assets/icon.svg'
+    );
+    expect(vnode.props.style.backgroundColor).toBe('currentColor');
   });
 
   it('openMainView 打开主区视图，closeMainView 关闭', async () => {

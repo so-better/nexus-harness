@@ -91,7 +91,12 @@ const pluginNavigationSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   viewId: z.string().min(1),
-  icon: z.string().min(1).optional()
+  icon: z.string().min(1).optional(),
+  /** 相对插件目录的图标资源路径（assets/ 下的图片）；优先于 icon，宿主以单色 mask 渲染 */
+  iconAsset: z
+    .string()
+    .regex(/^assets\/.+\.(png|jpe?g|webp|gif|svg|ico)$/, 'iconAsset 必须是 assets/ 下的图片文件')
+    .optional()
 });
 
 export const pluginManifestSchema = z.object({

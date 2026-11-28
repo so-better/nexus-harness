@@ -1,7 +1,7 @@
 {
   "id": "nexus.token-usage",
   "name": "Token 用量",
-  "version": "1.19.0",
+  "version": "1.20.0",
   "description": "在会话标题栏和每条 AI 消息尾部显示 token 用量；消息尾部同时显示提供商 / 模型；耗时与字数可在插件设置中开启（默认关闭）；提供会话/全局用量看板，以及左侧导航栏「用量统计」整页：可按今天/本周/本月/今年/自定义日期范围与指定会话查看用量，含环比、token 构成与调用次数同图的趋势、缓存效率与排行，所有数值均标注单位。",
   "engines": {
     "nexus": ">=0.0.1 <0.1.0"
@@ -42,7 +42,7 @@
         "id": "usage.stats",
         "title": "用量统计",
         "viewId": "usage.stats",
-        "icon": "database"
+        "iconAsset": "assets/icon.svg"
       }
     ],
     "settings": [

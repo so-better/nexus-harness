@@ -16,7 +16,7 @@ metadata:
       usage,
       用户插件
     ]
-  version: 1.3.46
+  version: 1.4.0
   requires: [read, write, execute]
   source: nexus-self-authored
 ---
@@ -255,7 +255,7 @@ export function activate(ctx) {
 
 - `views` / `messageSlots` / `statusBar` / `commands` / `settings` / `skins` / `startup` 见 manifest。
 - `views`：`[{ id, title }]`。**默认以弹窗打开**（`ctx.views.open(id)` → 宿主大尺寸弹窗），宿主不自动列出。
-- `navigation`：`[{ id, title, viewId, icon? }]`，在**左侧导航栏**显示入口；点击后在**主区（右侧整页）**展示对应 `view`（需 `ui.panel`，且 `viewId` 必须已在本插件 `views` 中声明）。
+- `navigation`：`[{ id, title, viewId, icon?, iconAsset? }]`，在**左侧导航栏**显示入口；点击后在**主区（右侧整页）**展示对应 `view`（需 `ui.panel`，且 `viewId` 必须已在本插件 `views` 中声明）。`iconAsset?` 为相对插件目录的图标资源路径（如 `assets/icon.svg`），宿主以单色 mask（`currentColor`）渲染、随主题切换，**优先于 `icon`**。
 
 **视图呈现方式由「入口」决定，与视图本身无关：**
 
