@@ -275,14 +275,13 @@ export const barOption = (rows, p, text, limit = 8) => {
     backgroundColor: 'transparent',
     grid: { left: 8, right: 64, top: 8, bottom: 8, containLabel: true },
     tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'shadow', shadowStyle: { color: p.bgHover } },
+      trigger: 'item',
       renderMode: 'richText',
       backgroundColor: p.bgPopover,
       borderColor: p.border,
       padding: [8, 12],
       textStyle: { color: p.textPrimary, fontSize: 12 },
-      formatter: (items) => `${items[0].name}\n${formatNumber(items[0].value)} ${text.unitTokens}`
+      formatter: (info) => `${info.name}\n${formatNumber(info.value)} ${text.unitTokens}`
     },
     xAxis: {
       type: 'value',
